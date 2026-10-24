@@ -1,7 +1,7 @@
 <header class="top"><div class="wrap">
   <span class="brand">动手学深度学习每日课</span>
   <nav class="days" id="dayNav" aria-label="课程天数">
-    <a href="#day1" data-nav="1">第 1 天</a><a href="#day2" data-nav="2">第 2 天</a><a href="#day3" data-nav="3">第 3 天</a><a href="#day4" data-nav="4">第 4 天</a><a href="#day5" data-nav="5">第 5 天</a><a href="#day6" data-nav="6">第 6 天</a><a href="#day7" data-nav="7">第 7 天</a><a href="#day8" data-nav="8">第 8 天</a><a href="#day9" data-nav="9">第 9 天</a><a href="#day10" data-nav="10">第 10 天</a><a href="#day11" data-nav="11">第 11 天</a><a href="#day12" data-nav="12">第 12 天</a><a href="#day13" data-nav="13">第 13 天</a><a href="#day14" data-nav="14">第 14 天</a><a href="#day15" data-nav="15">第 15 天</a><a href="#day16" data-nav="16">第 16 天</a>
+    <a href="#day1" data-nav="1">第 1 天</a><a href="#day2" data-nav="2">第 2 天</a><a href="#day3" data-nav="3">第 3 天</a><a href="#day4" data-nav="4">第 4 天</a><a href="#day5" data-nav="5">第 5 天</a><a href="#day6" data-nav="6">第 6 天</a><a href="#day7" data-nav="7">第 7 天</a><a href="#day8" data-nav="8">第 8 天</a><a href="#day9" data-nav="9">第 9 天</a><a href="#day10" data-nav="10">第 10 天</a><a href="#day11" data-nav="11">第 11 天</a><a href="#day12" data-nav="12">第 12 天</a><a href="#day13" data-nav="13">第 13 天</a><a href="#day14" data-nav="14">第 14 天</a><a href="#day15" data-nav="15">第 15 天</a><a href="#day16" data-nav="16">第 16 天</a><a href="#day17" data-nav="17">第 17 天</a>
     <a href="#road" class="road-link">课程表</a>
     <a class="soon" href="#road">第 9 天</a><a class="soon" href="#road">第 10 天</a>
   </nav>
@@ -4639,6 +4639,352 @@ weights[0]</textarea></div>
     <div class="panel stack">
       <h3>明天（第 17 天）学什么</h3>
       <p>原书 10.7 Transformer：残差连接、层规范化（LayerNorm）、前馈网络，把它们和多头注意力拼成一个完整的块。SAKT、AKT、simpleKT 的 <code>ln1</code>、<code>ln2</code>、<code>ffn</code> 就是这些。还会看 AKT 的距离衰减。</p>
+    </div>
+  </div>
+</section>
+</main>
+
+<main class="wrap day" id="day17" data-day="17" hidden>
+<section class="hero">
+  <div class="eyebrow">第 17 天 · 原书第 10.7 节 + 专题：SAKT 对比 DKT · 论文路线第 10 课</div>
+  <h1>Transformer：注意力、残差、层规范化、前馈网络</h1>
+  <p class="lead">Transformer 是 2017 年提出的架构，完全用注意力，不用循环。它的每个“块”由四样东西组成：多头注意力（昨天）、<b>残差连接</b>、<b>层规范化</b>和<b>逐位置的前馈网络</b>。你论文的 SAKT、AKT、simpleKT 都是这样的块：代码里的 <code>Wo</code>、<code>ln1</code>、<code>ln2</code>、<code>ffn</code> 今天全部认识。最后把论文的 SAKT 原样搬过来，和第 14 天的 DKT 在同一份模拟数据上比一比。</p>
+  <div class="plan">
+    <div><b class="k">今天的时间</b>大约 80 分钟。最后两个训练格要手动运行，分别约 10 秒和 40 秒。</div>
+    <div><b class="k">学完你能</b><ul><li>画出 Transformer 编码器块的结构</li><li>区分层规范化和批量规范化</li><li>说出残差连接的作用</li><li>读懂并训练论文的 SAKT</li></ul></div>
+    <div><b class="k">和你的论文</b><ul><li>SAKT 的 <code>ln1(drop(Wo(o)) + Qe)</code></li><li>AKT 的距离衰减 <code>decay</code></li><li>为什么论文里 DKT 的 AUC 反而最高</li></ul></div>
+  </div>
+</section>
+
+<section class="part" id="tfm">
+  <div class="part-h"><div class="eyebrow">第一部分</div><h2>10.7 Transformer</h2><span class="src">对应原书第 10.7 节，代码来自原书 PyTorch 版。机器翻译的训练没有放进来，见 10.7.5 的说明</span></div>
+  <div class="prose"><div class="row"><button class="btn primary runAll" data-day="17">从头全部运行</button><span class="small muted runAllMsg"></span></div></div>
+  <div class="blk"><div class="blk-h"><span class="n">10.7.1</span><h3>模型</h3></div>
+    <div class="prose">
+      <p>原书的 Transformer 用于机器翻译，分编码器和解码器。<b>编码器</b>由 n 个相同的块叠成，每块两层：多头自注意力，逐位置前馈网络。每一层外面都包一个“残差连接 + 层规范化”：</p>
+      <p class="math">Y = LayerNorm(X + Dropout(子层(X)))</p>
+      <p><b>解码器</b>的块多一层“编码器—解码器注意力”（查询来自解码器，键值来自编码器的输出），而且解码器的自注意力要加因果掩码，生成第 t 个词时看不到后面的词。KT 模型只需要“看历史、预测下一个”，结构更像带因果掩码的编码器。</p>
+    </div>
+    <div class="cell"><textarea>from d2l import torch as d2l
+import math
+import torch
+from torch import nn</textarea></div>
+  </div>
+  <div class="blk"><div class="blk-h"><span class="n">10.7.2</span><h3>基于位置的前馈网络</h3></div>
+    <div class="prose"><p>一个两层的多层感知机，对序列里<b>每个位置单独</b>使用（所有位置共用参数）。输入 (批量, 时间步, d)，输出 (批量, 时间步, d′)。</p></div>
+    <div class="cell"><textarea>#@save
+class PositionWiseFFN(nn.Module):
+    """基于位置的前馈网络"""
+    def __init__(self, ffn_num_input, ffn_num_hiddens, ffn_num_outputs,
+                 **kwargs):
+        super(PositionWiseFFN, self).__init__(**kwargs)
+        self.dense1 = nn.Linear(ffn_num_input, ffn_num_hiddens)
+        self.relu = nn.ReLU()
+        self.dense2 = nn.Linear(ffn_num_hiddens, ffn_num_outputs)
+
+    def forward(self, X):
+        return self.dense2(self.relu(self.dense1(X)))</textarea></div>
+    <div class="prose"><p>输入全是 1，所以同一个样本里每个位置的输出完全一样：</p></div>
+    <div class="cell"><textarea>ffn = PositionWiseFFN(4, 4, 8)
+ffn.eval()
+ffn(d2l.ones((2, 3, 4)))[0]</textarea></div>
+  </div>
+  <div class="blk"><div class="blk-h"><span class="n">10.7.3</span><h3>残差连接和层规范化</h3></div>
+    <div class="prose">
+      <p><b>层规范化</b>（LayerNorm）对<b>每个样本自己的特征</b>做标准化：减去均值、除以标准差，再乘一个可学习的缩放、加一个可学习的偏移。<b>批量规范化</b>（BatchNorm，原书第 7.5 节）对<b>每个特征在一个批量里</b>做标准化。序列长度不一、批量又小时，层规范化更稳定，所以 Transformer 用它。</p>
+    </div>
+    <div class="cell"><textarea>ln = nn.LayerNorm(2)
+bn = nn.BatchNorm1d(2)
+X = d2l.tensor([[1, 2], [2, 3]], dtype=torch.float32)
+# 在训练模式下计算X的均值和方差
+print('layer norm:', ln(X), '\nbatch norm:', bn(X))</textarea></div>
+    <div class="panel stack" id="lnLab">
+      <h4>按行还是按列标准化</h4>
+      <p class="small muted">4 个样本（行），每个 3 个特征（列）。层规范化：每一行自己减均值、除标准差，结果每行的均值为 0。批量规范化：每一列在 4 个样本之间标准化，结果每列的均值为 0。点格子换一个数试试。</p>
+      <div class="row"><label class="ctrl" for="lnMode">方式 <select id="lnMode"><option value="ln">层规范化（按行）</option><option value="bn">批量规范化（按列）</option></select></label><button class="btn sm" id="lnRand">随机一组数</button></div>
+      <div class="two"><div class="lngrid" id="lnIn"></div><div class="lngrid" id="lnOut"></div></div>
+      <div class="calc pw" id="lnCalc"></div>
+    </div>
+    <div class="prose"><p><b>残差连接</b>：输出是 X + 子层(X)，而不是只有子层(X)。这样子层只需要学“在 X 的基础上改多少”；反向传播时梯度可以沿着“+ X”这条路直接传回去，几十层也不会梯度消失（原书第 7.6 节 ResNet 的想法）。</p></div>
+    <div class="cell"><textarea>#@save
+class AddNorm(nn.Module):
+    """残差连接后进行层规范化"""
+    def __init__(self, normalized_shape, dropout, **kwargs):
+        super(AddNorm, self).__init__(**kwargs)
+        self.dropout = nn.Dropout(dropout)
+        self.ln = nn.LayerNorm(normalized_shape)
+
+    def forward(self, X, Y):
+        return self.ln(self.dropout(Y) + X)</textarea></div>
+    <div class="cell"><textarea>add_norm = AddNorm([3, 4], 0.5)
+add_norm.eval()
+add_norm(d2l.ones((2, 3, 4)), d2l.ones((2, 3, 4))).shape</textarea></div>
+  </div>
+  <div class="blk"><div class="blk-h"><span class="n">10.7.4</span><h3>编码器</h3></div>
+    <div class="cell"><textarea>#@save
+class EncoderBlock(nn.Module):
+    """Transformer编码器块"""
+    def __init__(self, key_size, query_size, value_size, num_hiddens,
+                 norm_shape, ffn_num_input, ffn_num_hiddens, num_heads,
+                 dropout, use_bias=False, **kwargs):
+        super(EncoderBlock, self).__init__(**kwargs)
+        self.attention = d2l.MultiHeadAttention(
+            key_size, query_size, value_size, num_hiddens, num_heads, dropout,
+            use_bias)
+        self.addnorm1 = AddNorm(norm_shape, dropout)
+        self.ffn = PositionWiseFFN(
+            ffn_num_input, ffn_num_hiddens, num_hiddens)
+        self.addnorm2 = AddNorm(norm_shape, dropout)
+
+    def forward(self, X, valid_lens):
+        Y = self.addnorm1(X, self.attention(X, X, X, valid_lens))
+        return self.addnorm2(Y, self.ffn(Y))</textarea></div>
+    <div class="prose"><p>编码器块不改变形状：</p></div>
+    <div class="cell"><textarea>X = d2l.ones((2, 100, 24))
+valid_lens = d2l.tensor([3, 2])
+encoder_blk = EncoderBlock(24, 24, 24, 24, [100, 24], 24, 48, 8, 0.5)
+encoder_blk.eval()
+encoder_blk(X, valid_lens).shape</textarea></div>
+    <div class="prose"><p>完整的编码器：嵌入（乘 √d，因为位置编码在 −1 到 1 之间，要让两者大小相当）+ 位置编码 + n 个编码器块。</p></div>
+    <div class="cell"><textarea>#@save
+class TransformerEncoder(d2l.Encoder):
+    """Transformer编码器"""
+    def __init__(self, vocab_size, key_size, query_size, value_size,
+                 num_hiddens, norm_shape, ffn_num_input, ffn_num_hiddens,
+                 num_heads, num_layers, dropout, use_bias=False, **kwargs):
+        super(TransformerEncoder, self).__init__(**kwargs)
+        self.num_hiddens = num_hiddens
+        self.embedding = nn.Embedding(vocab_size, num_hiddens)
+        self.pos_encoding = d2l.PositionalEncoding(num_hiddens, dropout)
+        self.blks = nn.Sequential()
+        for i in range(num_layers):
+            self.blks.add_module("block"+str(i),
+                EncoderBlock(key_size, query_size, value_size, num_hiddens,
+                             norm_shape, ffn_num_input, ffn_num_hiddens,
+                             num_heads, dropout, use_bias))
+
+    def forward(self, X, valid_lens, *args):
+        # 因为位置编码值在-1和1之间，
+        # 因此嵌入值乘以嵌入维度的平方根进行缩放，
+        # 然后再与位置编码相加。
+        X = self.pos_encoding(self.embedding(X) * math.sqrt(self.num_hiddens))
+        self.attention_weights = [None] * len(self.blks)
+        for i, blk in enumerate(self.blks):
+            X = blk(X, valid_lens)
+            self.attention_weights[
+                i] = blk.attention.attention.attention_weights
+        return X</textarea></div>
+    <div class="cell"><textarea>encoder = TransformerEncoder(
+    200, 24, 24, 24, 24, [100, 24], 24, 48, 8, 2, 0.5)
+encoder.eval()
+encoder(d2l.ones((2, 100), dtype=torch.long), valid_lens).shape</textarea></div>
+    <div class="cell"><textarea>print(encoder)</textarea></div>
+  </div>
+  <div class="blk"><div class="blk-h"><span class="n">10.7.5</span><h3>解码器和训练（只讲思路）</h3></div>
+    <div class="prose">
+      <p>原书接下来实现解码器，并在一个英语—法语的小数据集上训练翻译模型。这部分需要第 9 章的机器翻译数据和编码器—解码器框架，和你论文的关系不大，本页没有放进来。要点只有两个：</p>
+      <ul>
+        <li>训练时，解码器第 t 个位置的自注意力只能看第 1 到 t 个位置（原书代码里 <code>dec_valid_lens = torch.arange(1, num_steps + 1)</code>），和昨天的因果掩码是一回事。</li>
+        <li>预测时一个词一个词地生成，每生成一个词，把它加到已生成的序列里，再预测下一个。</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="part" id="sakt2">
+  <div class="part-h"><div class="eyebrow">第二部分</div><h2>专题：论文的 SAKT 对比 DKT</h2><span class="src">本页补充。<code>causal_attn</code> 和 <code>SAKT</code> 照抄你论文 <code>experiment.py</code> 第 995 行和第 1141 行，只把 d 从 64 改成 32</span></div>
+  <div class="blk">
+    <div class="prose"><p>先把第 14 天的模拟数据、DKT 和训练函数原样再定义一遍（每一天的代码格是分开的）：</p></div>
+    <div class="cell"><textarea># 第 14 天的模拟数据、DKT、损失和训练函数，原样再定义一遍
+import torch
+from torch import nn
+from torch.nn import functional as F
+from d2l import torch as d2l
+torch.manual_seed(0)
+K, N, T = 5, 600, 50                  # 5 个知识点，600 个学生，每人做 50 题
+p_learn = torch.tensor([0.15, 0.10, 0.20, 0.05, 0.12])   # 每做一次学会的概率
+p_guess, p_slip = 0.2, 0.1            # 不会也蒙对的概率、会了却做错的概率
+known = (torch.rand(N, K) &lt; 0.2).float()   # 一开始就会的知识点
+sk = torch.randint(0, K, (N, T))       # 每一步做哪个知识点的题
+rs = torch.zeros(N, T)                 # 对错
+truth = torch.zeros(N, T)              # 真实的答对概率（模型看不到）
+for t in range(T):
+    oh = F.one_hot(sk[:, t], K).float()
+    k = (known * oh).sum(1)            # 这一题的知识点会不会
+    p = k * (1 - p_slip) + (1 - k) * p_guess
+    truth[:, t] = p
+    rs[:, t] = (torch.rand(N) &lt; p).float()
+    learn = (torch.rand(N) &lt; (oh * p_learn).sum(1)).float()
+    known = known + oh * (1 - known) * learn.unsqueeze(1)
+sk.shape, rs.shape, sk.dtype, rs.dtype
+
+perm = torch.randperm(N)
+te, va, tr = perm[:120], perm[120:168], perm[168:]
+
+class DKT(nn.Module):
+    def __init__(self, K, d=32):
+        super().__init__()
+        self.K = K
+        self.emb = nn.Embedding(2 * K, d); self.lstm = nn.LSTM(d, d, batch_first=True)
+        self.drop = nn.Dropout(0.2); self.out = nn.Linear(d, K)
+
+    def encode(self, sk, rs):
+        x = self.emb(sk + self.K * rs.long()); h, _ = self.lstm(x)
+        return {"h": self.drop(h), "B": sk.shape[0]}
+
+    def readout_all(self, H, qpos):
+        return self.out(H["h"].index_select(1, qpos))
+
+    def readout(self, H, q, qpos):
+        return self.readout_all(H, qpos).gather(-1, q)
+
+
+def batch_loss(model, sk, rs):
+    H = model.encode(sk, rs)
+    qpos = torch.arange(sk.shape[1] - 1)
+    logit = model.readout(H, sk[:, 1:].unsqueeze(-1), qpos).squeeze(-1)
+    y = rs[:, 1:]
+    return F.binary_cross_entropy_with_logits(logit, y), logit
+
+def auc(y, p):
+    """AUC：随机挑一道答对的题和一道答错的题，模型给答对那道更高分的概率"""
+    pairs = sorted(zip(p, y))
+    pos = sum(y); neg = len(y) - pos
+    r, i = 0, 0
+    while i &lt; len(pairs):
+        j = i
+        while j &lt; len(pairs) and pairs[j][0] == pairs[i][0]:
+            j += 1
+        r += (i + j + 1) / 2 * sum(1 for q in range(i, j) if pairs[q][1] == 1)
+        i = j
+    return (r - pos * (pos + 1) / 2) / (pos * neg)
+
+def eval_bce(model, idx):
+    model.eval()
+    with torch.no_grad():
+        l, logit = batch_loss(model, sk[idx], rs[idx])
+    return l.item(), torch.sigmoid(logit)
+
+def train_kt(model, epochs=15, lr=2e-3, BS=32):
+    opt = torch.optim.Adam(model.parameters(), lr=lr)
+    best, best_ep, best_state = float('inf'), -1, None
+    for ep in range(epochs):
+        model.train(); p = tr[torch.randperm(len(tr))]
+        for i in range(0, len(p), BS):
+            b = p[i:i + BS]
+            loss, _ = batch_loss(model, sk[b], rs[b])
+            opt.zero_grad(); loss.backward()
+            nn.utils.clip_grad_norm_(model.parameters(), 5.0); opt.step()
+        vb, _ = eval_bce(model, va)
+        if vb &lt; best:
+            best = vb; best_ep = ep
+            best_state = {k: v.detach().clone() for k, v in model.state_dict().items()}
+        print(f'epoch {ep + 1:2d}  验证集 BCE {vb:.4f}' + ('  ← 目前最好' if best_ep == ep else ''))
+    model.load_state_dict(best_state)
+    model.eval()
+    return best_ep</textarea></div>
+    <div class="prose"><p>论文的因果注意力和 SAKT。对照今天学的结构：</p>
+      <div class="tblwrap"><table class="t">
+        <thead><tr><th>SAKT 里的代码</th><th>Transformer 里的名字</th></tr></thead>
+        <tbody>
+          <tr><td><code>self.pos = nn.Embedding(maxlen, d)</code></td><td>位置编码（可学习的版本）</td></tr>
+          <tr><td><code>Wq</code>、<code>Wk</code>、<code>Wv</code> 加 <code>causal_attn(..., self.h)</code></td><td>带因果掩码的多头注意力</td></tr>
+          <tr><td><code>self.ln1(self.drop(self.Wo(o)) + Qe)</code></td><td>AddNorm：残差 + 层规范化（残差加的是查询 Qe）</td></tr>
+          <tr><td><code>self.ln2(o + self.drop(self.ffn(o)))</code></td><td>AddNorm(前馈网络)</td></tr>
+          <tr><td><code>self.out = nn.Linear(d, 1)</code></td><td>输出一个 logit</td></tr>
+        </tbody></table></div></div>
+    <div class="cell"><textarea>import math
+
+def causal_attn(Q, Kt, V, qpos, heads, decay=None):
+    B, Tq, M, d = Q.shape
+    T = Kt.shape[1]; dh = d // heads
+    q = Q.reshape(B, Tq, M, heads, dh).permute(0, 3, 1, 2, 4)
+    k = Kt.reshape(B, T, heads, dh).permute(0, 2, 1, 3)
+    v = V.reshape(B, T, heads, dh).permute(0, 2, 1, 3)
+    s = torch.einsum("bhtmd,bhjd->bhtmj", q, k) / math.sqrt(dh)
+    jpos = torch.arange(T, device=Q.device)
+    dist = qpos.view(-1, 1) - jpos.view(1, -1)
+    if decay is not None:
+        s = s - decay.view(1, heads, 1, 1, 1) * dist.clamp(min=0).float().view(1, 1, Tq, 1, T)
+    s = s.masked_fill((dist < 0).view(1, 1, Tq, 1, T), -1e9)
+    a = torch.softmax(s, -1)
+    o = torch.einsum("bhtmj,bhjd->bhtmd", a, v)
+    return o.permute(0, 2, 3, 1, 4).reshape(B, Tq, M, d)
+
+class SAKT(nn.Module):
+    def __init__(self, K, d=32, heads=2, maxlen=512):
+        super().__init__()
+        self.K = K
+        self.d, self.h = d, heads
+        self.iemb = nn.Embedding(2 * K, d); self.qemb = nn.Embedding(K, d); self.pos = nn.Embedding(maxlen, d)
+        self.Wq, self.Wk, self.Wv, self.Wo = [nn.Linear(d, d) for _ in range(4)]
+        self.ln1 = nn.LayerNorm(d); self.ln2 = nn.LayerNorm(d)
+        self.ffn = nn.Sequential(nn.Linear(d, d), nn.ReLU(), nn.Dropout(0.2), nn.Linear(d, d))
+        self.drop = nn.Dropout(0.2); self.out = nn.Linear(d, 1)
+
+    def encode(self, sk, rs):
+        T = sk.shape[1]
+        x = self.iemb(sk + self.K * rs.long()) + self.pos(torch.arange(T, device=sk.device)).unsqueeze(0)
+        return {"K": self.Wk(x), "V": self.Wv(x), "B": sk.shape[0]}
+
+    def readout(self, H, q, qpos):
+        Qe = self.qemb(q)
+        o = causal_attn(self.Wq(Qe), H["K"], H["V"], qpos, self.h)
+        o = self.ln1(self.drop(self.Wo(o)) + Qe)
+        o = self.ln2(o + self.drop(self.ffn(o)))
+        return self.out(o).squeeze(-1)
+
+sakt = SAKT(K)
+H = sakt.encode(sk[:2], rs[:2])
+print('键 K 的形状：', H['K'].shape)
+print('readout 的形状：', sakt.readout(H, sk[:2, 1:].unsqueeze(-1), torch.arange(T - 1)).shape)</textarea></div>
+    <div class="prose"><p>注意 SAKT 没有 <code>readout_all</code>，<code>batch_loss</code> 只调用 <code>readout</code>，所以第 14 天的训练函数原样能用。两个模型用同一份数据、同一个随机种子、同样 15 轮：</p></div>
+    <div class="cell" data-manual="训练 DKT 15 轮，电脑上约 10 秒"><textarea>torch.manual_seed(1)
+dkt = DKT(K)
+train_kt(dkt)
+tb, p_te = eval_bce(dkt, te)
+y = rs[te][:, 1:].reshape(-1).tolist()
+print('DKT  测试集 BCE', round(tb, 4), ' AUC', round(auc(y, p_te.reshape(-1).tolist()), 4))</textarea></div>
+    <div class="cell" data-manual="训练 SAKT 15 轮，电脑上约 40 秒，期间页面会卡住"><textarea>torch.manual_seed(1)
+sakt = SAKT(K)
+train_kt(sakt)
+tb, p_te = eval_bce(sakt, te)
+y = rs[te][:, 1:].reshape(-1).tolist()
+print('SAKT 测试集 BCE', round(tb, 4), ' AUC', round(auc(y, p_te.reshape(-1).tolist()), 4))</textarea></div>
+    <div class="prose"><p>我在真 PyTorch 上跑同样的代码：DKT 的测试 AUC 0.788，SAKT 0.773。DKT 略好。这不奇怪：模拟数据是按 BKT 生成的，“每个知识点有一个隐藏的掌握状态，每做一题更新一次”，这正是 RNN 擅长的结构。</p></div>
+    <div class="callout"><h4>对照你的论文：真实数据上也是 DKT 最好</h4><p>你论文四个数据集的测试 AUC：ASSISTments 2009 上 DKT 0.754、SAKT 0.730、AKT 0.735、simpleKT 0.734；Algebra 2005 上 DKT 0.788、SAKT 0.762；EdNet 上 DKT 0.673、SAKT 0.666；只有 Junyi 上 AKT（0.882）略高于 DKT（0.877）。注意力模型不一定更准。论文关心的其实也不是 AUC，而是把预测用来出题时效果好不好（第 19 天的 OPE 和第 20 天）。</p></div>
+    <div class="panel stack" id="dcLab">
+      <h4>AKT 的距离衰减</h4>
+      <p class="small muted">AKT（你论文第 1203 行）调用 <code>causal_attn</code> 时传了 <code>decay</code>：注意力分数减去 θ × 距离（θ = softplus(th1)，每个头一个，初始值 0.05）。下面假设 20 道做过的题原始分数都一样，看不同的 θ 怎样把注意力推向最近的题。</p>
+      <div class="row"><label class="ctrl" for="dcT">θ <output id="dcTv">0.05</output><input type="range" id="dcT" min="0" max="1" step="0.01" value="0.05"></label></div>
+      <div class="cv" id="dcHost"><canvas id="dcCv" aria-label="距离衰减后的注意力权重"></canvas></div>
+      <div class="calc pw" id="dcCalc"></div>
+    </div>
+  </div>
+</section>
+
+<section class="part quiz-sec">
+  <div class="part-h"><div class="eyebrow">课后题</div><h2>做几道题检查一下</h2><span class="src">选择题点选项马上出结果；写形状和写代码的题，网页会现场运行代码判断对错。答题记录只存在你这台设备的浏览器里。</span></div>
+  <div class="quiz dayquiz" data-day="17"></div>
+  <div class="row small muted quizscore" data-day="17"></div>
+</section>
+
+<section class="part">
+  <div class="part-h"><div class="eyebrow">今日小结</div><h2>今天学会了吗？</h2></div>
+  <div class="two">
+    <div class="panel stack">
+      <ul class="check-list" data-day="17">
+        <li><label><input type="checkbox" data-k="c1">编码器块 = 多头自注意力 + AddNorm + 前馈网络 + AddNorm</label></li>
+        <li><label><input type="checkbox" data-k="c2">层规范化按样本（行）标准化，批量规范化按特征（列）</label></li>
+        <li><label><input type="checkbox" data-k="c3">残差连接 X + 子层(X)：梯度有一条直通的路</label></li>
+        <li><label><input type="checkbox" data-k="c4">SAKT 的 ln1、ln2、ffn、Wo 各对应哪一部分</label></li>
+        <li><label><input type="checkbox" data-k="c5">AKT 的距离衰减：分数减 θ × 距离，越远越不关注</label></li>
+      </ul>
+      <span class="small check-msg"></span>
+    </div>
+    <div class="panel stack">
+      <h3>明天（第 18 天）学什么</h3>
+      <p>原书第 11 章优化算法：小批量随机梯度下降、动量法、Adam。你论文所有神经网络都用 <code>torch.optim.Adam</code>，明天从零实现一遍，看清楚 lr = 2×10⁻³ 到底控制了什么。</p>
     </div>
   </div>
 </section>

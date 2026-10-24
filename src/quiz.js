@@ -165,6 +165,17 @@ const QUIZ={
  {t:'c',q:'你论文 causal_attn 里 s.masked_fill((dist < 0)..., -1e9)，dist < 0 表示什么？',o:['键在查询之前','键的位置在查询之后，也就是未来','两题知识点不同','学生答错了'],a:1,why:'dist = qpos − jpos，小于 0 说明键的位置比查询还靠后。'},
  {t:'code',q:'写代码：造一个 4 × 4 的因果掩码 mask（对角线以上为 True），把全 0 的分数矩阵 s = torch.zeros(4, 4) 中被掩码的位置填成 -1e9，softmax 后存成 w（按最后一维）。',start:'s = torch.zeros(4, 4)\nmask = \nw = \nw',check:env=>{const w=env.vars.w;if(!w||!MT.isT(w)||w.shape.join()!=='4,4')return'w 应该是 4 × 4 的张量';const want=[[1,0,0,0],[.5,.5,0,0],[1/3,1/3,1/3,0],[.25,.25,.25,.25]];for(let i=0;i<4;i++)for(let j=0;j<4;j++)if(Math.abs(w.data[i*4+j]-want[i][j])>1e-4)return`第 ${i+1} 行应该是 [${want[i].map(x=>x.toFixed(2)).join(', ')}]`;return true},why:'mask = torch.triu(torch.ones(4, 4, dtype=torch.bool), diagonal=1)；w = torch.softmax(s.masked_fill(mask, -1e9), dim=-1)。第 i 行把权重平分给前 i 个位置。'},
 ],
+'17':[
+ {t:'c',q:'Transformer 编码器块里，每个子层外面包的是什么？',o:['池化层','残差连接 + 层规范化：LayerNorm(X + Dropout(子层(X)))','另一个注意力','卷积'],a:1,why:'原书的 AddNorm。SAKT 里的 ln1(drop(Wo(o)) + Qe) 和 ln2(o + drop(ffn(o))) 都是这个结构。'},
+ {t:'c',q:'层规范化（LayerNorm）对什么做标准化？',o:['每个特征在整个批量上','每个样本（每个位置）自己的所有特征','所有参数','学习率'],a:1,why:'批量规范化才是按特征、跨样本。层规范化不依赖批量大小，适合序列模型。'},
+ {t:'shape',q:'基于位置的前馈网络 PositionWiseFFN(4, 8, 4) 作用在形状 (2, 5, 4) 的输入上，输出形状？',code:'ffn = nn.Sequential(nn.Linear(4, 8), nn.ReLU(), nn.Linear(8, 4))\nffn(torch.ones(2, 5, 4))',why:'线性层只作用在最后一维，每个位置单独算：(2, 5, 4)。'},
+ {t:'c',q:'残差连接 Y = X + f(X) 对训练有什么好处？',o:['减少参数','反向传播时梯度可以沿着“+ X”直接传回去，深层网络不容易梯度消失','防止过拟合','让输出变成 0 到 1'],a:1,why:'∂Y/∂X = I + ∂f/∂X，至少有一个单位矩阵，梯度不会被连乘到 0。'},
+ {t:'c',q:'TransformerEncoder 里为什么嵌入要乘 √num_hiddens 再加位置编码？',o:['为了归一化','位置编码的值在 −1 到 1 之间，嵌入的值较小，乘一下让两者大小相当','为了加快训练','没有原因'],a:1,why:'否则位置信息会盖过词本身的信息。'},
+ {t:'c',q:'SAKT 的 ln1(drop(Wo(o)) + Qe) 里，残差加的是什么？',o:['做过的题的嵌入','下一题（查询）的嵌入 Qe','位置编码','0'],a:1,why:'SAKT 的输出位置对应的是“要预测的题”，所以残差连接回到查询本身。'},
+ {t:'c',q:'AKT 的 causal_attn 里 s = s − decay × dist 起什么作用？',o:['防止梯度爆炸','离得越远的题注意力分数越低，模拟遗忘','因果掩码','归一化'],a:1,why:'decay = softplus(th1) 是可学习的，每个头一个。dist = 0 的最近一题不受影响。'},
+ {t:'c',q:'在你论文的四个数据集上，哪个模型的预测 AUC 最常排第一？',o:['SAKT','AKT','DKT（四个里三个第一）','simpleKT'],a:2,why:'ASSISTments 2009、EdNet、Algebra 2005 上 DKT 最高，Junyi 上 AKT 略高。注意力模型不一定更准。'},
+ {t:'code',q:'写代码：用 nn.LayerNorm(3) 规范化 x = torch.tensor([[1.0, 2.0, 3.0], [10.0, 10.0, 40.0]])，结果存成 y。检查：y 的每一行均值约为 0。',start:'x = torch.tensor([[1.0, 2.0, 3.0], [10.0, 10.0, 40.0]])\nln = \ny = \ny, y.mean(dim=1)',check:env=>{const y=env.vars.y;if(!y||!MT.isT(y)||y.shape.join()!=='2,3')return'y 应该是形状 (2, 3) 的张量';for(let i=0;i<2;i++){const r=[0,1,2].map(j=>y.data[i*3+j]),m=r.reduce((a,b)=>a+b,0)/3,v=r.reduce((a,b)=>a+(b-m)**2,0)/3;if(Math.abs(m)>1e-4||Math.abs(v-1)>1e-3)return`第 ${i+1} 行的均值应该是 0、方差应该约为 1，现在是 ${m.toFixed(4)} 和 ${v.toFixed(4)}`}if(Math.abs(y.data[0]+1.2247)>1e-3)return'第一行应该约为 [-1.2247, 0, 1.2247]';return true},why:'ln = nn.LayerNorm(3)；y = ln(x)。两行原来大小差很多，规范化后都变成均值 0、方差 1。第一行是 [−1.2247, 0, 1.2247]。'},
+],
 };
 function quizState(day){return store.get('quiz'+day,{})}
 function quizSave(day,s){store.set('quiz'+day,s)}

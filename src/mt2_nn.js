@@ -89,6 +89,14 @@ function embedForward(m,x){const I0=asTensor(x),W=m.params.weight,[N,D]=W.shape;
 function nnForward(m,args,ctx){const x=args[0];
   switch(m.kind){
     case'RNN':case'LSTM':case'GRU':return rnnForward(m,args);case'Embedding':return embedForward(m,x);
+    case'LayerNorm':{const X=asTensor(x),k=m.cfg.shape.length;if(X.shape.slice(-k).join()!==m.cfg.shape.join())err('RuntimeError',`Given normalized_shape=[${m.cfg.shape.join(', ')}], expected input with shape [*, ${m.cfg.shape.join(', ')}], but got input of size[${X.shape.join(', ')}]`);
+      const ds=m.cfg.shape.map((_,i)=>X.shape.length-k+i),mu=reduce(X,ds,'mean',true),xc=binop('-',X,mu),vr=reduce(binop('*',xc,xc),ds,'mean',true);let y=binop('/',xc,unary(binop('+',vr,F(m.cfg.eps)),'sqrt'));
+      if(m.params.weight){y=binop('*',y,m.params.weight);y=binop('+',y,m.params.bias)}return rename(y,'NativeLayerNormBackward0')}
+    case'BatchNorm1d':{const X=asTensor(x),C=m.cfg.num_features;if(X.shape[1]!==C)err('RuntimeError',`running_mean should contain ${X.shape[1]} elements not ${C}`);const ds=X.shape.length===3?[0,2]:[0],bsh=X.shape.length===3?[1,C,1]:[1,C];let mu,vr;
+      if(m.training){mu=reduce(X,ds,'mean',true);const xc=binop('-',X,mu);vr=reduce(binop('*',xc,xc),ds,'mean',true);const n=X.data.length/C,mo=m.cfg.momentum,rm=m.buffers.running_mean,rv=m.buffers.running_var;
+        for(let c=0;c<C;c++){rm.data[c]=Math.fround((1-mo)*rm.data[c]+mo*mu.data[c]);rv.data[c]=Math.fround((1-mo)*rv.data[c]+mo*vr.data[c]*n/Math.max(1,n-1))}m.buffers.num_batches_tracked.data[0]++}
+      else{mu=reshapeT(m.buffers.running_mean,bsh);vr=reshapeT(m.buffers.running_var,bsh)}
+      let y=binop('*',binop('-',X,mu),binop('/',F(1),unary(binop('+',vr,F(m.cfg.eps)),'sqrt')));y=binop('+',binop('*',y,reshapeT(m.params.weight,bsh)),reshapeT(m.params.bias,bsh));return rename(y,'NativeBatchNormBackward0')}
     case'Linear':{const X=asTensor(x),W=m.params.weight,b=m.params.bias;if(X.shape[X.shape.length-1]!==W.shape[1])err('RuntimeError',`mat1 and mat2 shapes cannot be multiplied (${X.shape.length===1?1:prod(X.shape.slice(0,-1))}x${X.shape[X.shape.length-1]} and ${W.shape[1]}x${W.shape[0]})`);
       let Xf=X.shape.length>2?reshapeT(X,[-1,X.shape[X.shape.length-1]]):X;let R=matmul(Xf,transpose2(W));if(b)R=binop('+',R,b);if(X.shape.length>2){R=reshapeT(R,[...X.shape.slice(0,-1),W.shape[0]]);if(!b)rename(R,'UnsafeViewBackward0')}else if(X.shape.length===2&&b)rename(R,'AddmmBackward0');return R}
     case'Sequential':{let h=x;for(const c of m.children)h=callValue(c[1],[h],{},ctx);return h}
@@ -107,7 +115,9 @@ function nnRepr(m,ind=''){const c=m.cfg;switch(m.kind){
   case'HuberLoss':case'SmoothL1Loss':return`${m.kind}()`;
   case'Sequential':return modListRepr('Sequential',m.children,ind);
   case'RNN':case'LSTM':case'GRU':return`${m.kind}(${c.input_size}, ${c.hidden_size}${c.num_layers>1?', num_layers='+c.num_layers:''}${c.bias?'':', bias=False'}${c.batch_first?', batch_first=True':''})`;
-  case'Embedding':return`Embedding(${m.params.weight.shape[0]}, ${m.params.weight.shape[1]})`}return`${m.kind}()`}
+  case'Embedding':return`Embedding(${m.params.weight.shape[0]}, ${m.params.weight.shape[1]})`;
+  case'LayerNorm':return`LayerNorm((${c.shape.join(', ')}${c.shape.length===1?',':''}), eps=${pyFloatRepr(c.eps).replace(/^1e-05$/,'1e-05')}, elementwise_affine=${c.affine?'True':'False'}${c.affine?', bias=True':''})`;
+  case'BatchNorm1d':return`BatchNorm1d(${c.num_features}, eps=${pyFloatRepr(c.eps)}, momentum=${pyFloatRepr(c.momentum)}, affine=True, bias=True, track_running_stats=True)`}return`${m.kind}()`}
 function modListRepr(name,children,ind){if(!children.length)return name+'()';return name+'(\n'+children.map(([k,v])=>`${ind}  (${k}): ${modRepr(v,ind+'  ')}`).join('\n')+`\n${ind})`}
 function modRepr(v,ind=''){if(v.t==='nn')return nnRepr(v,ind);if(v.t==='obj'&&isModuleObj(v))return modListRepr(v.cls.name,objChildren(v),ind);return repr(v)}
 function isModuleCls(c){while(c){if(c===ModuleCls)return true;c=c.base}return false}
@@ -115,6 +125,7 @@ const isModuleObj=o=>o.t==='obj'&&isModuleCls(o.cls);
 const isMod=v=>v&&(v.t==='nn'||isModuleObj(v));
 function objChildren(o){const r=Object.entries(o.attrs).filter(([k,v])=>isMod(v));const d=o.attrs._modules;if(d&&d.t==='dict')for(const[k,v]of d.m.values())if(isMod(v))r.push([str(k),v]);return r}
 function modChildren(m){return m.t==='nn'?m.children:objChildren(m)}
+function namedBuffers(m,prefix=''){const out=[];if(m.t==='nn'&&m.buffers)for(const[k,b]of Object.entries(m.buffers))out.push([prefix+k,b]);for(const[k,c]of modChildren(m))out.push(...namedBuffers(c,prefix+k+'.'));return out}
 function namedParams(m,prefix='',dedup=true){const out=[];if(m.t==='nn'){for(const[k,p]of Object.entries(m.params))if(p)out.push([prefix+k,p])}else for(const[k,v]of Object.entries(m.attrs))if(isT(v)&&v.isParam)out.push([prefix+k,v]);
   for(const[k,c]of modChildren(m))out.push(...namedParams(c,prefix+k+'.',false));if(!dedup)return out;const seen=new Set();return out.filter(([k,p])=>seen.has(p)?false:(seen.add(p),true))}
 function modName(m){return m.t==='nn'?m.kind:m.cls.name}
@@ -134,7 +145,7 @@ function moduleMethods(m){return{
   train:a=>{setTraining(m,a.length?truthy(a[0]):true);return m},eval:()=>{setTraining(m,false);return m},
   apply:(a,kw,ctx)=>{const walk=x=>{for(const[,c]of modChildren(x))walk(c);callValue(a[0],[x],{},ctx)};walk(m);return m},
   zero_grad:()=>{for(const[,p]of namedParams(m))p.grad=null;return NONE},
-  state_dict:()=>{const d=mkDict(namedParams(m,'',false).map(([k,p])=>{const t=mkT(p.shape.slice(),[],p.dtype);t.data=p.data;return[S(k),t]}));d.odict=true;return d},
+  state_dict:()=>{const d=mkDict([...namedParams(m,'',false),...namedBuffers(m)].map(([k,p])=>{const t=mkT(p.shape.slice(),[],p.dtype);t.data=p.data;return[S(k),t]}));d.odict=true;return d},
   load_state_dict:(a,kw)=>loadStateDict(m,a[0],kw.strict?truthy(kw.strict):a[1]?truthy(a[1]):true),
   named_children:()=>({t:'iter',items:modChildren(m).map(([k,c])=>tup([S(k),c])),pos:0}),
   named_modules:()=>{const all=[tup([S(''),m])];const walk=(x,pre)=>{for(const[k,c]of modChildren(x)){all.push(tup([S(pre+k),c]));walk(c,pre+k+'.')}};walk(m,'');return{t:'iter',items:all,pos:0}},
@@ -143,11 +154,15 @@ function moduleMethods(m){return{
 function nnAttr(m,name){const c=m.cfg;
   if(name in m.params){const p=m.params[name];return p||NONE}
   if(m.kind==='Linear'){if(name==='in_features')return I(m.params.weight.shape[1]);if(name==='out_features')return I(m.params.weight.shape[0])}
-  if(c.attrs&&name in c.attrs)return c.attrs[name];
+  if(c.attrs&&name in c.attrs)return c.attrs[name];if(m.buffers&&name in m.buffers)return m.buffers[name];
   if(name==='training')return B(m.training);if(name==='p'&&m.kind==='Dropout')return F(c.p);if(name==='reduction'&&LOSSES.has(m.kind))return S(c.reduction);
   const M=moduleMethods(m);if(M[name])return fn(name,M[name]);err('AttributeError',`'${m.kind}' object has no attribute '${name}'`)}
 function nnMake(kind,a,kw){const bkw=(k,d)=>kw[k]!==undefined?truthy(kw[k]):d;
   switch(kind){case'RNN':case'LSTM':case'GRU':return rnnMake(kind,a,kw);
+    case'LayerNorm':{const ns=kwOr(kw,a,'normalized_shape',0),shape=isT(ns)?[...ns.data]:(ns.t==='list'||ns.t==='tuple'||ns.t==='size')?iterate(ns).map(intOf):[intOf(ns)],eps=kw.eps?numOf(kw.eps):1e-5,aff=kw.elementwise_affine?truthy(kw.elementwise_affine):true,n=prod(shape);
+      return nnObj('LayerNorm',{shape,eps,affine:aff,attrs:{normalized_shape:tup(shape.map(I)),eps:F(eps)}},aff?{weight:mkParam(shape.slice(),new Array(n).fill(1)),bias:mkParam(shape.slice(),new Array(n).fill(0))}:{})}
+    case'BatchNorm1d':{const C=intOf(kwOr(kw,a,'num_features',0)),eps=kw.eps?numOf(kw.eps):1e-5,mo=kw.momentum?numOf(kw.momentum):0.1;const o=nnObj('BatchNorm1d',{num_features:C,eps,momentum:mo},{weight:mkParam([C],new Array(C).fill(1)),bias:mkParam([C],new Array(C).fill(0))});
+      o.buffers={running_mean:mkT([C],new Array(C).fill(0),'float32'),running_var:mkT([C],new Array(C).fill(1),'float32'),num_batches_tracked:mkT([],[0],'int64')};return o}
     case'Embedding':{const N=intOf(kwOr(kw,a,'num_embeddings',0)),D=intOf(kwOr(kw,a,'embedding_dim',1));return nnObj('Embedding',{attrs:{num_embeddings:I(N),embedding_dim:I(D)}},{weight:mkParam([N,D],Array.from({length:N*D},gauss))})}
     case'Linear':{const inF=intOf(kwOr(kw,a,'in_features',0)),outF=intOf(kwOr(kw,a,'out_features',1));return nnObj('Linear',{},linearInit(inF,outF,bkw('bias',a[2]?truthy(a[2]):true)))}
     case'Sequential':{if(a.length===1&&a[0].t==='dict')return nnObj('Sequential',{},{},[...a[0].m.values()].map(([k,v])=>[str(k),v]));return nnObj('Sequential',{},{},a.map((v,i)=>{if(!isMod(v))err('TypeError',`${typeName(v)} is not a Module subclass`);return[String(i),v]}))}
@@ -161,7 +176,7 @@ const ModuleCls={t:'cls',name:'Module',base:null,attrs:Object.create(null)};
 ModuleCls.attrs.__init__=fn('__init__',a=>{const self=a[0];self.attrs.training=B(true);const d=mkDict([]);d.odict=true;self.attrs._modules=d;return NONE});ModuleCls.attrs.__init__.method=true;
 ModuleCls.attrs.__call__=fn('__call__',(a,kw,ctx)=>{const self=a[0];const f=classLookup(self.cls,'forward');if(!f)err('NotImplementedError',`Module [${self.cls.name}] is missing the required "forward" function`);return callValue({t:'bound',f,self},a.slice(1),kw,ctx)});ModuleCls.attrs.__call__.method=true;
 for(const k of['parameters','named_parameters','children','named_children','modules','named_modules','train','eval','apply','zero_grad','state_dict','load_state_dict','to','cpu','cuda','add_module']){ModuleCls.attrs[k]=fn(k,(a,kw,ctx)=>moduleMethods(a[0])[k](a.slice(1),kw,ctx));ModuleCls.attrs[k].method=true}
-const NN_KINDS=['RNN','LSTM','GRU','Embedding','Linear','Sequential','Flatten','ReLU','Sigmoid','Tanh','Softmax','LogSoftmax','Dropout','Identity','MSELoss','L1Loss','HuberLoss','SmoothL1Loss','CrossEntropyLoss','BCELoss','BCEWithLogitsLoss'];
+const NN_KINDS=['LayerNorm','BatchNorm1d','RNN','LSTM','GRU','Embedding','Linear','Sequential','Flatten','ReLU','Sigmoid','Tanh','Softmax','LogSoftmax','Dropout','Identity','MSELoss','L1Loss','HuberLoss','SmoothL1Loss','CrossEntropyLoss','BCELoss','BCEWithLogitsLoss'];
 const nnInit=mod('torch.nn.init',{
   normal_:fn('normal_',(a,kw)=>{const T=a[0],m=numOf(kwOr(kw,a,'mean',1,F(0))),s=numOf(kwOr(kw,a,'std',2,F(1)));for(let i=0;i<T.data.length;i++)T.data[i]=castVal(m+s*gauss(),T.dtype);return T}),
   uniform_:fn('uniform_',(a,kw)=>{const T=a[0],lo=numOf(kwOr(kw,a,'a',1,F(0))),hi=numOf(kwOr(kw,a,'b',2,F(1)));for(let i=0;i<T.data.length;i++)T.data[i]=castVal(lo+(hi-lo)*rand(),T.dtype);return T}),

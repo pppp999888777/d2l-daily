@@ -72,6 +72,7 @@ torch.attrs.transpose=fn('transpose',a=>transposeT(asTensor(a[0]),intOf(a[1]),in
 torch.attrs.pow=fn('pow',a=>binop('**',isT(a[0])?a[0]:a[0],a[1]));
 torch.attrs.triu=fn('triu',(a,kw)=>triT(asTensor(a[0]),intOf(kwOr(kw,a,'diagonal',1,I(0))),true));torch.attrs.tril=fn('tril',(a,kw)=>triT(asTensor(a[0]),intOf(kwOr(kw,a,'diagonal',1,I(0))),false));
 torch.attrs.masked_fill=fn('masked_fill',a=>maskedFillT(asTensor(a[0]),asTensor(a[1]),a[2]));
+torch.attrs.einsum=fn('einsum',a=>einsumT(str(a[0]),(a.length===2&&(a[1].t==='list'||a[1].t==='tuple')?a[1].items:a.slice(1)).map(asTensor)));
 torch.attrs.linspace=fn('linspace',(a,kw)=>{const s0=numOf(kwOr(kw,a,'start',0)),e=numOf(kwOr(kw,a,'end',1)),n=intOf(kwOr(kw,a,'steps',2));const st=n>1?(e-s0)/(n-1):0;
   return withGrad(mkT([n],Array.from({length:n},(_,i)=>n===1?s0:i<n/2?s0+i*st:e-(n-1-i)*st),dtypeKw(kw,'float32')),kw)});
 torch.attrs.device=fn('device',a=>({t:'device',name:str(a[0]).split(':')[0]}));

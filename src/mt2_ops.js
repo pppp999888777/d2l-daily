@@ -152,6 +152,29 @@ function triT(T,k,upper){const[r,c]=T.shape.slice(-2),n=T.data.length,out=Float6
 function maskedFillT(T,M,v){const val=numOf(v),shape=bshape(T.shape,M.shape);if(shape.join()!==T.shape.join())err('RuntimeError',`The expanded size of the mask must match the tensor shape`);
   const sb=bidx(M.shape,shape),n=T.data.length,hit=new Uint8Array(n),idx=new Array(shape.length).fill(0);for(let q=0;q<n;q++){let o=0;for(let d=0;d<shape.length;d++)o+=idx[d]*sb[d];hit[q]=M.data[o]?1:0;for(let d=shape.length-1;d>=0;d--){if(++idx[d]<shape[d])break;idx[d]=0}}
   const out=Float64Array.from(T.data,(x,q)=>hit[q]?castVal(val,T.dtype):x);return track(mkT(T.shape.slice(),out,T.dtype,T.np),[T],'MaskedFillBackward0',g=>[Float64Array.from(g,(x,q)=>hit[q]?0:x)])}
+// torch.einsum：通用实现（逐个枚举所有下标组合），支持任意个输入和自动求导
+// 两个输入时的快速路径：把下标分成“批量 / 只在 A / 只在 B / 要求和”四类，转成一次 bmm
+function einsum2(lhs,rhs,A,B){const[a,b]=lhs;if(new Set(a).size!==a.length||new Set(b).size!==b.length||new Set(rhs).size!==rhs.length)return null;
+  const sz={};[...a].forEach((c,d)=>sz[c]=A.shape[d]);for(const[d,c]of[...b].entries()){if(sz[c]!=null&&sz[c]!==B.shape[d])return null;sz[c]=B.shape[d]}
+  if([...rhs].some(c=>!a.includes(c)&&!b.includes(c)))return null;
+  const bt=[...rhs].filter(c=>a.includes(c)&&b.includes(c)),ao=[...a].filter(c=>!b.includes(c)),bo=[...b].filter(c=>!a.includes(c)),ct=[...a].filter(c=>b.includes(c)&&!rhs.includes(c));
+  if(ao.some(c=>!rhs.includes(c))||bo.some(c=>!rhs.includes(c)))return null;
+  const pa=[...bt,...ao,...ct].map(c=>a.indexOf(c)),pb=[...bt,...ct,...bo].map(c=>b.indexOf(c)),n=x=>x.reduce((p,c)=>p*sz[c],1);
+  const A3=reshapeT(permuteT(A,pa),[n(bt),n(ao),n(ct)]),B3=reshapeT(permuteT(B,pb),[n(bt),n(ct),n(bo)]),R=bmmT(A3,B3);
+  const order=[...bt,...ao,...bo],R2=reshapeT(R,order.map(c=>sz[c]));return rename(permuteT(R2,[...rhs].map(c=>order.indexOf(c))),'ViewBackward0')}
+function einsumT(spec,ops){spec=spec.replace(/\s/g,'');
+  {const parts=spec.split('->');if(ops.length===2&&parts.length===2){const r=einsum2(parts[0].split(','),parts[1],ops[0],ops[1]);if(r)return r}}let[lhs,rhs]=spec.split('->');const ins=lhs.split(',');if(ins.length!==ops.length)err('RuntimeError','einsum(): more operands were provided than specified in the equation');
+  if(rhs==null){const cnt={};for(const c of ins.join(''))cnt[c]=(cnt[c]||0)+1;rhs=Object.keys(cnt).filter(c=>cnt[c]===1).sort().join('')}
+  const size={};ins.forEach((s,i)=>{if(s.length!==ops[i].shape.length)err('RuntimeError',`einsum(): the number of subscripts in the equation (${s.length}) does not match the number of dimensions (${ops[i].shape.length}) for operand ${i}`);[...s].forEach((c,d)=>{const n=ops[i].shape[d];if(size[c]!=null&&size[c]!==n&&size[c]!==1&&n!==1)err('RuntimeError',`einsum(): operands do not broadcast with remapped shapes (original->remapped)`);size[c]=Math.max(size[c]||1,n)})});
+  const letters=Object.keys(size),L=letters.length,dims=letters.map(c=>size[c]),total=prod(dims),oshape=[...rhs].map(c=>size[c]);
+  const strideOf=(s,T)=>{const st=strides(T.shape);return letters.map(c=>{let k=0;[...s].forEach((cc,d)=>{if(cc===c&&T.shape[d]!==1)k+=st[d]});return k})};
+  const ist=ins.map((s,i)=>strideOf(s,ops[i])),ost=(()=>{const st=strides(oshape);return letters.map(c=>{const d=rhs.indexOf(c);return d<0?0:st[d]})})();
+  const out=new Float64Array(prod(oshape)||1),idx=new Array(L).fill(0),offs=new Int32Array(ops.length);let oo=0;
+  const visit=f=>{idx.fill(0);offs.fill(0);oo=0;for(let q=0;q<total;q++){f();for(let d=L-1;d>=0;d--){idx[d]++;oo+=ost[d];for(let i=0;i<ops.length;i++)offs[i]+=ist[i][d];if(idx[d]<dims[d])break;oo-=ost[d]*dims[d];for(let i=0;i<ops.length;i++)offs[i]-=ist[i][d]*dims[d];idx[d]=0}}};
+  visit(()=>{let p=1;for(let i=0;i<ops.length;i++)p*=ops[i].data[offs[i]];out[oo]+=p});
+  const dt=ops.map(o=>o.dtype).reduce((a,b)=>RANK[a]>=RANK[b]?a:b);
+  return track(mkT(oshape,out,dt),ops,'ViewBackward0',g=>{const gs=ops.map(o=>o.requires_grad?new Float64Array(o.data.length):null);
+    visit(()=>{const gv=g[oo];if(!gv)return;for(let i=0;i<ops.length;i++){if(!gs[i])continue;let p=gv;for(let j=0;j<ops.length;j++)if(j!==i)p*=ops[j].data[offs[j]];gs[i][offs[i]]+=p}});return gs})}
 function clampT(T,lo,hi){const L=lo&&lo.t!=='none'?numOf(lo):-Infinity,H=hi&&hi.t!=='none'?numOf(hi):Infinity;if(L===-Infinity&&H===Infinity)err('RuntimeError',"torch.clamp: At least one of 'min' or 'max' must not be None");
   const dt=T.dtype==='bool'?'int64':T.dtype,out=Float64Array.from(T.data,v=>Number.isNaN(v)?v:Math.min(H,Math.max(L,v)));
   return track(mkT(T.shape.slice(),out,dt,T.np),[T],'ClampBackward1',g=>[Float64Array.from(g,(gv,k)=>T.data[k]>=L&&T.data[k]<=H?gv:0)])}
