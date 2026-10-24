@@ -59,6 +59,9 @@ function pyDeepCopy(v){if(isT(v)){const c=mkT(v.shape.slice(),v.data,v.dtype,v.n
   if(v.t==='list')return list(v.items.map(pyDeepCopy));if(v.t==='tuple')return tup(v.items.map(pyDeepCopy));
   if(v.t==='dict'){const d=mkDict([...v.m.values()].map(([k,x])=>[k,pyDeepCopy(x)]));d.odict=v.odict;return d}
   if(['int','float','bool','str','none'].includes(v.t))return v;err('TypeError',`本页的 torch.save 只支持张量、列表、元组、字典和数字，不支持 ${typeName(v)}。保存模型请用 torch.save(net.state_dict(), 路径)`)}
+torch.attrs.linspace=fn('linspace',(a,kw)=>{const s0=numOf(kwOr(kw,a,'start',0)),e=numOf(kwOr(kw,a,'end',1)),n=intOf(kwOr(kw,a,'steps',2));const st=n>1?(e-s0)/(n-1):0;
+  return withGrad(mkT([n],Array.from({length:n},(_,i)=>n===1?s0:i<n/2?s0+i*st:e-(n-1-i)*st),dtypeKw(kw,'float32')),kw)});
+torch.attrs.device=fn('device',a=>({t:'device',name:str(a[0]).split(':')[0]}));
 torch.attrs.FloatTensor=fn('FloatTensor',a=>torch.attrs.tensor.call([a[0]],{dtype:torch.attrs.float32}));torch.attrs.LongTensor=fn('LongTensor',a=>torch.attrs.tensor.call([a[0]],{dtype:torch.attrs.int64}));
 torch.attrs.save=fn('save',a=>{const p=normPath(str(a[1]));const dir=p.includes('/')?p.slice(0,p.lastIndexOf('/')):'.';if(dir!=='.'&&!DIRS.has(dir))err('RuntimeError',`Parent directory ${dir} does not exist.`);FS.set(p,{pickled:pyDeepCopy(a[0])});return NONE});
 torch.attrs.load=fn('load',a=>{const p=normPath(str(a[0]));if(!FS.has(p))err('FileNotFoundError',`[Errno 2] No such file or directory: '${str(a[0])}'`);const v=FS.get(p);if(typeof v==='string')err('UnpicklingError','invalid load key, 不是用 torch.save 保存的文件');return pyDeepCopy(v.pickled)});

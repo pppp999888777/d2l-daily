@@ -30,8 +30,65 @@ let warnings=[];
 let nnTraining=true;
 function nnObj(kind,cfg,params,children){return{t:'nn',kind,cfg:cfg||{},params:params||{},children:children||[],training:true}}
 function linearInit(inF,outF,bias){const k=1/Math.sqrt(inF),u=()=>(rand()*2-1)*k;const p={weight:mkParam([outF,inF],Array.from({length:outF*inF},u))};p.bias=bias?mkParam([outF],Array.from({length:outF},u)):null;return p}
+// ---------- 循环层：RNN / LSTM / GRU（用可求导的基本运算一步步算，自动求导自然成立） ----------
+const RNN_GATES={RNN:1,LSTM:4,GRU:3};
+function rnnMake(kind,a,kw){const inS=intOf(kwOr(kw,a,'input_size',0)),H=intOf(kwOr(kw,a,'hidden_size',1)),L=intOf(kwOr(kw,a,'num_layers',2,I(1))),bias=kw.bias?truthy(kw.bias):true,bf=kw.batch_first?truthy(kw.batch_first):false;
+  if(kw.bidirectional&&truthy(kw.bidirectional))err('NotImplementedError','本页的循环层还不支持 bidirectional=True');
+  const G=RNN_GATES[kind],k=1/Math.sqrt(H),u=n=>Array.from({length:n},()=>(rand()*2-1)*k),p={};
+  for(let l=0;l<L;l++){const d=l?H:inS;p['weight_ih_l'+l]=mkParam([G*H,d],u(G*H*d));p['weight_hh_l'+l]=mkParam([G*H,H],u(G*H*H));if(bias){p['bias_ih_l'+l]=mkParam([G*H],u(G*H));p['bias_hh_l'+l]=mkParam([G*H],u(G*H))}}
+  const nl=kw.nonlinearity?str(kw.nonlinearity):'tanh';
+  return nnObj(kind,{input_size:inS,hidden_size:H,num_layers:L,bias,batch_first:bf,nonlinearity:nl,attrs:{input_size:I(inS),hidden_size:I(H),num_layers:I(L),bidirectional:B(false),batch_first:B(bf),bias:B(bias)}},p)}
+// 融合的单步计算：一个时间步只建一个计算图节点，反向传播手写（公式见第 13、14 天）。比拆成二十几个小运算快很多。
+const sigm=x=>1/(1+Math.exp(-x));
+function mmT(A,W,B,n,k,G){const out=new Float64Array(B*G);for(let b=0;b<B;b++)for(let g=0;g<G;g++){let s=0;const wo=g*n,ao=b*n;for(let j=0;j<n;j++)s+=A[ao+j]*W[wo+j];out[b*G+g]=s}return out} // A(B,n) · Wᵀ，W 是 (G,n)
+function cellBack(dg,h,Wh,B,H,G,hasB){const gW=new Float64Array(G*H),gb=hasB?new Float64Array(G):null,gh=new Float64Array(B*H);
+  for(let b=0;b<B;b++)for(let g=0;g<G;g++){const d=dg[b*G+g];if(!d)continue;if(gb)gb[g]+=d;const wo=g*H,ho=b*H;for(let j=0;j<H;j++){gW[wo+j]+=d*h[ho+j];gh[ho+j]+=d*Wh[wo+j]}}return{gW,gb,gh}}
+function fusedCell(kind,gi,h,c,Wh,bh,relu){const B=h.shape[0],H=h.shape[1],G=Wh.shape[0],hd=h.data,ghh=mmT(hd,Wh.data,B,H,H,G);if(bh)for(let b=0;b<B;b++)for(let g=0;g<G;g++)ghh[b*G+g]+=bh.data[g];
+  const ins=kind==='LSTM'?[gi,h,c,Wh,bh]:[gi,h,Wh,bh],gd=gi.data;
+  if(kind==='RNN'){const out=new Float64Array(B*H);for(let q=0;q<B*H;q++){const v=gd[q]+ghh[q];out[q]=relu?Math.max(0,v):Math.tanh(v)}const R=mkT([B,H],out,h.dtype);
+    return track(R,ins,'TanhBackward0',g=>{const dp=new Float64Array(B*H);for(let q=0;q<B*H;q++)dp[q]=relu?(R.data[q]>0?g[q]:0):g[q]*(1-R.data[q]*R.data[q]);const r=cellBack(dp,hd,Wh.data,B,H,G,!!bh);return[dp,r.gh,r.gW,r.gb]})}
+  if(kind==='GRU'){const rr=new Float64Array(B*H),zz=new Float64Array(B*H),nn=new Float64Array(B*H),out=new Float64Array(B*H);
+    for(let b=0;b<B;b++)for(let j=0;j<H;j++){const o=b*G,q=b*H+j,r=sigm(gd[o+j]+ghh[o+j]),z=sigm(gd[o+H+j]+ghh[o+H+j]),n=Math.tanh(gd[o+2*H+j]+r*ghh[o+2*H+j]);rr[q]=r;zz[q]=z;nn[q]=n;out[q]=(1-z)*n+z*hd[q]}
+    return track(mkT([B,H],out,h.dtype),ins,'AddBackward0',g=>{const dgi=new Float64Array(B*G),dgh=new Float64Array(B*G),dh=new Float64Array(B*H);
+      for(let b=0;b<B;b++)for(let j=0;j<H;j++){const q=b*H+j,o=b*G,r=rr[q],z=zz[q],n=nn[q],gv=g[q];const dn=gv*(1-z)*(1-n*n),dz=gv*(hd[q]-n)*z*(1-z),dr=dn*ghh[o+2*H+j]*r*(1-r);dh[q]=gv*z;
+        dgi[o+j]=dr;dgh[o+j]=dr;dgi[o+H+j]=dz;dgh[o+H+j]=dz;dgi[o+2*H+j]=dn;dgh[o+2*H+j]=dn*r}
+      const r=cellBack(dgh,hd,Wh.data,B,H,G,!!bh);for(let q=0;q<B*H;q++)dh[q]+=r.gh[q];return[dgi,dh,r.gW,r.gb]})}
+  // LSTM：输出把 h 和 c 拼在一起 (B, 2H)，外面再切开
+  const cd=c.data,I_=new Float64Array(B*H),F_=new Float64Array(B*H),Gg=new Float64Array(B*H),O_=new Float64Array(B*H),TC=new Float64Array(B*H),out=new Float64Array(B*2*H);
+  for(let b=0;b<B;b++)for(let j=0;j<H;j++){const o=b*G,q=b*H+j,i=sigm(gd[o+j]+ghh[o+j]),f=sigm(gd[o+H+j]+ghh[o+H+j]),gg=Math.tanh(gd[o+2*H+j]+ghh[o+2*H+j]),oo=sigm(gd[o+3*H+j]+ghh[o+3*H+j]);
+    const cn=f*cd[q]+i*gg,tc=Math.tanh(cn);I_[q]=i;F_[q]=f;Gg[q]=gg;O_[q]=oo;TC[q]=tc;out[b*2*H+j]=oo*tc;out[b*2*H+H+j]=cn}
+  return track(mkT([B,2*H],out,h.dtype),ins,'CatBackward0',g=>{const dg=new Float64Array(B*G),dc=new Float64Array(B*H);
+    for(let b=0;b<B;b++)for(let j=0;j<H;j++){const q=b*H+j,o=b*G,dhv=g[b*2*H+j],i=I_[q],f=F_[q],gg=Gg[q],oo=O_[q],tc=TC[q];const dcn=g[b*2*H+H+j]+dhv*oo*(1-tc*tc);
+      dg[o+j]=dcn*gg*i*(1-i);dg[o+H+j]=dcn*cd[q]*f*(1-f);dg[o+2*H+j]=dcn*i*(1-gg*gg);dg[o+3*H+j]=dhv*tc*oo*(1-oo);dc[q]=dcn*f}
+    const r=cellBack(dg,hd,Wh.data,B,H,G,!!bh);return[dg,r.gh,dc,r.gW,r.gb]})}
+function rnnForward(m,args){const c=m.cfg,H=c.hidden_size,L=c.num_layers,kind=m.kind;let X=asTensor(args[0]);const unb=X.shape.length===2;
+  if(X.shape.length!==3&&!unb)err('RuntimeError',`${kind}: Expected input to be 2D or 3D, got ${X.shape.length}D instead`);
+  if(unb)X=reshapeT(X,c.batch_first?[1,...X.shape]:[X.shape[0],1,X.shape[1]]);
+  if(X.shape[2]!==c.input_size)err('RuntimeError',`input.size(-1) must be equal to input_size. Expected ${c.input_size}, got ${X.shape[2]}`);
+  const T=c.batch_first?X.shape[1]:X.shape[0],Bn=c.batch_first?X.shape[0]:X.shape[1],ALL={slice:[null,null,null]};
+  let h0=null,c0=null,st=args[1];if(st&&st.t!=='none'){if(kind==='LSTM'){if(st.t!=='tuple'||st.items.length!==2)err('RuntimeError','LSTM 的状态要是 (h0, c0) 两个张量组成的元组');h0=asTensor(st.items[0]);c0=asTensor(st.items[1])}else h0=asTensor(st);if(unb){h0=reshapeT(h0,[L,1,H]);if(c0)c0=reshapeT(c0,[L,1,H])}
+    if(h0.shape.join()!==[L,Bn,H].join())err('RuntimeError',`Expected hidden size (${L}, ${Bn}, ${H}), got [${h0.shape.join(', ')}]`)}
+  const zeros=()=>mkT([Bn,H],new Float64Array(Bn*H),'float32'),sl=(G,k)=>getItem(G,[ALL,{slice:[k*H,(k+1)*H,null]}]);
+  // 加速：权重的转置每层只做一次；输入那一半 X·W_ihᵀ 对所有时间步一次算完，再按时间步取出来
+  let inputs=null;const hn=[],cn=[];
+  for(let l=0;l<L;l++){const P=m.params,WiT=transpose2(P['weight_ih_l'+l]),bi=P['bias_ih_l'+l],bh=P['bias_hh_l'+l],G=WiT.shape[1];let h=h0?getItem(h0,[{v:l}]):zeros(),cc=kind==='LSTM'?(c0?getItem(c0,[{v:l}]):zeros()):null;const outs=[];
+    let gAll;if(l===0){const X2=reshapeT(X,[-1,X.shape[2]]);let g=matmul(X2,WiT);if(bi)g=binop('+',g,bi);gAll=reshapeT(g,[X.shape[0],X.shape[1],G])}else{let g=matmul(reshapeT(stack([list(inputs)],{dim:I(0)}),[-1,H]),WiT);if(bi)g=binop('+',g,bi);gAll=reshapeT(g,[T,Bn,G])}
+    const tm=l>0||!c.batch_first;
+    for(let t=0;t<T;t++){const gi=tm?getItem(gAll,[{v:t}]):getItem(gAll,[ALL,{v:t}]);
+      if(kind==='LSTM'){const hc=fusedCell('LSTM',gi,h,cc,P['weight_hh_l'+l],bh);h=getItem(hc,[ALL,{slice:[0,H,null]}]);cc=getItem(hc,[ALL,{slice:[H,2*H,null]}])}
+      else h=fusedCell(kind,gi,h,null,P['weight_hh_l'+l],bh,c.nonlinearity==='relu');
+      outs.push(h)}
+    inputs=outs;hn.push(h);if(cc)cn.push(cc)}
+  const stk=(ts,d)=>rename(stack([list(ts)],{dim:I(d)}),'StackBackward0');
+  let out=c.batch_first?rename(stack([list(inputs)],{dim:I(1)}),'TransposeBackward0'):stk(inputs,0),hN=stk(hn,0),cN=cn.length?stk(cn,0):null;
+  if(unb){out=reshapeT(out,[T,H]);hN=reshapeT(hN,[L,H]);if(cN)cN=reshapeT(cN,[L,H])}
+  return tup([out,kind==='LSTM'?tup([hN,cN]):hN])}
+function embedForward(m,x){const I0=asTensor(x),W=m.params.weight,[N,D]=W.shape;if(I0.dtype!=='int64')err('RuntimeError',"Expected tensor for argument #1 'indices' to have one of the following scalar types: Long, Int; but got torch.FloatTensor instead (while checking arguments for embedding)");
+  const out=new Float64Array(I0.data.length*D);I0.data.forEach((v,i)=>{if(v<0||v>=N)err('IndexError','index out of range in self');for(let j=0;j<D;j++)out[i*D+j]=W.data[v*D+j]});
+  return track(mkT([...I0.shape,D],out,W.dtype),[W],'EmbeddingBackward0',g=>{const gw=new Float64Array(N*D);I0.data.forEach((v,i)=>{for(let j=0;j<D;j++)gw[v*D+j]+=g[i*D+j]});return[gw]})}
 function nnForward(m,args,ctx){const x=args[0];
   switch(m.kind){
+    case'RNN':case'LSTM':case'GRU':return rnnForward(m,args);case'Embedding':return embedForward(m,x);
     case'Linear':{const X=asTensor(x),W=m.params.weight,b=m.params.bias;if(X.shape[X.shape.length-1]!==W.shape[1])err('RuntimeError',`mat1 and mat2 shapes cannot be multiplied (${X.shape.length===1?1:prod(X.shape.slice(0,-1))}x${X.shape[X.shape.length-1]} and ${W.shape[1]}x${W.shape[0]})`);
       let Xf=X.shape.length>2?reshapeT(X,[-1,X.shape[X.shape.length-1]]):X;let R=matmul(Xf,transpose2(W));if(b)R=binop('+',R,b);if(X.shape.length>2)R=reshapeT(R,[...X.shape.slice(0,-1),W.shape[0]]);else if(X.shape.length===2&&b)rename(R,'AddmmBackward0');return R}
     case'Sequential':{let h=x;for(const c of m.children)h=callValue(c[1],[h],{},ctx);return h}
@@ -48,7 +105,9 @@ function nnRepr(m,ind=''){const c=m.cfg;switch(m.kind){
   case'Linear':return`Linear(in_features=${m.params.weight.shape[1]}, out_features=${m.params.weight.shape[0]}, bias=${m.params.bias?'True':'False'})`;
   case'Flatten':return`Flatten(start_dim=${c.start_dim}, end_dim=-1)`;case'Softmax':case'LogSoftmax':return`${m.kind}(dim=${c.dim})`;case'Dropout':return`Dropout(p=${pyFloatRepr(c.p)}, inplace=False)`;
   case'HuberLoss':case'SmoothL1Loss':return`${m.kind}()`;
-  case'Sequential':return modListRepr('Sequential',m.children,ind)}return`${m.kind}()`}
+  case'Sequential':return modListRepr('Sequential',m.children,ind);
+  case'RNN':case'LSTM':case'GRU':return`${m.kind}(${c.input_size}, ${c.hidden_size}${c.num_layers>1?', num_layers='+c.num_layers:''}${c.bias?'':', bias=False'}${c.batch_first?', batch_first=True':''})`;
+  case'Embedding':return`Embedding(${m.params.weight.shape[0]}, ${m.params.weight.shape[1]})`}return`${m.kind}()`}
 function modListRepr(name,children,ind){if(!children.length)return name+'()';return name+'(\n'+children.map(([k,v])=>`${ind}  (${k}): ${modRepr(v,ind+'  ')}`).join('\n')+`\n${ind})`}
 function modRepr(v,ind=''){if(v.t==='nn')return nnRepr(v,ind);if(v.t==='obj'&&isModuleObj(v))return modListRepr(v.cls.name,objChildren(v),ind);return repr(v)}
 function isModuleCls(c){while(c){if(c===ModuleCls)return true;c=c.base}return false}
@@ -84,10 +143,13 @@ function moduleMethods(m){return{
 function nnAttr(m,name){const c=m.cfg;
   if(name in m.params){const p=m.params[name];return p||NONE}
   if(m.kind==='Linear'){if(name==='in_features')return I(m.params.weight.shape[1]);if(name==='out_features')return I(m.params.weight.shape[0])}
+  if(c.attrs&&name in c.attrs)return c.attrs[name];
   if(name==='training')return B(m.training);if(name==='p'&&m.kind==='Dropout')return F(c.p);if(name==='reduction'&&LOSSES.has(m.kind))return S(c.reduction);
   const M=moduleMethods(m);if(M[name])return fn(name,M[name]);err('AttributeError',`'${m.kind}' object has no attribute '${name}'`)}
 function nnMake(kind,a,kw){const bkw=(k,d)=>kw[k]!==undefined?truthy(kw[k]):d;
-  switch(kind){case'Linear':{const inF=intOf(kwOr(kw,a,'in_features',0)),outF=intOf(kwOr(kw,a,'out_features',1));return nnObj('Linear',{},linearInit(inF,outF,bkw('bias',a[2]?truthy(a[2]):true)))}
+  switch(kind){case'RNN':case'LSTM':case'GRU':return rnnMake(kind,a,kw);
+    case'Embedding':{const N=intOf(kwOr(kw,a,'num_embeddings',0)),D=intOf(kwOr(kw,a,'embedding_dim',1));return nnObj('Embedding',{attrs:{num_embeddings:I(N),embedding_dim:I(D)}},{weight:mkParam([N,D],Array.from({length:N*D},gauss))})}
+    case'Linear':{const inF=intOf(kwOr(kw,a,'in_features',0)),outF=intOf(kwOr(kw,a,'out_features',1));return nnObj('Linear',{},linearInit(inF,outF,bkw('bias',a[2]?truthy(a[2]):true)))}
     case'Sequential':{if(a.length===1&&a[0].t==='dict')return nnObj('Sequential',{},{},[...a[0].m.values()].map(([k,v])=>[str(k),v]));return nnObj('Sequential',{},{},a.map((v,i)=>{if(!isMod(v))err('TypeError',`${typeName(v)} is not a Module subclass`);return[String(i),v]}))}
     case'Flatten':return nnObj('Flatten',{start_dim:kw.start_dim?intOf(kw.start_dim):a[0]?intOf(a[0]):1});
     case'Softmax':case'LogSoftmax':return nnObj(kind,{dim:kw.dim?intOf(kw.dim):a[0]?intOf(a[0]):null});
@@ -99,20 +161,20 @@ const ModuleCls={t:'cls',name:'Module',base:null,attrs:Object.create(null)};
 ModuleCls.attrs.__init__=fn('__init__',a=>{const self=a[0];self.attrs.training=B(true);const d=mkDict([]);d.odict=true;self.attrs._modules=d;return NONE});ModuleCls.attrs.__init__.method=true;
 ModuleCls.attrs.__call__=fn('__call__',(a,kw,ctx)=>{const self=a[0];const f=classLookup(self.cls,'forward');if(!f)err('NotImplementedError',`Module [${self.cls.name}] is missing the required "forward" function`);return callValue({t:'bound',f,self},a.slice(1),kw,ctx)});ModuleCls.attrs.__call__.method=true;
 for(const k of['parameters','named_parameters','children','named_children','modules','named_modules','train','eval','apply','zero_grad','state_dict','load_state_dict','to','cpu','cuda','add_module']){ModuleCls.attrs[k]=fn(k,(a,kw,ctx)=>moduleMethods(a[0])[k](a.slice(1),kw,ctx));ModuleCls.attrs[k].method=true}
-const NN_KINDS=['Linear','Sequential','Flatten','ReLU','Sigmoid','Tanh','Softmax','LogSoftmax','Dropout','Identity','MSELoss','L1Loss','HuberLoss','SmoothL1Loss','CrossEntropyLoss','BCELoss','BCEWithLogitsLoss'];
+const NN_KINDS=['RNN','LSTM','GRU','Embedding','Linear','Sequential','Flatten','ReLU','Sigmoid','Tanh','Softmax','LogSoftmax','Dropout','Identity','MSELoss','L1Loss','HuberLoss','SmoothL1Loss','CrossEntropyLoss','BCELoss','BCEWithLogitsLoss'];
 const nnInit=mod('torch.nn.init',{
   normal_:fn('normal_',(a,kw)=>{const T=a[0],m=numOf(kwOr(kw,a,'mean',1,F(0))),s=numOf(kwOr(kw,a,'std',2,F(1)));for(let i=0;i<T.data.length;i++)T.data[i]=castVal(m+s*gauss(),T.dtype);return T}),
   uniform_:fn('uniform_',(a,kw)=>{const T=a[0],lo=numOf(kwOr(kw,a,'a',1,F(0))),hi=numOf(kwOr(kw,a,'b',2,F(1)));for(let i=0;i<T.data.length;i++)T.data[i]=castVal(lo+(hi-lo)*rand(),T.dtype);return T}),
   zeros_:fn('zeros_',a=>{a[0].data.fill(0);return a[0]}),ones_:fn('ones_',a=>{a[0].data.fill(1);return a[0]}),constant_:fn('constant_',a=>{a[0].data.fill(castVal(numOf(a[1]),a[0].dtype));return a[0]}),
   xavier_uniform_:fn('xavier_uniform_',(a,kw)=>{const T=a[0],[o,i]=T.shape,g=kw.gain?numOf(kw.gain):1,b=g*Math.sqrt(6/(i+o));for(let k=0;k<T.data.length;k++)T.data[k]=castVal((rand()*2-1)*b,T.dtype);return T}),
   xavier_normal_:fn('xavier_normal_',a=>{const T=a[0],[o,i]=T.shape,s=Math.sqrt(2/(i+o));for(let k=0;k<T.data.length;k++)T.data[k]=castVal(s*gauss(),T.dtype);return T})});
-const nnF=mod('torch.nn.functional',{relu:fn('relu',a=>unary(a[0],'relu')),sigmoid:fn('sigmoid',a=>unary(a[0],'sigmoid')),tanh:fn('tanh',a=>unary(a[0],'tanh')),
+const nnF=mod('torch.nn.functional',{one_hot:fn('one_hot',(a,kw)=>{const T=asTensor(a[0]);if(T.dtype!=='int64')err('RuntimeError','one_hot is only applicable to index tensor of type LongTensor.');let C=intOf(kwOr(kw,a,'num_classes',1,I(-1)));if(C<0)C=Math.max(-1,...T.data)+1;const out=new Float64Array(T.data.length*C);T.data.forEach((v,i)=>{if(v<0||v>=C)err('RuntimeError','Class values must be smaller than num_classes.');out[i*C+v]=1});return mkT([...T.shape,C],out,'int64')}),relu:fn('relu',a=>unary(a[0],'relu')),sigmoid:fn('sigmoid',a=>unary(a[0],'sigmoid')),tanh:fn('tanh',a=>unary(a[0],'tanh')),
   softmax:fn('softmax',(a,kw)=>softmaxT(a[0],intOf(kwOr(kw,a,'dim',1)))),log_softmax:fn('log_softmax',(a,kw)=>softmaxT(a[0],intOf(kwOr(kw,a,'dim',1)),true)),
   cross_entropy:fn('cross_entropy',(a,kw)=>crossEntropy(a[0],a[1],redOf(kw))),mse_loss:fn('mse_loss',(a,kw)=>mseLoss(a[0],a[1],redOf(kw))),
   binary_cross_entropy:fn('binary_cross_entropy',(a,kw)=>bceLoss(a[0],a[1],redOf(kw),false)),binary_cross_entropy_with_logits:fn('binary_cross_entropy_with_logits',(a,kw)=>bceLoss(a[0],a[1],redOf(kw),true)),
   huber_loss:fn('huber_loss',(a,kw)=>huberLoss(a[0],a[1],redOf(kw),kw.delta?numOf(kw.delta):1)),dropout:fn('dropout',(a,kw)=>{const p=numOf(kwOr(kw,a,'p',1,F(0.5)));const tr=kw.training?truthy(kw.training):true;return tr?nnForward(nnObj('Dropout',{p}),[a[0]],null):a[0]})});
 const nnMod=mod('torch.nn',{Module:ModuleCls,init:nnInit,functional:nnF,Parameter:fn('Parameter',(a,kw)=>{const T=asTensor(a[0]);const p=mkParam(T.shape.slice(),T.data);p.dtype=T.dtype;if(kw.requires_grad&&!truthy(kw.requires_grad))p.requires_grad=false;return p})});
-for(const k of NN_KINDS)nnMod.attrs[k]=fn(k,(a,kw)=>nnMake(k,a,kw));
+for(const k of NN_KINDS){nnMod.attrs[k]=fn(k,(a,kw)=>nnMake(k,a,kw));nnMod.attrs[k].nnKind=k}
 // 优化器
 function optMake(kind,a,kw){const items=a[0].t==='list'||a[0].t==='tuple'||a[0].t==='iter'?iterate(a[0]):[a[0]];const toList=v=>isT(v)?[v]:iterate(v).filter(isT);
   const defLr=numOf(kwOr(kw,a,'lr',1,F(kind==='SGD'?NaN:0.001)));if(kind==='SGD'&&Number.isNaN(defLr))err('TypeError',"SGD.__init__() missing 1 required positional argument: 'lr'");

@@ -1,0 +1,324 @@
+<main class="wrap day" id="day13" data-day="13" hidden>
+<section class="hero">
+  <div class="eyebrow">第 13 天 · 原书第 8.5 节 + 第 8.6 节 + 第 8.7 节 · 论文路线第 6 课</div>
+  <h1>亲手训练一个 RNN，再看梯度怎么穿过时间</h1>
+  <p class="lead">昨天看了 RNN 的公式，今天从零写一个，用《时光机器》训练它一个字符一个字符地“写文章”。然后用 <code>nn.RNN</code> 写简洁版。最后看反向传播怎么沿着时间往回走、为什么要做梯度裁剪。你论文 <code>train_kt</code> 里的 <code>clip_grad_norm_(params, 5.0)</code> 就是今天讲的东西。</p>
+  <div class="plan">
+    <div><b class="k">今天的时间</b>大约 80 分钟。三个训练格要手动运行，每个半分钟左右。</div>
+    <div><b class="k">学完你能</b><ul><li>用独热编码把字符变成向量</li><li>从零实现 RNN 的前向计算、预测和训练</li><li>实现梯度裁剪</li><li>说清通过时间反向传播和截断</li></ul></div>
+    <div><b class="k">和你的论文</b><ul><li><code>clip_grad_norm_(params, 5.0)</code></li><li>100 步窗口相当于截断的 BPTT</li><li><code>nn.LSTM(d, d, batch_first=True)</code> 的输入输出形状</li></ul></div>
+  </div>
+</section>
+
+<section class="part" id="rnnscratch">
+  <div class="part-h"><div class="eyebrow">第一部分</div><h2>8.5 循环神经网络的从零开始实现</h2><span class="src">对应原书第 8.5 节，代码来自原书 PyTorch 版。训练规模缩小了，见下文说明</span></div>
+  <div class="prose"><div class="row"><button class="btn primary runAll" data-day="13">从头全部运行</button><span class="small muted runAllMsg"></span></div></div>
+  <div class="blk">
+    <div class="cell"><textarea>%matplotlib inline
+from d2l import torch as d2l
+import math
+import torch
+from torch import nn
+from torch.nn import functional as F</textarea></div>
+    <div class="cell"><textarea>batch_size, num_steps = 32, 35
+train_iter, vocab = d2l.load_data_time_machine(batch_size, num_steps)</textarea></div>
+  </div>
+  <div class="blk"><div class="blk-h"><span class="n">8.5.1</span><h3>独热编码</h3></div>
+    <div class="prose"><p>每个字符的编号变成一个长度为词表大小（28）的向量，对应位置是 1，其余是 0：</p></div>
+    <div class="cell"><textarea>F.one_hot(torch.tensor([0, 2]), len(vocab))</textarea></div>
+    <div class="prose"><p>一个小批量的形状是（批量大小，时间步数）。转置以后再独热编码，得到（时间步数，批量大小，词表大小），这样第一个维度就是时间，可以一步步往下走：</p></div>
+    <div class="cell"><textarea>X = d2l.reshape(d2l.arange(10), (2, 5))
+F.one_hot(X.T, 28).shape</textarea></div>
+    <div class="callout"><h4>对照你的论文：独热编码 × 矩阵 = 嵌入</h4><p>独热向量乘 W_xh，结果正好是 W_xh 的某一行。所以“独热编码再乘矩阵”和“直接按编号取一行”是一回事，后者就是 <code>nn.Embedding</code>，省掉了一大堆乘 0 的计算。DKT 的 <code>self.emb = nn.Embedding(2 * K, d)</code> 就相当于这里的 W_xh。</p></div>
+  </div>
+  <div class="blk"><div class="blk-h"><span class="n">8.5.2</span><h3>初始化模型参数</h3></div>
+    <div class="cell"><textarea>def get_params(vocab_size, num_hiddens, device):
+    num_inputs = num_outputs = vocab_size
+
+    def normal(shape):
+        return torch.randn(size=shape, device=device) * 0.01
+
+    # 隐藏层参数
+    W_xh = normal((num_inputs, num_hiddens))
+    W_hh = normal((num_hiddens, num_hiddens))
+    b_h = d2l.zeros(num_hiddens, device=device)
+    # 输出层参数
+    W_hq = normal((num_hiddens, num_outputs))
+    b_q = d2l.zeros(num_outputs, device=device)
+    # 附加梯度
+    params = [W_xh, W_hh, b_h, W_hq, b_q]
+    for param in params:
+        param.requires_grad_(True)
+    return params</textarea></div>
+  </div>
+  <div class="blk"><div class="blk-h"><span class="n">8.5.3</span><h3>循环神经网络模型</h3></div>
+    <div class="prose"><p>隐状态的初始值全是 0。返回一个元组，是为了和后面 LSTM（有两个状态）的写法统一。</p></div>
+    <div class="cell"><textarea>def init_rnn_state(batch_size, num_hiddens, device):
+    return (d2l.zeros((batch_size, num_hiddens), device=device), )</textarea></div>
+    <div class="prose"><p>前向计算：沿着时间一步步算 Hₜ 和输出，最后把所有时间步的输出竖着拼起来。</p></div>
+    <div class="cell"><textarea>def rnn(inputs, state, params):
+    # inputs的形状：(时间步数量，批量大小，词表大小)
+    W_xh, W_hh, b_h, W_hq, b_q = params
+    H, = state
+    outputs = []
+    # X的形状：(批量大小，词表大小)
+    for X in inputs:
+        H = torch.tanh(torch.mm(X, W_xh) + torch.mm(H, W_hh) + b_h)
+        Y = torch.mm(H, W_hq) + b_q
+        outputs.append(Y)
+    return torch.cat(outputs, dim=0), (H,)</textarea></div>
+    <div class="cell"><textarea>class RNNModelScratch: #@save
+    """从零开始实现的循环神经网络模型"""
+    def __init__(self, vocab_size, num_hiddens, device,
+                 get_params, init_state, forward_fn):
+        self.vocab_size, self.num_hiddens = vocab_size, num_hiddens
+        self.params = get_params(vocab_size, num_hiddens, device)
+        self.init_state, self.forward_fn = init_state, forward_fn
+
+    def __call__(self, X, state):
+        X = F.one_hot(X.T, self.vocab_size).type(torch.float32)
+        return self.forward_fn(X, state, self.params)
+
+    def begin_state(self, batch_size, device):
+        return self.init_state(batch_size, self.num_hiddens, device)</textarea></div>
+    <div class="prose"><p>检查形状：输入 2 个样本、5 个时间步，输出是 (5 × 2, 28)，隐状态是 (2, 512)。</p></div>
+    <div class="cell"><textarea>num_hiddens = 512
+net = RNNModelScratch(len(vocab), num_hiddens, d2l.try_gpu(), get_params,
+                      init_rnn_state, rnn)
+state = net.begin_state(X.shape[0], d2l.try_gpu())
+Y, new_state = net(X.to(d2l.try_gpu()), state)
+Y.shape, len(new_state), new_state[0].shape</textarea></div>
+  </div>
+  <div class="blk"><div class="blk-h"><span class="n">8.5.4</span><h3>预测</h3></div>
+    <div class="prose"><p>先把前缀一个个喂进去“预热”隐状态（只更新状态，不看输出），然后每次取概率最大的字符，再把它当作下一步的输入。还没训练，输出是乱码：</p></div>
+    <div class="cell"><textarea>def predict_ch8(prefix, num_preds, net, vocab, device):  #@save
+    """在prefix后面生成新字符"""
+    state = net.begin_state(batch_size=1, device=device)
+    outputs = [vocab[prefix[0]]]
+    get_input = lambda: d2l.reshape(d2l.tensor(
+        [outputs[-1]], device=device), (1, 1))
+    for y in prefix[1:]:  # 预热期
+        _, state = net(get_input(), state)
+        outputs.append(vocab[y])
+    for _ in range(num_preds):  # 预测num_preds步
+        y, state = net(get_input(), state)
+        outputs.append(int(y.argmax(dim=1).reshape(1)))
+    return ''.join([vocab.idx_to_token[i] for i in outputs])</textarea></div>
+    <div class="cell"><textarea>predict_ch8('time traveller ', 10, net, vocab, d2l.try_gpu())</textarea></div>
+  </div>
+  <div class="blk"><div class="blk-h"><span class="n">8.5.5</span><h3>梯度裁剪</h3></div>
+    <div class="prose"><p>把所有参数的梯度看成一个长向量 g。如果它的长度 ‖g‖ 超过上限 θ，就整体缩小：</p>
+      <p class="math">g ← min(1, θ / ‖g‖) · g</p>
+      <p>方向不变，只把长度压到 θ。这样一次更新不会因为某一步梯度爆炸而跳得太远。</p></div>
+    <div class="cell"><textarea>def grad_clipping(net, theta):  #@save
+    """裁剪梯度"""
+    if isinstance(net, nn.Module):
+        params = [p for p in net.parameters() if p.requires_grad]
+    else:
+        params = net.params
+    norm = torch.sqrt(sum(torch.sum((p.grad ** 2)) for p in params))
+    if norm > theta:
+        for param in params:
+            param.grad[:] *= theta / norm</textarea></div>
+    <div class="panel stack" id="clLab">
+      <h4>梯度裁剪长什么样</h4>
+      <p class="small muted">拖动滑块改变原始梯度（蓝色箭头）的长度和方向。虚线圆的半径是 θ。超出圆的梯度会沿着原方向缩回到圆上（橙色箭头）；在圆里面的不变。</p>
+      <div class="row"><label class="ctrl" for="clLen">梯度长度 <output id="clLenv">8.0</output><input type="range" id="clLen" min="0.5" max="20" step="0.5" value="8"></label><label class="ctrl" for="clAng">方向 <output id="clAngv">30°</output><input type="range" id="clAng" min="0" max="359" step="1" value="30"></label><label class="ctrl" for="clTh">上限 θ <output id="clThv">5</output><input type="range" id="clTh" min="1" max="10" step="0.5" value="5"></label></div>
+      <div class="two"><div class="cv" id="clHost"><canvas id="clCv" aria-label="梯度裁剪示意"></canvas></div><div class="calc pw" id="clCalc"></div></div>
+    </div>
+  </div>
+  <div class="blk"><div class="blk-h"><span class="n">8.5.6</span><h3>训练</h3></div>
+    <div class="prose"><p>和第 7 天的训练循环比，有三处不同：（1）顺序分区时，隐状态从上一个小批量接着用，但要 <code>detach_()</code> 把它从上一批的计算图上摘下来，不然反向传播会一路传回到最开始；（2）反向传播后先做梯度裁剪再更新；（3）用困惑度衡量好坏。</p></div>
+    <div class="cell"><textarea>#@save
+def train_epoch_ch8(net, train_iter, loss, updater, device, use_random_iter):
+    """训练网络一个迭代周期（定义见第8章）"""
+    state, timer = None, d2l.Timer()
+    metric = d2l.Accumulator(2)  # 训练损失之和,词元数量
+    for X, Y in train_iter:
+        if state is None or use_random_iter:
+            # 在第一次迭代或使用随机抽样时初始化state
+            state = net.begin_state(batch_size=X.shape[0], device=device)
+        else:
+            if isinstance(net, nn.Module) and not isinstance(state, tuple):
+                # state对于nn.GRU是个张量
+                state.detach_()
+            else:
+                # state对于nn.LSTM或对于我们从零开始实现的模型是个张量
+                for s in state:
+                    s.detach_()
+        y = Y.T.reshape(-1)
+        X, y = X.to(device), y.to(device)
+        y_hat, state = net(X, state)
+        l = loss(y_hat, y.long()).mean()
+        if isinstance(updater, torch.optim.Optimizer):
+            updater.zero_grad()
+            l.backward()
+            grad_clipping(net, 1)
+            updater.step()
+        else:
+            l.backward()
+            grad_clipping(net, 1)
+            # 因为已经调用了mean函数
+            updater(batch_size=1)
+        metric.add(l * d2l.size(y), d2l.size(y))
+    return math.exp(metric[0] / metric[1]), metric[1] / timer.stop()</textarea></div>
+    <div class="cell"><textarea>#@save
+def train_ch8(net, train_iter, vocab, lr, num_epochs, device,
+              use_random_iter=False):
+    """训练模型（定义见第8章）"""
+    loss = nn.CrossEntropyLoss()
+    animator = d2l.Animator(xlabel='epoch', ylabel='perplexity',
+                            legend=['train'], xlim=[10, num_epochs])
+    # 初始化
+    if isinstance(net, nn.Module):
+        updater = torch.optim.SGD(net.parameters(), lr)
+    else:
+        updater = lambda batch_size: d2l.sgd(net.params, lr, batch_size)
+    predict = lambda prefix: predict_ch8(prefix, 50, net, vocab, device)
+    # 训练和预测
+    for epoch in range(num_epochs):
+        ppl, speed = train_epoch_ch8(
+            net, train_iter, loss, updater, device, use_random_iter)
+        if (epoch + 1) % 10 == 0:
+            print(predict('time traveller'))
+            animator.add(epoch + 1, [ppl])
+    print(f'困惑度 {ppl:.1f}, {speed:.1f} 词元/秒 {str(device)}')
+    print(predict('time traveller'))
+    print(predict('traveller'))</textarea></div>
+    <div class="prose"><p><b>和原书的不同</b>：原书 512 个隐藏单元、训练 500 轮，在 GPU 上要一两分钟，最后困惑度约 1.0（几乎把这 1 万个字符背下来了）。网页里没有 GPU，这里改成 64 个隐藏单元、150 轮，在电脑上大约半分钟，手机上会慢几倍。我在真 PyTorch 上跑过同样的设置，最后困惑度约 4.8，生成的句子已经有不少真单词了，比如 “time traveller and have the time that the …”。</p></div>
+    <div class="cell" data-manual="训练 150 轮，电脑上大约半分钟，期间页面会卡住"><textarea># 原书：num_hiddens = 512，num_epochs = 500
+num_hiddens, num_epochs, lr = 64, 150, 1
+net = RNNModelScratch(len(vocab), num_hiddens, d2l.try_gpu(), get_params,
+                      init_rnn_state, rnn)
+train_ch8(net, train_iter, vocab, lr, num_epochs, d2l.try_gpu())</textarea></div>
+    <div class="prose"><p>换成随机抽样（每个小批量重新初始化隐状态），结果通常略差一点：模型每次只能看到 35 个字符的上下文。</p></div>
+    <div class="cell" data-manual="训练 150 轮，电脑上大约半分钟"><textarea>net = RNNModelScratch(len(vocab), num_hiddens, d2l.try_gpu(), get_params,
+                      init_rnn_state, rnn)
+train_ch8(net, train_iter, vocab, lr, num_epochs, d2l.try_gpu(),
+          use_random_iter=True)</textarea></div>
+  </div>
+</section>
+
+<section class="part" id="rnnconcise">
+  <div class="part-h"><div class="eyebrow">第二部分</div><h2>8.6 循环神经网络的简洁实现</h2><span class="src">对应原书第 8.6 节，代码来自原书 PyTorch 版</span></div>
+  <div class="blk">
+    <div class="cell"><textarea>from d2l import torch as d2l
+import torch
+from torch import nn
+from torch.nn import functional as F
+
+batch_size, num_steps = 32, 35
+train_iter, vocab = d2l.load_data_time_machine(batch_size, num_steps)</textarea></div>
+    <div class="prose"><p><code>nn.RNN(输入维度, 隐藏维度)</code>。它的参数名就是第 11 天看到的 <code>weight_ih_l0</code>、<code>weight_hh_l0</code>、<code>bias_ih_l0</code>、<code>bias_hh_l0</code>：</p></div>
+    <div class="cell"><textarea>num_hiddens = 256
+rnn_layer = nn.RNN(len(vocab), num_hiddens)
+[(name, p.shape) for name, p in rnn_layer.named_parameters()]</textarea></div>
+    <div class="prose"><p>隐状态的形状是（层数，批量大小，隐藏单元数）：</p></div>
+    <div class="cell"><textarea>state = torch.zeros((1, batch_size, num_hiddens))
+state.shape</textarea></div>
+    <div class="prose"><p><code>nn.RNN</code> 本身<b>不包含输出层</b>。它返回两样东西：每个时间步的隐状态 Y（时间步数，批量大小，隐藏单元数），以及最后一步的隐状态。</p></div>
+    <div class="cell"><textarea>X = torch.rand(size=(num_steps, batch_size, len(vocab)))
+Y, state_new = rnn_layer(X, state)
+Y.shape, state_new.shape</textarea></div>
+    <div class="cell"><textarea>#@save
+class RNNModel(nn.Module):
+    """循环神经网络模型"""
+    def __init__(self, rnn_layer, vocab_size, **kwargs):
+        super(RNNModel, self).__init__(**kwargs)
+        self.rnn = rnn_layer
+        self.vocab_size = vocab_size
+        self.num_hiddens = self.rnn.hidden_size
+        # 如果RNN是双向的（之后将介绍），num_directions应该是2，否则应该是1
+        if not self.rnn.bidirectional:
+            self.num_directions = 1
+            self.linear = nn.Linear(self.num_hiddens, self.vocab_size)
+        else:
+            self.num_directions = 2
+            self.linear = nn.Linear(self.num_hiddens * 2, self.vocab_size)
+
+    def forward(self, inputs, state):
+        X = F.one_hot(inputs.T.long(), self.vocab_size)
+        X = X.to(torch.float32)
+        Y, state = self.rnn(X, state)
+        # 全连接层首先将Y的形状改为(时间步数*批量大小,隐藏单元数)
+        # 它的输出形状是(时间步数*批量大小,词表大小)。
+        output = self.linear(Y.reshape((-1, Y.shape[-1])))
+        return output, state
+
+    def begin_state(self, device, batch_size=1):
+        if not isinstance(self.rnn, nn.LSTM):
+            # nn.GRU以张量作为隐状态
+            return  torch.zeros((self.num_directions * self.rnn.num_layers,
+                                 batch_size, self.num_hiddens),
+                                device=device)
+        else:
+            # nn.LSTM以元组作为隐状态
+            return (torch.zeros((
+                self.num_directions * self.rnn.num_layers,
+                batch_size, self.num_hiddens), device=device),
+                    torch.zeros((
+                        self.num_directions * self.rnn.num_layers,
+                        batch_size, self.num_hiddens), device=device))</textarea></div>
+    <div class="cell"><textarea>device = d2l.try_gpu()
+net = RNNModel(rnn_layer, vocab_size=len(vocab))
+net = net.to(device)
+d2l.predict_ch8('time traveller', 10, net, vocab, device)</textarea></div>
+    <div class="prose"><p>训练。原书 256 个隐藏单元、500 轮，这里改成 64 个、150 轮。</p></div>
+    <div class="cell" data-manual="训练 150 轮，电脑上大约半分钟"><textarea># 原书：num_hiddens = 256，num_epochs = 500
+num_epochs, lr = 150, 1
+net = RNNModel(nn.RNN(len(vocab), 64), vocab_size=len(vocab))
+d2l.train_ch8(net, train_iter, vocab, lr, num_epochs, device)</textarea></div>
+    <div class="callout"><h4>对照你的论文：DKT 的 LSTM 层</h4><p>第 1035 行 <code>self.lstm = nn.LSTM(d, d, batch_first=True)</code>：输入 d 维（嵌入向量）、隐藏 d 维。<code>batch_first=True</code> 表示输入的形状是（批量，时间步，d），而不是这里默认的（时间步，批量，d）。第 1043 行 <code>h, _ = self.lstm(x)</code>：没传初始状态，默认全 0；只要每个时间步的输出 h（批量，时间步，d），最后一步的状态用不到，就用 <code>_</code> 扔掉。h 再经过输出层 <code>self.out = nn.Linear(d, K)</code> 得到每个知识点的答对 logit，和这里的 <code>self.linear</code> 是一个作用。</p></div>
+  </div>
+</section>
+
+<section class="part" id="bptt">
+  <div class="part-h"><div class="eyebrow">第三部分</div><h2>8.7 通过时间反向传播</h2><span class="src">对应原书第 8.7 节。原书这一节只有公式，下面的交互是本页补充的</span></div>
+  <div class="blk">
+    <div class="prose">
+      <p>把 RNN 沿时间展开，就是一个很深的网络，每一层共用参数。损失对 W_hh 的梯度要把每个时间步的贡献加起来，而每一步的贡献里都有这样一串连乘：</p>
+      <p class="math">∂hₜ/∂h_i = ∏_{j=i+1}^{t} ∂h_j/∂h_{j−1}，每一项都含 W_hh</p>
+      <p>t − i 很大时，这串连乘要么趋于 0（梯度消失，远处的信息学不到），要么爆炸（第 10 天讲过）。原书讨论了三种算法：</p>
+      <ul>
+        <li><b>完全计算</b>：一直传回序列开头。又慢又容易爆炸，基本不用。</li>
+        <li><b>截断时间步</b>：只往回传 τ 步就停。实际中最常用，今天的训练就是这样：每个小批量 35 步，<code>detach_()</code> 把更早的部分切断。</li>
+        <li><b>随机截断</b>：用随机长度截断，再用权重修正让估计无偏。理论上好看，实际效果和固定截断差不多。</li>
+      </ul>
+    </div>
+    <div class="panel stack" id="btLab">
+      <h4>梯度能传多远</h4>
+      <p class="small muted">一个最简单的 RNN：hₜ = tanh(w·h_{t−1} + xₜ)，序列长 60 步，损失只看最后一步。曲线上每个点是损失对第 i 步隐状态的梯度大小 |∂L/∂h_i|（对数刻度）。拖动 w，看梯度往回传时是衰减还是放大；打开截断，看 τ 步以前的梯度怎样被直接切掉。</p>
+      <div class="row"><label class="ctrl" for="btW">循环权重 w <output id="btWv">0.90</output><input type="range" id="btW" min="0.1" max="3" step="0.05" value="0.9"></label><label class="ctrl" for="btTr">截断 <select id="btTr"><option value="0">不截断（完全计算）</option><option value="35">往回 35 步（今天的训练）</option><option value="10">往回 10 步</option></select></label><label class="ctrl" for="btAct">激活 <select id="btAct"><option value="tanh">tanh</option><option value="lin">不用激活（线性）</option></select></label></div>
+      <div class="cv" id="btHost"><canvas id="btCv" aria-label="每个时间步的梯度大小"></canvas></div>
+      <div class="calc pw" id="btCalc"></div>
+    </div>
+    <div class="callout"><h4>对照你的论文：窗口就是截断</h4><p>你论文把每个学生的记录切成 100 步的窗口，每个窗口从零状态开始（第 12 天讲过），所以梯度最多往回传 100 步，这就是截断的 BPTT。LSTM 的门控结构让梯度在这 100 步里不容易消失（明天讲），再加上每一步的 <code>clip_grad_norm_(params, 5.0)</code> 防止爆炸。和原书的 <code>grad_clipping(net, 1)</code> 是同一个算法，只是上限 θ 取 5。</p></div>
+  </div>
+</section>
+
+<section class="part quiz-sec">
+  <div class="part-h"><div class="eyebrow">课后题</div><h2>做几道题检查一下</h2><span class="src">选择题点选项马上出结果；写形状和写代码的题，网页会现场运行代码判断对错。答题记录只存在你这台设备的浏览器里。</span></div>
+  <div class="quiz dayquiz" data-day="13"></div>
+  <div class="row small muted quizscore" data-day="13"></div>
+</section>
+
+<section class="part">
+  <div class="part-h"><div class="eyebrow">今日小结</div><h2>今天学会了吗？</h2></div>
+  <div class="two">
+    <div class="panel stack">
+      <ul class="check-list" data-day="13">
+        <li><label><input type="checkbox" data-k="c1">独热编码乘矩阵 = 取矩阵的一行 = 嵌入层</label></li>
+        <li><label><input type="checkbox" data-k="c2">RNN 前向：沿时间循环，每步更新 H，输出拼起来</label></li>
+        <li><label><input type="checkbox" data-k="c3">梯度裁剪：总长度超过 θ 就按比例缩到 θ，方向不变</label></li>
+        <li><label><input type="checkbox" data-k="c4"><code>nn.RNN</code> / <code>nn.LSTM</code> 只输出隐状态，输出层要自己加；<code>batch_first</code> 决定形状</label></li>
+        <li><label><input type="checkbox" data-k="c5">截断的 BPTT：只往回传有限步；论文的 100 步窗口就是截断</label></li>
+      </ul>
+      <span class="small check-msg"></span>
+    </div>
+    <div class="panel stack">
+      <h3>明天（第 14 天）学什么</h3>
+      <p>原书 9.1 GRU 和 9.2 LSTM：用“门”控制记住什么、忘掉什么。然后专题：照着你论文第 1032 行，在网页里从头搭一个 DKT，用模拟的学生做题数据训练它，看它预测答对概率。</p>
+    </div>
+  </div>
+</section>
+</main>

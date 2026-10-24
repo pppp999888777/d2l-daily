@@ -8,7 +8,7 @@ function colors(){const cs=getComputedStyle(document.documentElement),g=n=>cs.ge
 function fitCanvas(cv,W,H){const r=window.devicePixelRatio||1;cv.width=Math.round(W*r);cv.height=Math.round(H*r);cv.style.width=W+'px';cv.style.height=H+'px';const c=cv.getContext('2d');c.setTransform(r,0,0,r,0,0);return c}
 const MONO='11px "JetBrains Mono",ui-monospace,monospace';
 const bodyFont=px=>`${px}px ${getComputedStyle(document.body).fontFamily}`;
-const DAYS=['1','2','3','4','5','6','7','8','9','10','11','12'];
+const DAYS=['1','2','3','4','5','6','7','8','9','10','11','12','13'];
 
 // ---------- 张量图示 ----------
 function cellText(v,dtype){if(dtype==='bool')return v?'T':'F';if(dtype==='int64')return String(v);if(!Number.isFinite(v))return String(v);return Number.isInteger(v)?String(v):(Math.abs(v)>=100?v.toFixed(0):v.toFixed(2))}
@@ -127,7 +127,7 @@ function setupCells(){$$('.cell').forEach((cell,i)=>{const ta=cell.querySelector
     else if(e.key==='Tab'&&!e.shiftKey){e.preventDefault();const s=ta.selectionStart;ta.setRangeText('    ',s,ta.selectionEnd,'end');autoSize(ta)}})})}
 function runAll(day){ENVS[day]=MT.newEnv();EXEC[day]=0;MT.resetFS();let errs=0;const main=$('#day'+day);
   $$('.cell',main).forEach(c=>{if(c.dataset.manual){const out=c.querySelector('.out');out.className='out';out.textContent='';const t=document.createElement('span');t.className='tip';t.textContent=`这一格要手动运行：${c.dataset.manual}。准备好了点这一格右上角的“运行”。`;out.appendChild(t);out.hidden=false;return}if(!runCellEl(c))errs++});RAN[day]=true;
-  const expected={'1':0,'2':5,'3':3,'4':0,'5':0,'6':0,'7':0,'8':0,'9':0,'10':0,'11':2,'12':0}[day]||0;
+  const expected={'1':0,'2':5,'3':3,'4':0,'5':0,'6':0,'7':0,'8':0,'9':0,'10':0,'11':2,'12':0,'13':0}[day]||0;
   $$('.runAllMsg',main).forEach(m=>m.textContent=errs>expected?`运行完了，有 ${errs} 个格子报错，往下找红字。`:expected?`全部运行完了。其中 ${expected} 个格子是故意报错的，用来练习读报错。`:'全部运行完了，没有报错。')}
 document.addEventListener('click',e=>{const b=e.target.closest('.runAll');if(b)runAll(b.dataset.day)});
 
@@ -497,6 +497,26 @@ function rnRender(){const host=$('#rnHost');if(!host.offsetParent)return;const m
   ctx.textAlign='left';ctx.textBaseline='middle';ctx.font=bodyFont(12);[[C.accent,[],'h 第 1 维'],[C.ink,[5,4],'h 第 2 维']].forEach(([c,d,t],i)=>{const x=pl+i*96;ctx.strokeStyle=c;ctx.setLineDash(d);ctx.beginPath();ctx.moveTo(x,10);ctx.lineTo(x+18,10);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle=C.ink;ctx.fillText(t,x+22,10)});ctx.fillStyle=C.pos;ctx.globalAlpha=.5;ctx.fillRect(pl+192,4,14,12);ctx.globalAlpha=1;ctx.fillStyle=C.ink;ctx.fillText('预测下一题答对的概率',pl+212,10);
   const last=r.H[n-1];$('#rnCalc').textContent=`W_hh = ${mem.toFixed(2)} × [[0.90, 0.25], [−0.10, 0.95]]\n\n${r.P.map((p,t)=>`t = ${String(t+1).padStart(2)}  ${RN.ans[t]?'对':'错'}  h = (${r.H[t][0].toFixed(2).padStart(5)}, ${r.H[t][1].toFixed(2).padStart(5)})  下一题答对概率 ${p.toFixed(2)}`).join('\n')}\n\n${mem<0.1?'W_hh ≈ 0：没有记忆，预测只看最后一题的对错。':mem>1?'记忆很强：很久以前的对错也一直影响预测，改一下第 1 步试试。':'改一下前几步的对错，最后一步的预测也会跟着变：这就是隐状态在“记住”历史。'}`}
 ['#rnAll1','#rnAll0','#rnAlt'].forEach((s,i)=>$(s).onclick=()=>{RN.ans=RN.ans.map((_,t)=>i===0?1:i===1?0:(t+1)%2);rnRender()});$('#rnMem').addEventListener('input',rnRender);
+// ---------- 第 13 天：梯度裁剪 ----------
+function clRender(){const host=$('#clHost');if(!host.offsetParent)return;const C=colors(),L=+$('#clLen').value,ang=+$('#clAng').value*Math.PI/180,th=+$('#clTh').value;$('#clLenv').textContent=L.toFixed(1);$('#clAngv').textContent=$('#clAng').value+'°';$('#clThv').textContent=th;
+  const g=[L*Math.cos(ang),L*Math.sin(ang)],k=Math.min(1,th/L),gc=[g[0]*k,g[1]*k];
+  const W=Math.max(220,host.clientWidth),H=Math.min(W,300),ctx=fitCanvas($('#clCv'),W,H),cx=W/2,cy=H/2,sc=Math.min(W,H)/2/(Math.max(L,th)*1.2);
+  ctx.strokeStyle=C.line;ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(0,cy);ctx.lineTo(W,cy);ctx.moveTo(cx,0);ctx.lineTo(cx,H);ctx.stroke();
+  ctx.setLineDash([5,4]);ctx.strokeStyle=C.muted;ctx.beginPath();ctx.arc(cx,cy,th*sc,0,7);ctx.stroke();ctx.setLineDash([]);
+  const arrow=(v,col,w)=>{const x=cx+v[0]*sc,y=cy-v[1]*sc,a=Math.atan2(cy-y,x-cx);ctx.strokeStyle=col;ctx.fillStyle=col;ctx.lineWidth=w;ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(x,y);ctx.stroke();ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x-9*Math.cos(a-0.4),y+9*Math.sin(a-0.4));ctx.lineTo(x-9*Math.cos(a+0.4),y+9*Math.sin(a+0.4));ctx.fill()};
+  arrow(g,C.accent,2);if(k<1)arrow(gc,C.pos,3);
+  $('#clCalc').textContent=`原始梯度 g = (${g[0].toFixed(2)}, ${g[1].toFixed(2)})\n‖g‖ = ${L.toFixed(2)}，上限 θ = ${th}\n\n${k<1?`‖g‖ > θ，乘以 θ/‖g‖ = ${k.toFixed(3)}\n裁剪后 = (${gc[0].toFixed(2)}, ${gc[1].toFixed(2)})，长度正好是 ${th}`:'‖g‖ ≤ θ，不用裁剪，原样使用'}\n\n方向不变：裁剪前后两个箭头在同一条线上。\n真实模型里 g 是所有参数的梯度拼成的长向量，\n你论文的 DKT 大约有 7 万维，θ = 5。`}
+['#clLen','#clAng','#clTh'].forEach(s=>$(s).addEventListener('input',clRender));
+// ---------- 第 13 天：梯度沿时间往回传 ----------
+function btRender(){const host=$('#btHost');if(!host.offsetParent)return;const w=+$('#btW').value,tr=+$('#btTr').value,act=$('#btAct').value;$('#btWv').textContent=w.toFixed(2);
+  const T=60,xs=Array.from({length:T},(_,t)=>0.3*Math.sin(1.7*t)+0.2*Math.cos(0.9*t)),h=[0];for(let t=0;t<T;t++){const pre=w*h[t]+xs[t];h.push(act==='tanh'?Math.tanh(pre):pre)}
+  const g=new Array(T+1).fill(0);g[T]=1;for(let t=T;t>=1;t--){const d=act==='tanh'?(1-h[t]*h[t]):1;g[t-1]=g[t]*w*d;if(tr&&T-(t-1)>tr)g[t-1]=0}
+  const steps=Array.from({length:T},(_,i)=>i+1),vals=steps.map(i=>Math.max(1e-300,Math.abs(g[i])));
+  host.innerHTML='<canvas id="btCv" aria-label="每个时间步的梯度大小"></canvas>';
+  drawPlot($('#btCv'),{series:[{x:steps,y:steps.map(i=>tr&&T-i>=tr?NaN:vals[i-1]),label:'|∂L/∂hᵢ|'}],hlines:[],xlabel:'时间步 i（第 60 步是损失所在的位置）',ylabel:'',legend:false,yscale:'log'});
+  const g1=Math.abs(g[1]),g30=Math.abs(g[30]);
+  $('#btCalc').textContent=`每往回一步，梯度乘上 w × tanh′(·)${act==='lin'?'（线性时就是乘 w）':''}\n第 60 步：1\n第 30 步：${tr&&T-30>=tr?'被截断，为 0':g30.toExponential(2)}\n第 1 步：${tr&&T-1>=tr?'被截断，为 0':g1.toExponential(2)}\n\n${act==='lin'?(w<1?'w < 1：梯度按 w 的幂次衰减，远处几乎为 0（梯度消失）。':w>1?'w > 1：梯度按 w 的幂次放大（梯度爆炸），这时就需要梯度裁剪。':'w = 1：梯度不变。'):(w<1?'w < 1：梯度消失。':'tanh 会饱和（导数小于 1），把 w 放大的效果抵消掉一部分；w 很大时 h 贴近 ±1，导数接近 0，梯度反而又消失了。')}${tr?`\n截断：只往回传 ${tr} 步，更早的梯度直接是 0。`:''}`}
+$('#btW').addEventListener('input',btRender);['#btTr','#btAct'].forEach(s=>$(s).onchange=btRender);
 // ---------- 小结勾选、课程表、切换天数 ----------
 function checksSetup(){$$('.check-list').forEach(ul=>{const day=ul.dataset.day,key='checks'+day,st=store.get(key,{});$$('input',ul).forEach(c=>{c.checked=!!st[c.dataset.k];c.onchange=()=>{const s=store.get(key,{});s[c.dataset.k]=c.checked;store.set(key,s);checkMsg(ul)}});checkMsg(ul)})}
 function checkMsg(ul){const day=ul.dataset.day,all=$$('input',ul),n=all.filter(c=>c.checked).length,msg=ul.parentElement.querySelector('.check-msg');const done=n===all.length;
@@ -509,7 +529,7 @@ const ROAD=[['1','第 1 章 引言 + 2.1 数据操作'],['2','2.2 数据预处�
   ['18','11.4 至 11.6 + 11.10 小批量随机梯度下降、动量、Adam（论文用的优化器）','paper'],['19','论文专题：离线策略评估 IPS、SNIPS、DR（书里没有）','paper'],['20','论文专题：逐行读你的 experiment.py','paper'],
   ['选学','4.7 前向传播、反向传播和计算图；4.10 Kaggle 房价预测'],['选学','第 6 至 7 章 卷积神经网络（LeNet、ResNet 等）'],['选学','9.3 至 9.8 深度和双向循环网络、机器翻译、seq2seq'],['选学','第 11 章其余优化算法、第 12 章计算性能'],['选学','第 13 至 15 章 计算机视觉、自然语言处理']];
 function roadRender(){$('#roadList').innerHTML=ROAD.map(([d,t,f])=>{const live=DAYS.includes(d);return`<div><span class="d">${/^\d+$/.test(d)?`第 ${d} 天`:d}</span><span>${live?`<a href="#day${d}">${esc(t)}</a>`:esc(t)}${f==='paper'?' <span class="mark">论文</span>':''}</span><span class="st${live?' now':''}">${live?'已上线':'未上线'}</span></div>`}).join('')}
-const REDRAW={'1':()=>{kRender();imRender();ofRender()},'2':()=>{dotRender();normRender()},'3':()=>{secRender();gradRender()},'4':()=>{diceRender();bayesRender();bktRender()},'5':()=>{houseRender();if(!sgd.X)sgdData();sgdRender()},'6':()=>{smRender();calRender()},'7':()=>{pixRender()},'8':()=>{uaRender();actRender()},'9':()=>{spRender();rdRender();dpRender()},'10':()=>{sgRender();shRender()},'11':()=>{pcRender()},'12':()=>{tkRender();ptRender();rnRender()}};
+const REDRAW={'1':()=>{kRender();imRender();ofRender()},'2':()=>{dotRender();normRender()},'3':()=>{secRender();gradRender()},'4':()=>{diceRender();bayesRender();bktRender()},'5':()=>{houseRender();if(!sgd.X)sgdData();sgdRender()},'6':()=>{smRender();calRender()},'7':()=>{pixRender()},'8':()=>{uaRender();actRender()},'9':()=>{spRender();rdRender();dpRender()},'10':()=>{sgRender();shRender()},'11':()=>{pcRender()},'12':()=>{tkRender();ptRender();rnRender()},'13':()=>{clRender();btRender()}};
 function showDay(day,scroll){if(!DAYS.includes(day))day='1';$$('main.day').forEach(m=>m.hidden=m.dataset.day!==day);$$('[data-nav]').forEach(a=>a.classList.toggle('on',a.dataset.nav===day));store.set('lastDay',day);
   if(!RAN[day]){if(day==='7'&&!FM_U8){fmReady.then(ok=>{if(ok&&!RAN['7']){runAll('7');REDRAW['7']()}});}else runAll(day)}$$('#day'+day+' textarea').forEach(autoSize);REDRAW[day]();if(scroll)window.scrollTo(0,0)}
 function route(){const h=location.hash.replace('#','');const m=h.match(/^day(\d+)$/);if(m){showDay(m[1],true);return}

@@ -20,7 +20,9 @@ function getItem(T,items){if(items.filter(it=>it.tensor).length>=2)return paired
   const sel=selection(T,items),shape=selShape(sel),vals=[],offs=[],mask=new Uint8Array(T.data.length);
   forEachSel(T,sel,off=>{vals.push(T.data[off]);offs.push(off);mask[off]=1});const R=mkT(shape,vals,T.dtype,T.np);
   if(T.shape.length>=1&&T.shape.length<=3&&T.data.length<=300)R.meta={kind:'index',src:snapshot(T),mask};
-  const nm=sel.some(s=>s.adv)?'IndexBackward0':sel.some(s=>!s.keep&&!s.newaxis)&&!sel.some(s=>s.slice)?'SelectBackward0':sel.some(s=>s.slice)?'SliceBackward0':'AliasBackward0';
+  // grad_fn 的名字取最后一个真正起作用的索引操作（和 PyTorch 逐个应用下标一致）：x[:, 0] 是 Select，x[0, 1:3] 是 Slice
+  let last=null;sel.forEach((s,d)=>{if(s.newaxis)return;if(!s.keep)last='SelectBackward0';else if(s.slice&&!(s.idx.length===T.shape[d]&&s.idx.every((v,i)=>v===i)))last='SliceBackward0'});
+  const nm=sel.some(s=>s.adv)?'IndexBackward0':last||(sel.some(s=>s.slice)?'SliceBackward0':'AliasBackward0');
   return track(R,[T],nm,g=>{const r=new Float64Array(T.data.length);offs.forEach((o,c)=>r[o]+=g[c]);return[r]})}
 function setItem(T,items,v){checkInplace(T);if(items.length===1&&items[0].bool){const M=items[0].bool,x=numOf(v);T.data.forEach((_,i)=>{if(M.data[i])T.data[i]=castVal(x,T.dtype)});return}
   const sel=selection(T,items),shape=selShape(sel),mask=new Uint8Array(T.data.length);let src=null,x=0,ibs=null;
