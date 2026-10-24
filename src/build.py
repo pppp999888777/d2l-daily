@@ -45,9 +45,16 @@ def main():
         f.write(standalone(daily))
     with open(os.path.join(ROOT, 'playground.html'), 'w', encoding='utf-8') as f:
         f.write(standalone(read('playground_artifact.html')))
+    # 论文实验室：src/paperlab/ 里的几个文件拼成 paper.html（同时写一份给 claude.ai 版本用）
+    pl = lambda n: read(os.path.join('paperlab', n))
+    lab = pl('head.html') + pl('body.html') + '<script type="application/json" id="D">' + pl('data.json').replace('</', '<\\/') + '</script>\n<script>\n' + pl('sim.js') + '\n' + pl('app.js') + '</script>\n'
+    with open(os.path.join(os.path.dirname(ROOT), 'paperlab', 'paperlab.html'), 'w', encoding='utf-8') as f:
+        f.write(lab)
+    with open(os.path.join(ROOT, 'paper.html'), 'w', encoding='utf-8') as f:
+        f.write(standalone(lab))
     with open(os.path.join(ROOT, 'index.html'), 'w', encoding='utf-8') as f:
         f.write(standalone(read('index_fragment.html')))
-    print('built daily.html, playground.html, index.html')
+    print('built daily.html, playground.html, paper.html, index.html')
 
 if __name__ == '__main__':
     main()

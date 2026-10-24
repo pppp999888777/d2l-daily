@@ -1,0 +1,147 @@
+<nav class="top" aria-label="章节"><div class="wrap"><b>论文实验室</b><a href="#overview">一页看懂</a><a href="#data">数据集</a><a href="#models">模型</a><a href="#results">结果浏览器</a><a href="#tradeoff">预测好≠出题好</a><a href="#hacking">刷分诊断</a><a href="#sim">模拟器游乐场</a><a href="#robust">稳健性</a><a href="#stats">统计检验</a><a href="#takeaway">结论</a></div></nav>
+<div id="tip" role="status" aria-live="polite"></div>
+<main class="wrap">
+
+<section id="overview">
+  <div class="sh">
+    <div class="eyebrow">Safe-DFKT-AG · 4 个数据集 · 17 个方法 · 5 个随机种子</div>
+    <h1>超越纯预测：让知识追踪模型学会出题，成功了吗？</h1>
+    <p class="lead">知识追踪模型平时比的是“预测准不准”（AUC），可真正上线时，它们被用来决定“下一题出什么”。这篇论文问：如果训练时直接优化出题的效果，同时保住预测的准确和校准，学生会学得更好吗？答案是<b>没有</b>，而且论文找到了原因。这一页把论文所有的数据、模型和结果放在一起，可以随便点、随便比、自己跑模拟。</p>
+  </div>
+  <div class="tiles" id="heroTiles"></div>
+  <div class="card stack" style="margin-top:16px">
+    <h3>实验怎么做的：两条线</h3>
+    <div class="flow">
+      <div class="lane"><span class="lb">A 线 · 真实日志</span>
+        <div class="step"><b>4 个公开数据集</b>按学生 80/20 划分，训练集再留 10% 验证</div>
+        <div class="step"><b>训练 KT 模型</b>Adam，lr 2e-3，按验证集 BCE 选检查点</div>
+        <div class="step"><b>测预测</b>AUC、ECE（校准误差）</div>
+        <div class="step"><b>离线评估出题</b>OPE：IPS / SNIPS / DR</div>
+      </div>
+      <div class="lane"><span class="lb">B 线 · 校准过的模拟器</span>
+        <div class="step"><b>拟合模拟学生</b>每个数据集挑 12 个知识点，拟合 BKT 参数（会不会、学会率、蒙对、失误、遗忘）</div>
+        <div class="step"><b>生成模拟日志</b>2000 个模拟学生，旧策略出题</div>
+        <div class="step key"><b>训练并上线</b>每个模型当“出题依据”，给 300 个新模拟学生各出 60 题</div>
+        <div class="step key"><b>测真实学习收益</b>前测后测算 NLG、掌握所需步数、保持率</div>
+      </div>
+    </div>
+    <p class="note">模拟器的意义：真实日志里不能让同一个学生按新规则再学一遍，模拟器可以，所以能给出“真实的学习收益”。所有数字都来自论文项目的 <span class="mono">results/results.json</span>。</p>
+  </div>
+</section>
+
+<section id="data">
+  <div class="sh"><div class="eyebrow">数据</div><h2>四个数据集和它们的模拟学生</h2><p class="muted">选一个数据集。上面是真实日志的规模，下面是从这份日志拟合出来的 12 个知识点的模拟学生参数。</p></div>
+  <div class="chips" id="dsChips" role="group" aria-label="数据集"></div>
+  <div class="grid2" style="margin-top:12px">
+    <div class="card stack"><h3 id="dsTitle"></h3><div class="tiles" id="dsTiles"></div><p class="note" id="dsNote"></p></div>
+    <div class="card stack"><h3>模拟器的 12 个知识点（BKT 参数）</h3>
+      <div class="row"><label class="ctl" for="parSel">看哪个参数<select id="parSel"><option value="p0">p0：一开始就会的概率</option><option value="learn">learn：做一次学会的概率</option><option value="guess">guess：不会也蒙对的概率</option><option value="slip">slip：会了却做错的概率</option><option value="forget_per_attempt">forget：每次练习后遗忘的概率</option></select></label></div>
+      <div class="chart" id="parChart"></div>
+      <p class="small muted">横轴是知识点（原数据集里的编号），数值来自网格搜索最大似然（<span class="mono">fit_bkt</span>，代码第 723 行）。</p></div>
+  </div>
+</section>
+
+<section id="models">
+  <div class="sh"><div class="eyebrow">模型</div><h2>17 个方法</h2><p class="muted">点一个方法，它会在下面所有的图里被高亮。卡片上的数字是四个数据集、五个种子的平均：预测 AUC 和模拟学习收益 NLG。课程链接指向讲这个模型的那一天。</p></div>
+  <div id="modelGroups" class="stack"></div>
+</section>
+
+<section id="results">
+  <div class="sh"><div class="eyebrow">结果</div><h2>结果浏览器</h2><p class="muted">选数据集和指标。误差线是 5 个种子的标准差（有的话）。橙色是本文方法，蓝色是参照的 DKT，灰色是其他。</p></div>
+  <div class="card stack">
+    <div class="row">
+      <label class="ctl" for="rDs">数据集<select id="rDs"></select></label>
+      <label class="ctl" for="rMet">指标<select id="rMet"></select></label>
+      <label class="ctl" for="rAbl">消融实验<select id="rAbl"><option value="1">显示</option><option value="0">隐藏</option></select></label>
+    </div>
+    <p class="small" id="rMetNote"></p>
+    <div class="chart" id="rChart"></div>
+  </div>
+</section>
+
+<section id="tradeoff">
+  <div class="sh"><div class="eyebrow">核心发现之一</div><h2>预测得准，不等于出题出得好</h2><p class="muted">横轴是真实日志上的预测 AUC，纵轴是模拟器里的学习收益 NLG。每个点是一个方法。如果“预测越准、出题越好”，点会从左下排到右上。</p></div>
+  <div class="card stack">
+    <div class="row"><label class="ctl" for="tDs">数据集<select id="tDs"></select></label><div class="legend" id="tLegend"></div></div>
+    <div class="chart" id="tChart"></div>
+    <p class="note" id="tNote"></p>
+  </div>
+</section>
+
+<section id="hacking">
+  <div class="sh"><div class="eyebrow">核心发现之二</div><h2>刷分：模型学会了“出已经会的题”</h2><p class="muted">NLG 收益在做对题时偏高，于是决策导向的训练把出题概率推向学生已经掌握的知识点：题做对了，看起来收益不错，学生却没学到新东西。横轴是“出给已掌握知识点的比例”，纵轴是 NLG。</p></div>
+  <div class="grid2">
+    <div class="card stack"><div class="row"><label class="ctl" for="hDs">数据集<select id="hDs"></select></label></div><div class="chart" id="hChart"></div><div class="legend" id="hLegend"></div></div>
+    <div class="card stack"><h3>差距是哪里来的？</h3><div class="chart" id="dcChart"></div>
+      <p class="small muted">“主干改变选择”：微调后的主干只用“最接近 0.7”规则时，和原始 DKT 选的题不一样的比例。“策略头改变选择”：加上策略头 g 以后改变选择的比例（20 个种子 × 数据集的平均，<span class="mono">decision_decomposition_summary</span>）。</p>
+      <div class="callout small" id="calNote"></div></div>
+  </div>
+</section>
+
+<section id="sim">
+  <div class="sh"><div class="eyebrow">自己动手</div><h2>模拟器游乐场</h2><p class="muted">论文模拟器（<span class="mono">rollout</span>，代码第 810 行）的浏览器版本，参数就是上面那 12 个知识点的拟合值。每个模拟学生能力不同，做 60 题，前测后测都是 12 个知识点的平均答对率。选一个出题规则，运行，看学习收益。</p></div>
+  <div class="grid2">
+    <div class="card stack">
+      <div class="row">
+        <label class="ctl" for="sDs">数据集<select id="sDs"></select></label>
+        <label class="ctl" for="sPol">出题规则<select id="sPol">
+          <option value="target-emp">选“预测答对率”最接近 c 的（经验正确率）</option>
+          <option value="target-oracle">选“真实答对率”最接近 c 的（理想模型）</option>
+          <option value="random">完全随机</option>
+          <option value="logging">旧日志策略（生成训练日志用的）</option>
+          <option value="greedy">总出最有把握答对的（模拟刷分）</option>
+        </select></label>
+      </div>
+      <div class="row">
+        <label class="ctl" for="sC">目标答对率 c <output id="sCv" class="mono">0.70</output><input type="range" id="sC" min="0.1" max="0.95" step="0.05" value="0.7"></label>
+        <label class="ctl" for="sN">模拟学生数 <output id="sNv" class="mono">300</output><input type="range" id="sN" min="100" max="2000" step="100" value="300"></label>
+      </div>
+      <div class="row"><button class="btn" id="sRun">运行</button><button class="btn ghost" id="sSweep">扫描 c（0.1 到 0.95）</button><button class="btn ghost" id="sClear">清空记录</button></div>
+      <div class="tiles" id="sTiles"></div>
+      <p class="note" id="sNote"></p>
+    </div>
+    <div class="card stack"><h3>运行记录</h3>
+      <div class="chart" id="sHist"></div>
+      <div class="tblwrap"><table class="hist"><thead><tr><th>数据集</th><th>规则</th><th class="n">NLG</th><th class="n">已掌握%</th><th class="n">不同知识点</th></tr></thead><tbody id="sTbl"></tbody></table></div>
+    </div>
+  </div>
+  <div class="card stack" style="margin-top:16px"><h3>第 1 个模拟学生的 60 题</h3>
+    <p class="small muted">每格一题，数字是知识点编号（1 到 12）。上边框绿色 = 做对，红色 = 做错；蓝底 = 做题时已经掌握；橙框 = 这一题学会了。</p>
+    <div class="traj" id="sTraj"></div></div>
+  <div class="card stack" style="margin-top:16px" id="sweepBox" hidden><h3>c 扫描：目标答对率和学习收益</h3><div class="chart" id="sSweepChart"></div><div class="legend" id="sSweepLeg"></div><p class="note">论文第 2737 行做了同样的扫描（c = 0.3、0.5、0.7），结论一致：目标越低（越偏向没掌握的题），NLG 越高。</p></div>
+  <p class="note" style="margin-top:12px" id="simValid"></p>
+</section>
+
+<section id="robust">
+  <div class="sh"><div class="eyebrow">稳健性</div><h2>换个设置，结论还成立吗？</h2></div>
+  <div class="grid2">
+    <div class="card stack"><h3>目标答对率 c 的扫描（论文结果）</h3><div class="chart" id="rbTarget"></div><div class="legend" id="rbTargetLeg"></div><p class="small muted">3 个种子 × 4 个数据集。虚线是随机出题的 NLG。</p></div>
+    <div class="card stack"><h3>选检查点的标准</h3><div class="tblwrap"><table><thead><tr><th>方法</th><th>标准</th><th class="n">NLG</th><th class="n">AUC</th></tr></thead><tbody id="rbCkpt"></tbody></table></div>
+      <p class="small muted">val_bce：验证集 BCE 最低（主结果）；dec：模拟验证队列的真实 NLG 最高；val_dr：验证日志的 DR 最高；last：最后一轮。</p></div>
+    <div class="card stack"><h3>安全屏障 ε 的扫描（Safe-DFKT-AG）</h3><div class="tblwrap"><table><thead><tr><th class="n">ε</th><th class="n">NLG</th><th class="n">AUC</th><th class="n">ECE</th><th class="n">已掌握%</th></tr></thead><tbody id="rbEps"></tbody></table></div><p class="small muted">ε 是允许 BCE 比原始 DKT 变差的幅度。</p></div>
+    <div class="card stack"><h3>12 个和 24 个知识点的模拟器</h3><div class="chart" id="rbScale"></div><div class="legend" id="rbScaleLeg"></div></div>
+  </div>
+</section>
+
+<section id="stats">
+  <div class="sh"><div class="eyebrow">统计检验</div><h2>配对检验</h2><p class="muted">同一个种子、同一个数据集上两个方法配成一对（n = 20），看差值。p 值经过 Holm 校正。</p></div>
+  <div class="card stack">
+    <div class="row"><label class="ctl" for="stCmp">比较<select id="stCmp"></select></label></div>
+    <div class="tblwrap"><table><thead><tr><th>指标</th><th class="n">A 的均值</th><th class="n">B 的均值</th><th class="n">差值 A − B</th><th class="n">95% 置信区间</th><th class="n">A 更好的比例</th><th class="n">Wilcoxon p（Holm）</th></tr></thead><tbody id="stTbl"></tbody></table></div>
+  </div>
+</section>
+
+<section id="takeaway">
+  <div class="sh"><div class="eyebrow">结论</div><h2>这篇论文告诉我们什么</h2></div>
+  <div class="grid2">
+    <div class="card stack"><h3>结论</h3><ul id="concl"></ul></div>
+    <div class="card stack"><h3>局限（论文自己承认的）</h3><ul>
+      <li>学习收益只在模拟器里测：模拟学生是按 BKT 假设生成的，真实学生未必如此。</li>
+      <li>NLG 是 12 个知识点的平均，天然奖励“覆盖面广”，所以随机出题占优。换一个更看重深度的指标，排名可能不同。</li>
+      <li>OPE 估计的是“一步偏离”的价值，不是整条出题策略的价值。</li>
+      <li>真实日志上的 μ（旧策略）是用知识点转移频率估计的，只依赖上一题的知识点。</li>
+    </ul></div>
+  </div>
+</section>
+</main>
+<footer class="wrap">数据来自论文项目 <span class="mono">results/results.json</span>（2026-10-22 运行）。模拟器游乐场是 <span class="mono">experiment.py</span> 中 <span class="mono">rollout</span> 的 JavaScript 重写版本。配套课程：<a href="https://pppp999888777.github.io/d2l-daily/daily.html" target="_blank" rel="noopener">动手学深度学习每日课</a>。</footer>
