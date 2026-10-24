@@ -15,8 +15,9 @@ pre=''
 if 'FMNIST' in sys.argv[4:]:
     pre="var B64='"+_rawb64()+"';var _A='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';var _L=new Uint8Array(256);for(var i=0;i<64;i++)_L[_A.charCodeAt(i)]=i;var _n=B64.length*3/4-(B64.endsWith('==')?2:B64.endsWith('=')?1:0);var U=new Uint8Array(_n);var p=0;for(var i=0;i<B64.length;i+=4){var a=_L[B64.charCodeAt(i)],b=_L[B64.charCodeAt(i+1)],c=_L[B64.charCodeAt(i+2)],e=_L[B64.charCodeAt(i+3)];U[p++]=a<<2|b>>4;if(p<_n)U[p++]=(b&15)<<4|c>>2;if(p<_n)U[p++]=(c&3)<<6|e}MT.setFashion(U);"
 test=pre+"var CELLS="+json.dumps(C,ensure_ascii=False)+";var env=MT.newEnv();return JSON.stringify(CELLS.map(c=>MT.runCell(c,env).text));"
-open(d+'t2.js','w').write('(function(){'+js+test+'})()')
-raw=subprocess.run(['osascript','-l','JavaScript',d+'t2.js'],capture_output=True,text=True)
+TM="MT.setStaticFile('../data/timemachine.txt',"+json.dumps(open(d+'timemachine.txt').read())+");"
+import tempfile;_tf=_os.path.join(tempfile.gettempdir(),'d2l_t2.js');open(_tf,'w').write('print((function(){'+js+TM+test+'})())')
+raw=subprocess.run(['/System/Library/Frameworks/JavaScriptCore.framework/Versions/Current/Helpers/jsc',_tf],capture_output=True,text=True)
 try: mine=json.loads(raw.stdout)
 except Exception: print(raw.stdout[:3000],raw.stderr[:3000]); raise SystemExit
 ref=[r.rstrip('\n') for r in json.load(open(d+reffile))]

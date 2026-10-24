@@ -1,0 +1,407 @@
+<main class="wrap day" id="day12" data-day="12" hidden>
+<section class="hero">
+  <div class="eyebrow">第 12 天 · 原书第 8.1 节到第 8.4 节 · 论文路线第 5 课</div>
+  <h1>序列、词元和循环神经网络</h1>
+  <p class="lead">一个学生的做题记录就是一个序列：先做哪道题、对还是错，再做哪道题……知识追踪要做的，是根据前面的记录预测下一道题能不能答对。这和“根据前面的字预测下一个字”的语言模型是同一类问题。今天学序列模型、怎么把文本（或做题记录）变成数字、语言模型和数据怎么切分，最后看循环神经网络（RNN）的结构。DKT 就是一个 RNN。</p>
+  <div class="plan">
+    <div><b class="k">今天的时间</b>大约 80 分钟。今天的代码格都很快，自动运行。</div>
+    <div><b class="k">学完你能</b><ul><li>说清自回归模型和隐变量自回归模型</li><li>把文本变成词元、建词表、变成索引</li><li>理解随机抽样和顺序分区两种切分</li><li>写出 RNN 隐状态的更新公式，知道困惑度</li></ul></div>
+    <div><b class="k">和你的论文</b><ul><li>DKT 的输入编码 <code>sk + K * rs</code></li><li>做题序列按 100 步切窗口</li><li>BKT 是隐变量模型，DKT 是 RNN</li></ul></div>
+  </div>
+</section>
+
+<section class="part" id="seqmodel">
+  <div class="part-h"><div class="eyebrow">第一部分</div><h2>8.1 序列模型</h2><span class="src">对应原书第 8.1 节，代码来自原书 PyTorch 版</span></div>
+  <div class="prose"><div class="row"><button class="btn primary runAll" data-day="12">从头全部运行</button><span class="small muted runAllMsg"></span></div></div>
+  <div class="blk"><div class="blk-h"><span class="n">8.1.1</span><h3>统计工具</h3></div>
+    <div class="prose">
+      <p>序列 x₁, x₂, …, x_T 的联合概率可以按时间顺序拆开：P(x₁, …, x_T) = ∏ₜ P(xₜ | x_{t−1}, …, x₁)。所以只要会“根据过去预测下一个”，就能处理整个序列。难点是过去越来越长，有两种办法：</p>
+      <ul>
+        <li><b>自回归模型</b>：只看最近 τ 个，xₜ ≈ f(x_{t−1}, …, x_{t−τ})。参数个数固定。只看最近 τ 个就够的假设叫<b>马尔可夫条件</b>。</li>
+        <li><b>隐变量自回归模型</b>：用一个“摘要” hₜ 记住过去的信息，每一步更新它：hₜ = g(h_{t−1}, x_{t−1})，再用它预测 x̂ₜ = P(xₜ | hₜ)。</li>
+      </ul>
+    </div>
+    <div class="callout"><h4>对照你的论文：KT 模型就是这两类</h4><p>你论文里的基线正好分属这两类。<b>BKT</b> 是隐变量模型，隐变量是“学生会不会这个知识点”（只有会和不会两个状态），每做一道题按贝叶斯公式更新一次（第 4 天学过）。<b>DKT</b> 也是隐变量模型，隐状态是 LSTM 的 64 维向量 h，由神经网络学出来怎么更新。<b>LR、PFA</b> 这类计数模型则只用“这个知识点答对过几次、答错过几次”这样的统计量，不维护隐状态。</p></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">8.1.2</span><h3>训练</h3></div>
+    <div class="prose"><p>造一个序列：正弦曲线加噪声，时间步 1 到 1000。</p></div>
+    <div class="cell"><textarea>%matplotlib inline
+from d2l import torch as d2l
+import torch
+from torch import nn</textarea></div>
+    <div class="cell"><textarea>T = 1000  # 总共产生1000个点
+time = d2l.arange(1, T + 1, dtype=d2l.float32)
+x = d2l.sin(0.01 * time) + d2l.normal(0, 0.2, (T,))
+d2l.plot(time, [x], 'time', 'x', xlim=[1, 1000], figsize=(6, 3))</textarea></div>
+    <div class="prose"><p>τ = 4：用前 4 个点预测下一个。把序列切成“特征—标签”对：第 t 个样本的特征是 x_{t−4} 到 x_{t−1}，标签是 xₜ。一共 996 个样本，前 600 个用来训练。</p></div>
+    <div class="cell"><textarea>tau = 4
+features = d2l.zeros((T - tau, tau))
+for i in range(tau):
+    features[:, i] = x[i: T - tau + i]
+labels = d2l.reshape(x[tau:], (-1, 1))
+features.shape, labels.shape</textarea></div>
+    <div class="cell"><textarea>batch_size, n_train = 16, 600
+# 只有前n_train个样本用于训练
+train_iter = d2l.load_array((features[:n_train], labels[:n_train]),
+                            batch_size, is_train=True)</textarea></div>
+    <div class="prose"><p>一个两层的多层感知机，用 Adam 优化（第 18 天细讲 Adam）：</p></div>
+    <div class="cell"><textarea># 初始化网络权重的函数
+def init_weights(m):
+    if type(m) == nn.Linear:
+        nn.init.xavier_uniform_(m.weight)
+
+# 一个简单的多层感知机
+def get_net():
+    net = nn.Sequential(nn.Linear(4, 10),
+                        nn.ReLU(),
+                        nn.Linear(10, 1))
+    net.apply(init_weights)
+    return net
+
+# 平方损失。注意：MSELoss计算平方误差时不带系数1/2
+loss = nn.MSELoss(reduction='none')</textarea></div>
+    <div class="cell"><textarea>def train(net, train_iter, loss, epochs, lr):
+    trainer = torch.optim.Adam(net.parameters(), lr)
+    for epoch in range(epochs):
+        for X, y in train_iter:
+            trainer.zero_grad()
+            l = loss(net(X), y)
+            l.sum().backward()
+            trainer.step()
+        print(f'epoch {epoch + 1}, '
+              f'loss: {d2l.evaluate_loss(net, train_iter, loss):f}')
+
+net = get_net()
+train(net, train_iter, loss, 5, 0.01)</textarea></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">8.1.3</span><h3>预测</h3></div>
+    <div class="prose"><p><b>单步预测</b>：每次都用真实的前 4 个点预测下一个，效果很好。</p></div>
+    <div class="cell"><textarea>onestep_preds = net(features)
+d2l.plot([time, time[tau:]],
+         [d2l.numpy(x), d2l.numpy(onestep_preds)], 'time',
+         'x', legend=['data', '1-step preds'], xlim=[1, 1000],
+         figsize=(6, 3))</textarea></div>
+    <div class="prose"><p><b>多步预测</b>：604 步以后不再给真实数据，用自己的预测当输入继续往后预测。误差会一步步累积，很快就偏到一条平线上去了。</p></div>
+    <div class="cell"><textarea>multistep_preds = d2l.zeros(T)
+multistep_preds[: n_train + tau] = x[: n_train + tau]
+for i in range(n_train + tau, T):
+    multistep_preds[i] = net(
+        d2l.reshape(multistep_preds[i - tau: i], (1, -1)))</textarea></div>
+    <div class="cell"><textarea>d2l.plot([time, time[tau:], time[n_train + tau:]],
+         [d2l.numpy(x), d2l.numpy(onestep_preds),
+          d2l.numpy(multistep_preds[n_train + tau:])], 'time',
+         'x', legend=['data', '1-step preds', 'multistep preds'],
+         xlim=[1, 1000], figsize=(6, 3))</textarea></div>
+    <div class="prose"><p>系统地看一下 k 步预测：k 越大，越偏离真实曲线。</p></div>
+    <div class="cell"><textarea>max_steps = 64</textarea></div>
+    <div class="cell"><textarea>features = d2l.zeros((T - tau - max_steps + 1, tau + max_steps))
+# 列i（i<tau）是来自x的观测，其时间步从（i）到（i+T-tau-max_steps+1）
+for i in range(tau):
+    features[:, i] = x[i: i + T - tau - max_steps + 1]
+
+# 列i（i>=tau）是来自（i-tau+1）步的预测，其时间步从（i）到（i+T-tau-max_steps+1）
+for i in range(tau, tau + max_steps):
+    features[:, i] = d2l.reshape(net(features[:, i - tau: i]), -1)</textarea></div>
+    <div class="cell"><textarea>steps = (1, 4, 16, 64)
+d2l.plot([time[tau + i - 1: T - max_steps + i] for i in steps],
+         [d2l.numpy(features[:, tau + i - 1]) for i in steps], 'time', 'x',
+         legend=[f'{i}-step preds' for i in steps], xlim=[5, 1000],
+         figsize=(6, 3))</textarea></div>
+    <div class="callout"><h4>对照你的论文：模拟器的多步推演</h4><p>你论文用模拟学生评估出题策略：策略出一道题，模拟器给出对错，再出下一道……一直推演很多步。这就是多步预测，误差也会累积，所以论文要单独检查模拟器和真实日志差多少（模拟 AUC、模拟 ECE 那几列）。而 KT 模型训练时用的是真实日志，每一步都拿真实的历史去预测下一题，相当于单步预测。</p></div>
+  </div>
+</section>
+
+<section class="part" id="textpre">
+  <div class="part-h"><div class="eyebrow">第二部分</div><h2>8.2 文本预处理</h2><span class="src">对应原书第 8.2 节。时光机器全文（H. G. Wells，公版书，约 17.9 万字符）已放在网页里</span></div>
+  <div class="blk">
+    <div class="prose"><p>把文本变成模型能用的数字，分四步：读入文本、拆成<b>词元</b>（token）、建<b>词表</b>（每个词元一个编号）、把文本变成编号序列。</p></div>
+    <div class="cell"><textarea>import collections
+from d2l import torch as d2l
+import re</textarea></div>
+    <div class="prose"><p>读入文本，把非字母都换成空格，全部小写：</p></div>
+    <div class="cell"><textarea>#@save
+d2l.DATA_HUB['time_machine'] = (d2l.DATA_URL + 'timemachine.txt',
+                                '090b5e7e70c295757f55df93cb0a180b9691891a')
+
+def read_time_machine():  #@save
+    """将时间机器数据集加载到文本行的列表中"""
+    with open(d2l.download('time_machine'), 'r') as f:
+        lines = f.readlines()
+    return [re.sub('[^A-Za-z]+', ' ', line).strip().lower() for line in lines]
+
+lines = read_time_machine()
+print(f'# 文本总行数: {len(lines)}')
+print(lines[0])
+print(lines[10])</textarea></div>
+    <div class="cell"><textarea>def tokenize(lines, token='word'):  #@save
+    """将文本行拆分为单词或字符词元"""
+    if token == 'word':
+        return [line.split() for line in lines]
+    elif token == 'char':
+        return [list(line) for line in lines]
+    else:
+        print('错误：未知词元类型：' + token)
+
+tokens = tokenize(lines)
+for i in range(11):
+    print(tokens[i])</textarea></div>
+    <div class="prose"><p>词表：按出现次数从多到少排，编号 0 留给未知词元 <code>&lt;unk&gt;</code>。这个类用到了 <code>__getitem__</code>（让 <code>vocab[...]</code> 能用）、<code>__len__</code>（让 <code>len(vocab)</code> 能用）和 <code>@property</code>（把方法当属性用，写 <code>vocab.unk</code> 不用加括号）。</p></div>
+    <div class="cell"><textarea>class Vocab:  #@save
+    """文本词表"""
+    def __init__(self, tokens=None, min_freq=0, reserved_tokens=None):
+        if tokens is None:
+            tokens = []
+        if reserved_tokens is None:
+            reserved_tokens = []
+        # 按出现频率排序
+        counter = count_corpus(tokens)
+        self._token_freqs = sorted(counter.items(), key=lambda x: x[1],
+                                   reverse=True)
+        # 未知词元的索引为0
+        self.idx_to_token = ['<unk>'] + reserved_tokens
+        self.token_to_idx = {token: idx
+                             for idx, token in enumerate(self.idx_to_token)}
+        for token, freq in self._token_freqs:
+            if freq < min_freq:
+                break
+            if token not in self.token_to_idx:
+                self.idx_to_token.append(token)
+                self.token_to_idx[token] = len(self.idx_to_token) - 1
+
+    def __len__(self):
+        return len(self.idx_to_token)
+
+    def __getitem__(self, tokens):
+        if not isinstance(tokens, (list, tuple)):
+            return self.token_to_idx.get(tokens, self.unk)
+        return [self.__getitem__(token) for token in tokens]
+
+    def to_tokens(self, indices):
+        if not isinstance(indices, (list, tuple)):
+            return self.idx_to_token[indices]
+        return [self.idx_to_token[index] for index in indices]
+
+    @property
+    def unk(self):  # 未知词元的索引为0
+        return 0
+
+    @property
+    def token_freqs(self):
+        return self._token_freqs
+
+def count_corpus(tokens):  #@save
+    """统计词元的频率"""
+    # 这里的tokens是1D列表或2D列表
+    if len(tokens) == 0 or isinstance(tokens[0], list):
+        # 将词元列表展平成一个列表
+        tokens = [token for line in tokens for token in line]
+    return collections.Counter(tokens)</textarea></div>
+    <div class="cell"><textarea>vocab = Vocab(tokens)
+print(list(vocab.token_to_idx.items())[:10])</textarea></div>
+    <div class="cell"><textarea>for i in [0, 10]:
+    print('文本:', tokens[i])
+    print('索引:', vocab[tokens[i]])</textarea></div>
+    <div class="prose"><p>把上面几步打包。后面训练 RNN 用<b>字符</b>做词元（26 个字母加空格，再加 <code>&lt;unk&gt;</code>，一共 28 个）：</p></div>
+    <div class="cell"><textarea>def load_corpus_time_machine(max_tokens=-1):  #@save
+    """返回时光机器数据集的词元索引列表和词表"""
+    lines = read_time_machine()
+    tokens = tokenize(lines, 'char')
+    vocab = Vocab(tokens)
+    # 因为时光机器数据集中的每个文本行不一定是一个句子或一个段落，
+    # 所以将所有文本行展平到一个列表中
+    corpus = [vocab[token] for line in tokens for token in line]
+    if max_tokens > 0:
+        corpus = corpus[:max_tokens]
+    return corpus, vocab
+
+corpus, vocab = load_corpus_time_machine()
+len(corpus), len(vocab)</textarea></div>
+    <div class="panel stack" id="tkLab">
+      <h4>把做题记录变成词元：你论文 DKT 的输入</h4>
+      <p class="small muted">DKT 的“词元”是（知识点，对错）这一对。第 1043 行 <code>self.emb(sk + self.K * rs.long())</code>：答错的编号是 sk，答对的编号是 sk + K，所以词表大小是 2K。点下面的格子切换对错，看编号怎么变。这里 K = 5。</p>
+      <div class="row"><button class="btn sm" id="tkRand">换一个学生</button></div>
+      <div class="tkrow" id="tkRow"></div>
+      <div class="calc pw" id="tkCalc"></div>
+    </div>
+  </div>
+</section>
+
+<section class="part" id="lm">
+  <div class="part-h"><div class="eyebrow">第三部分</div><h2>8.3 语言模型和数据集</h2><span class="src">对应原书第 8.3 节，代码来自原书 PyTorch 版</span></div>
+  <div class="blk"><div class="blk-h"><span class="n">8.3.3</span><h3>自然语言统计</h3></div>
+    <div class="prose"><p>按单词统计，最常见的是 the、i、and 这些<b>停用词</b>：</p></div>
+    <div class="cell"><textarea>from d2l import torch as d2l
+import torch
+import random
+
+tokens = d2l.tokenize(d2l.read_time_machine())
+# 因为每个文本行不一定是一个句子或一个段落，因此我们把所有文本行拼接到一起
+corpus = [token for line in tokens for token in line]
+vocab = d2l.Vocab(corpus)
+vocab.token_freqs[:10]</textarea></div>
+    <div class="prose"><p>把词频按排名画在双对数坐标上，大致是一条直线。这叫<b>齐普夫定律</b>：第 i 常见的词出现次数 nᵢ ∝ 1/iᵅ。少数词非常常见，大量的词只出现一两次。</p></div>
+    <div class="cell"><textarea>freqs = [freq for token, freq in vocab.token_freqs]
+d2l.plot(freqs, xlabel='token: x', ylabel='frequency: n(x)',
+         xscale='log', yscale='log')</textarea></div>
+    <div class="prose"><p>相邻两个词（二元语法）和相邻三个词（三元语法）：</p></div>
+    <div class="cell"><textarea>bigram_tokens = [pair for pair in zip(corpus[:-1], corpus[1:])]
+bigram_vocab = d2l.Vocab(bigram_tokens)
+bigram_vocab.token_freqs[:10]</textarea></div>
+    <div class="cell"><textarea>trigram_tokens = [triple for triple in zip(
+    corpus[:-2], corpus[1:-1], corpus[2:])]
+trigram_vocab = d2l.Vocab(trigram_tokens)
+trigram_vocab.token_freqs[:10]</textarea></div>
+    <div class="cell"><textarea>bigram_freqs = [freq for token, freq in bigram_vocab.token_freqs]
+trigram_freqs = [freq for token, freq in trigram_vocab.token_freqs]
+d2l.plot([freqs, bigram_freqs, trigram_freqs], xlabel='token: x',
+         ylabel='frequency: n(x)', xscale='log', yscale='log',
+         legend=['unigram', 'bigram', 'trigram'])</textarea></div>
+    <div class="prose"><p>n 越大，不同组合越多，每种组合出现的次数越少。靠数次数（n 元语法）建模会遇到大量“没见过”的组合，这就是要用神经网络的原因。KT 里也一样：知识点和对错的长组合太多，没法一一计数，DKT 用 RNN 把整个历史压进一个隐状态。</p></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">8.3.4</span><h3>读取长序列数据</h3></div>
+    <div class="prose"><p>一整本书是一个很长的序列，训练时要切成很多长度为 num_steps 的小段，每段的标签是往后错一位的同一段。有两种切法：</p></div>
+    <div class="cell"><textarea>def seq_data_iter_random(corpus, batch_size, num_steps):  #@save
+    """使用随机抽样生成一个小批量子序列"""
+    # 从随机偏移量开始对序列进行分区，随机范围包括num_steps-1
+    corpus = corpus[random.randint(0, num_steps - 1):]
+    # 减去1，是因为我们需要考虑标签
+    num_subseqs = (len(corpus) - 1) // num_steps
+    # 长度为num_steps的子序列的起始索引
+    initial_indices = list(range(0, num_subseqs * num_steps, num_steps))
+    # 在随机抽样的迭代过程中，
+    # 来自两个相邻的、随机的、小批量中的子序列不一定在原始序列上相邻
+    random.shuffle(initial_indices)
+
+    def data(pos):
+        # 返回从pos位置开始的长度为num_steps的序列
+        return corpus[pos: pos + num_steps]
+
+    num_batches = num_subseqs // batch_size
+    for i in range(0, batch_size * num_batches, batch_size):
+        # 在这里，initial_indices包含子序列的随机起始索引
+        initial_indices_per_batch = initial_indices[i: i + batch_size]
+        X = [data(j) for j in initial_indices_per_batch]
+        Y = [data(j + 1) for j in initial_indices_per_batch]
+        yield d2l.tensor(X), d2l.tensor(Y)</textarea></div>
+    <div class="cell"><textarea>my_seq = list(range(35))
+for X, Y in seq_data_iter_random(my_seq, batch_size=2, num_steps=5):
+    print('X: ', X, '\nY:', Y)</textarea></div>
+    <div class="cell"><textarea>def seq_data_iter_sequential(corpus, batch_size, num_steps):  #@save
+    """使用顺序分区生成一个小批量子序列"""
+    # 从随机偏移量开始划分序列
+    offset = random.randint(0, num_steps)
+    num_tokens = ((len(corpus) - offset - 1) // batch_size) * batch_size
+    Xs = d2l.tensor(corpus[offset: offset + num_tokens])
+    Ys = d2l.tensor(corpus[offset + 1: offset + 1 + num_tokens])
+    Xs, Ys = Xs.reshape(batch_size, -1), Ys.reshape(batch_size, -1)
+    num_batches = Xs.shape[1] // num_steps
+    for i in range(0, num_steps * num_batches, num_steps):
+        X = Xs[:, i: i + num_steps]
+        Y = Ys[:, i: i + num_steps]
+        yield X, Y</textarea></div>
+    <div class="cell"><textarea>for X, Y in seq_data_iter_sequential(my_seq, batch_size=2, num_steps=5):
+    print('X: ', X, '\nY:', Y)</textarea></div>
+    <div class="panel stack" id="ptLab">
+      <h4>两种切法对比</h4>
+      <p class="small muted">0 到 34 这 35 个数，batch_size = 2，num_steps = 5。同一种颜色是同一个小批量。顺序分区时，第 1 行的相邻小批量在原序列里是接着的，所以 RNN 的隐状态可以从上一批传到下一批；随机抽样则不行，每批都要重新初始化隐状态。</p>
+      <div class="row"><label class="ctrl" for="ptMode">切法 <select id="ptMode"><option value="seq">顺序分区</option><option value="rand">随机抽样</option></select></label><button class="btn sm" id="ptGo">重新抽一次</button></div>
+      <div class="ptgrid" id="ptGrid"></div>
+      <div class="calc pw" id="ptCalc"></div>
+    </div>
+    <div class="prose"><p>把两种切法打包成一个数据加载器。<code>__iter__</code> 让它能直接用在 <code>for</code> 循环里：</p></div>
+    <div class="cell"><textarea>class SeqDataLoader:  #@save
+    """加载序列数据的迭代器"""
+    def __init__(self, batch_size, num_steps, use_random_iter, max_tokens):
+        if use_random_iter:
+            self.data_iter_fn = d2l.seq_data_iter_random
+        else:
+            self.data_iter_fn = d2l.seq_data_iter_sequential
+        self.corpus, self.vocab = d2l.load_corpus_time_machine(max_tokens)
+        self.batch_size, self.num_steps = batch_size, num_steps
+
+    def __iter__(self):
+        return self.data_iter_fn(self.corpus, self.batch_size, self.num_steps)</textarea></div>
+    <div class="cell"><textarea>def load_data_time_machine(batch_size, num_steps,  #@save
+                           use_random_iter=False, max_tokens=10000):
+    """返回时光机器数据集的迭代器和词表"""
+    data_iter = SeqDataLoader(
+        batch_size, num_steps, use_random_iter, max_tokens)
+    return data_iter, data_iter.vocab
+
+train_iter, vocab = load_data_time_machine(32, 35)
+X, Y = next(iter(train_iter))
+X.shape, Y.shape</textarea></div>
+    <div class="callout"><h4>对照你的论文：按学生切窗口</h4><p>KT 的数据不是一本书，而是几千个学生各自的序列。你论文 <code>prep_world</code>（第 680 到 686 行，WIN 在第 65 行）把每个学生的序列按 100 步（<code>WIN = 100</code>）切成窗口，最后不满 100 步的也保留（至少 2 步）。窗口不会跨学生，因为另一个学生的记录和这个学生的知识状态无关。每个窗口从空的隐状态开始，相当于这里的“随机抽样”：窗口之间不传隐状态。</p>
+<pre class="code">for st in range(0, L, win):          <span class="c"># L 是这个学生的记录条数，win = 100</span>
+    e = min(L, st + win)
+    if e - st &gt;= 2:
+        rows.append((i, st, e))       <span class="c"># 第 i 个学生，从 st 到 e</span></pre></div>
+  </div>
+</section>
+
+<section class="part" id="rnn">
+  <div class="part-h"><div class="eyebrow">第四部分</div><h2>8.4 循环神经网络</h2><span class="src">对应原书第 8.4 节，代码来自原书 PyTorch 版</span></div>
+  <div class="blk"><div class="blk-h"><span class="n">8.4.2</span><h3>有隐状态的循环神经网络</h3></div>
+    <div class="prose">
+      <p>第 8 天的多层感知机：H = φ(X W_xh + b_h)，输出 O = H W_hq + b_q。RNN 多了一项：<b>上一步的隐状态</b>也参与计算。</p>
+      <p class="math">Hₜ = φ(Xₜ W_xh + H_{t−1} W_hh + b_h)<br>Oₜ = Hₜ W_hq + b_q</p>
+      <p>形状：批量 n、输入 d 维、隐藏 h 维、输出 q 维时，Xₜ 是 (n, d)，Hₜ 是 (n, h)，W_xh 是 (d, h)，W_hh 是 (h, h)，W_hq 是 (h, q)。<b>每个时间步用的是同一组参数</b>，所以序列再长，参数个数也不变。H_{t−1} W_hh 这一项就是“记忆”：上一步的信息通过它传到这一步。</p>
+      <p>Xₜ W_xh + H_{t−1} W_hh 可以写成一次矩阵乘法：把 Xₜ 和 H_{t−1} 横着拼起来，W_xh 和 W_hh 竖着拼起来。验证一下：</p>
+    </div>
+    <div class="cell"><textarea>from d2l import torch as d2l
+import torch
+
+X, W_xh = d2l.normal(0, 1, (3, 1)), d2l.normal(0, 1, (1, 4))
+H, W_hh = d2l.normal(0, 1, (3, 4)), d2l.normal(0, 1, (4, 4))
+d2l.matmul(X, W_xh) + d2l.matmul(H, W_hh)</textarea></div>
+    <div class="cell"><textarea>d2l.matmul(d2l.concat((X, H), 1), d2l.concat((W_xh, W_hh), 0))</textarea></div>
+    <div class="cell"><textarea>d2l.concat((X, H), 1).shape, d2l.concat((W_xh, W_hh), 0).shape</textarea></div>
+    <div class="panel stack" id="rnLab">
+      <h4>一个迷你 DKT：看隐状态怎么记住历史</h4>
+      <p class="small muted">只有 1 个知识点、隐状态 2 维的 RNN，权重是手动设的。输入 xₜ：答对是 +1，答错是 −1。隐状态 hₜ = tanh(xₜ·w_x + h_{t−1}·W_hh + b)，预测下一题答对的概率 p = sigmoid(h·w_q + b_q)。点格子切换对错，看隐状态（两条线）和预测概率（柱子）怎么变。</p>
+      <div class="row"><button class="btn sm" id="rnAll1">全部答对</button><button class="btn sm" id="rnAll0">全部答错</button><button class="btn sm" id="rnAlt">对错交替</button><label class="ctrl" for="rnMem">记忆强度（W_hh 的大小） <output id="rnMemv">0.80</output><input type="range" id="rnMem" min="0" max="1.2" step="0.05" value="0.8"></label></div>
+      <div class="tkrow" id="rnRow"></div>
+      <div class="cv" id="rnHost"><canvas id="rnCv" aria-label="每一步的隐状态和预测概率"></canvas></div>
+      <div class="calc pw" id="rnCalc"></div>
+    </div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">8.4.4</span><h3>困惑度</h3></div>
+    <div class="prose">
+      <p>怎么衡量语言模型好不好？用每个词元的平均交叉熵：(1/n) Σ −log P(xₜ | x_{t−1}, …, x₁)。原书用它的指数，叫<b>困惑度</b>（perplexity）：</p>
+      <p class="math">困惑度 = exp( −(1/n) Σₜ log P(xₜ | x_{t−1}, …, x₁) )</p>
+      <p>可以理解成“模型平均在几个选项里犹豫”。完美模型每次都给正确答案概率 1，困惑度是 1；完全瞎猜（词表 28 个字符、每个概率 1/28），困惑度是 28；模型越差，困惑度越大。</p>
+    </div>
+    <div class="callout"><h4>对照你的论文：BCE 和困惑度</h4><p>KT 预测的是“对或错”两个选项，平均交叉熵就是论文里的 BCE（验证集上用它挑检查点）。BCE 的指数就是二选一的困惑度：瞎猜（每次都说 0.5）时 BCE = log 2 ≈ 0.693，困惑度正好是 2。你论文结果文件 <code>results.json</code> 里记录的 DKT 训练曲线（5 个随机种子），验证集 BCE 最低在 0.556 到 0.560 之间，困惑度约 1.75。比瞎猜好，但离 1 还远：学生答题本来就有很大的随机性。</p></div>
+  </div>
+</section>
+
+<section class="part quiz-sec">
+  <div class="part-h"><div class="eyebrow">课后题</div><h2>做几道题检查一下</h2><span class="src">选择题点选项马上出结果；写形状和写代码的题，网页会现场运行代码判断对错。答题记录只存在你这台设备的浏览器里。</span></div>
+  <div class="quiz dayquiz" data-day="12"></div>
+  <div class="row small muted quizscore" data-day="12"></div>
+</section>
+
+<section class="part">
+  <div class="part-h"><div class="eyebrow">今日小结</div><h2>今天学会了吗？</h2></div>
+  <div class="two">
+    <div class="panel stack">
+      <ul class="check-list" data-day="12">
+        <li><label><input type="checkbox" data-k="c1">自回归模型只看最近 τ 步，隐变量模型用一个隐状态记住历史</label></li>
+        <li><label><input type="checkbox" data-k="c2">多步预测会累积误差</label></li>
+        <li><label><input type="checkbox" data-k="c3">文本 → 词元 → 词表 → 编号；DKT 的词元是（知识点，对错），编号 sk + K·rs</label></li>
+        <li><label><input type="checkbox" data-k="c4">随机抽样和顺序分区的区别</label></li>
+        <li><label><input type="checkbox" data-k="c5">Hₜ = φ(Xₜ W_xh + H_{t−1} W_hh + b_h)，每一步共用参数；困惑度 = exp(平均交叉熵)</label></li>
+      </ul>
+      <span class="small check-msg"></span>
+    </div>
+    <div class="panel stack">
+      <h3>明天（第 13 天）学什么</h3>
+      <p>原书 8.5 到 8.7：从零实现一个字符级 RNN 并训练它写文章，梯度裁剪，通过时间反向传播。会用到今天的 <code>load_data_time_machine</code>。训练比较慢，本页会把规模缩小。</p>
+    </div>
+  </div>
+</section>
+</main>

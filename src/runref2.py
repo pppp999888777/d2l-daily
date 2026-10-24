@@ -50,7 +50,9 @@ if 'FMNIST' in sys.argv[3:]:
     _torch.utils.data.DataLoader=_DL0;_ip.display=types.SimpleNamespace(display=lambda *a,**k:None,clear_output=lambda *a,**k:None);sys.modules['IPython']=_ip;sys.modules['IPython.display']=_ip.display
     exec(_pre, _t.__dict__)
 C=['\n'.join(l for l in c.split('\n') if not l.startswith('%')) for c in C]
-os.makedirs(d+'ref2/work',exist_ok=True);os.chdir(d+'ref2/work')
+os.makedirs(d+'ref2/work',exist_ok=True);os.makedirs(d+'ref2/data',exist_ok=True)
+import shutil;shutil.copy(d+'timemachine.txt',d+'ref2/data/timemachine.txt')  # 第 8 章：d2l.download 返回 ../data/timemachine.txt
+os.chdir(d+'ref2/work')
 for c in C:
     buf=io.StringIO()
     with contextlib.redirect_stdout(buf):

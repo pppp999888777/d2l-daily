@@ -32,7 +32,7 @@ function axAttr(ax,name){const toArr=v=>isT(v)?[...v.data]:iterate(v).map(x=>num
   if(name==='axes')return ax;if(M[name])return fn(name,M[name]);return DUMMY}
 function subplots(a,kw){const nr=intOf(kwOr(kw,a,'nrows',0,I(1))),nc=intOf(kwOr(kw,a,'ncols',1,I(1)));const fig={t:'fig',rows:nr,cols:nc,axes:[],id:newId()};for(let i=0;i<nr*nc;i++)fig.axes.push(mkAx(fig));CUR.figs.push(fig);
   const axes=nr*nc===1?fig.axes[0]:{t:'axarr',fig,rows:nr,cols:nc};return tup([fig,axes])}
-function figSpec(fig){return{kind:'fig',rows:fig.rows,cols:fig.cols,axes:fig.axes.map(ax=>({lines:ax.lines.map(l=>({x:l.x.slice(),y:l.y.slice(),fmt:l.fmt})),image:ax.image,xlabel:ax.xlabel,ylabel:ax.ylabel,title:ax.title,legend:ax.legend.slice(),xlim:ax.xlim,ylim:ax.ylim,yscale:ax.yscale}))}}
+function figSpec(fig){return{kind:'fig',rows:fig.rows,cols:fig.cols,axes:fig.axes.map(ax=>({lines:ax.lines.map(l=>({x:l.x.slice(),y:l.y.slice(),fmt:l.fmt})),image:ax.image,xlabel:ax.xlabel,ylabel:ax.ylabel,title:ax.title,legend:ax.legend.slice(),xlim:ax.xlim,ylim:ax.ylim,xscale:ax.xscale,yscale:ax.yscale}))}}
 const ipyDisplay=mod('IPython.display',{display:fn('display',(a,kw,ctx)=>{const v=a[0];if(v&&v.t==='fig'){v.shown=true}else if(v)ctx.outBuf+=repr(v)+'\n';return NONE}),clear_output:fn('clear_output',()=>NONE)});
 function d2lSetAxes(a){const ax=a[0];if(ax.t!=='ax')return NONE;const[xl,yl,xlim,ylim,xs,ys,lg]=a.slice(1);const M=axAttr;M(ax,'set_xlabel').call([xl||NONE]);M(ax,'set_ylabel').call([yl||NONE]);M(ax,'set_xlim').call([xlim||NONE]);M(ax,'set_ylim').call([ylim||NONE]);if(ys&&ys.t==='str')ax.yscale=ys.v;if(lg&&lg.t!=='none')M(ax,'legend').call([lg]);return NONE}
 
@@ -204,4 +204,148 @@ def predict_ch3(net, test_iter, n=6):
     titles = [true +'\\n' + pred for true, pred in zip(trues, preds)]
     d2l.show_images(
         d2l.reshape(X[0:n], (n, 28, 28)), 1, n, titles=titles[0:n])
+
+# ---------- 第 8 章：文本（时光机器）----------
+import collections
+import re
+import random
+import os
+
+DATA_HUB = dict()
+DATA_URL = 'http://d2l-data.s3-accelerate.amazonaws.com/'
+DATA_HUB['time_machine'] = (DATA_URL + 'timemachine.txt',
+                            '090b5e7e70c295757f55df93cb0a180b9691891a')
+
+def download(name, cache_dir=os.path.join('..', 'data')):
+    """本页不联网：数据已经放在网页里，直接返回文件路径"""
+    url, sha1_hash = DATA_HUB[name]
+    return os.path.join(cache_dir, url.split('/')[-1])
+
+def read_time_machine():
+    """将时间机器数据集加载到文本行的列表中"""
+    with open(d2l.download('time_machine'), 'r') as f:
+        lines = f.readlines()
+    return [re.sub('[^A-Za-z]+', ' ', line).strip().lower() for line in lines]
+
+def tokenize(lines, token='word'):
+    """将文本行拆分为单词或字符词元"""
+    if token == 'word':
+        return [line.split() for line in lines]
+    elif token == 'char':
+        return [list(line) for line in lines]
+    else:
+        print('错误：未知词元类型：' + token)
+
+class Vocab:
+    """文本词表"""
+    def __init__(self, tokens=None, min_freq=0, reserved_tokens=None):
+        if tokens is None:
+            tokens = []
+        if reserved_tokens is None:
+            reserved_tokens = []
+        # 按出现频率排序
+        counter = count_corpus(tokens)
+        self._token_freqs = sorted(counter.items(), key=lambda x: x[1],
+                                   reverse=True)
+        # 未知词元的索引为0
+        self.idx_to_token = ['<unk>'] + reserved_tokens
+        self.token_to_idx = {token: idx
+                             for idx, token in enumerate(self.idx_to_token)}
+        for token, freq in self._token_freqs:
+            if freq < min_freq:
+                break
+            if token not in self.token_to_idx:
+                self.idx_to_token.append(token)
+                self.token_to_idx[token] = len(self.idx_to_token) - 1
+
+    def __len__(self):
+        return len(self.idx_to_token)
+
+    def __getitem__(self, tokens):
+        if not isinstance(tokens, (list, tuple)):
+            return self.token_to_idx.get(tokens, self.unk)
+        return [self.__getitem__(token) for token in tokens]
+
+    def to_tokens(self, indices):
+        if not isinstance(indices, (list, tuple)):
+            return self.idx_to_token[indices]
+        return [self.idx_to_token[index] for index in indices]
+
+    @property
+    def unk(self):  # 未知词元的索引为0
+        return 0
+
+    @property
+    def token_freqs(self):
+        return self._token_freqs
+
+def count_corpus(tokens):
+    """统计词元的频率"""
+    # 这里的tokens是1D列表或2D列表
+    if len(tokens) == 0 or isinstance(tokens[0], list):
+        # 将词元列表展平成一个列表
+        tokens = [token for line in tokens for token in line]
+    return collections.Counter(tokens)
+
+def load_corpus_time_machine(max_tokens=-1):
+    """返回时光机器数据集的词元索引列表和词表"""
+    lines = read_time_machine()
+    tokens = tokenize(lines, 'char')
+    vocab = Vocab(tokens)
+    # 因为时光机器数据集中的每个文本行不一定是一个句子或一个段落，
+    # 所以将所有文本行展平到一个列表中
+    corpus = [vocab[token] for line in tokens for token in line]
+    if max_tokens > 0:
+        corpus = corpus[:max_tokens]
+    return corpus, vocab
+
+def seq_data_iter_random(corpus, batch_size, num_steps):
+    """使用随机抽样生成一个小批量子序列"""
+    corpus = corpus[random.randint(0, num_steps - 1):]
+    num_subseqs = (len(corpus) - 1) // num_steps
+    initial_indices = list(range(0, num_subseqs * num_steps, num_steps))
+    random.shuffle(initial_indices)
+
+    def data(pos):
+        return corpus[pos: pos + num_steps]
+
+    num_batches = num_subseqs // batch_size
+    for i in range(0, batch_size * num_batches, batch_size):
+        initial_indices_per_batch = initial_indices[i: i + batch_size]
+        X = [data(j) for j in initial_indices_per_batch]
+        Y = [data(j + 1) for j in initial_indices_per_batch]
+        yield d2l.tensor(X), d2l.tensor(Y)
+
+def seq_data_iter_sequential(corpus, batch_size, num_steps):
+    """使用顺序分区生成一个小批量子序列"""
+    offset = random.randint(0, num_steps)
+    num_tokens = ((len(corpus) - offset - 1) // batch_size) * batch_size
+    Xs = d2l.tensor(corpus[offset: offset + num_tokens])
+    Ys = d2l.tensor(corpus[offset + 1: offset + 1 + num_tokens])
+    Xs, Ys = Xs.reshape(batch_size, -1), Ys.reshape(batch_size, -1)
+    num_batches = Xs.shape[1] // num_steps
+    for i in range(0, num_steps * num_batches, num_steps):
+        X = Xs[:, i: i + num_steps]
+        Y = Ys[:, i: i + num_steps]
+        yield X, Y
+
+class SeqDataLoader:
+    """加载序列数据的迭代器"""
+    def __init__(self, batch_size, num_steps, use_random_iter, max_tokens):
+        if use_random_iter:
+            self.data_iter_fn = d2l.seq_data_iter_random
+        else:
+            self.data_iter_fn = d2l.seq_data_iter_sequential
+        self.corpus, self.vocab = d2l.load_corpus_time_machine(max_tokens)
+        self.batch_size, self.num_steps = batch_size, num_steps
+
+    def __iter__(self):
+        return self.data_iter_fn(self.corpus, self.batch_size, self.num_steps)
+
+def load_data_time_machine(batch_size, num_steps,
+                           use_random_iter=False, max_tokens=10000):
+    """返回时光机器数据集的迭代器和词表"""
+    data_iter = SeqDataLoader(
+        batch_size, num_steps, use_random_iter, max_tokens)
+    return data_iter, data_iter.vocab
 `;

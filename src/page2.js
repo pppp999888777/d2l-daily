@@ -1,3 +1,5 @@
+// 第 8 章用的时光机器文本：放进模拟文件系统
+{const tm=document.getElementById('tmData');if(tm)MT.setStaticFile('../data/timemachine.txt',tm.textContent)}
 // ============ 页面逻辑 ============
 const $=s=>document.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -6,7 +8,7 @@ function colors(){const cs=getComputedStyle(document.documentElement),g=n=>cs.ge
 function fitCanvas(cv,W,H){const r=window.devicePixelRatio||1;cv.width=Math.round(W*r);cv.height=Math.round(H*r);cv.style.width=W+'px';cv.style.height=H+'px';const c=cv.getContext('2d');c.setTransform(r,0,0,r,0,0);return c}
 const MONO='11px "JetBrains Mono",ui-monospace,monospace';
 const bodyFont=px=>`${px}px ${getComputedStyle(document.body).fontFamily}`;
-const DAYS=['1','2','3','4','5','6','7','8','9','10','11'];
+const DAYS=['1','2','3','4','5','6','7','8','9','10','11','12'];
 
 // ---------- 张量图示 ----------
 function cellText(v,dtype){if(dtype==='bool')return v?'T':'F';if(dtype==='int64')return String(v);if(!Number.isFinite(v))return String(v);return Number.isInteger(v)?String(v):(Math.abs(v)>=100?v.toFixed(0):v.toFixed(2))}
@@ -67,18 +69,27 @@ function vizValue(v,env){if(!v)return'';if(MT.isT(v))return`<div class="vz">${vi
 // ---------- 画图（d2l.plot / plt.plot） ----------
 const SERIESC=['--accent','--pos','--neg','--muted'];
 function drawPlot(cv,fig){const C=colors(),cs=getComputedStyle(document.documentElement);const W=Math.max(260,Math.min(560,cv.parentElement.clientWidth||520)),H=Math.round(W*0.62),ctx=fitCanvas(cv,W,H);
-  const pl=50,pr=12,pt=fig.legend?30:12,pb=36,lg=fig.yscale==='log',T=v=>lg?(v>0?Math.log10(v):NaN):v;const xs=fig.series.flatMap(s=>s.x).filter(Number.isFinite),ys=[...fig.series.flatMap(s=>s.y),...fig.hlines].map(T).filter(Number.isFinite);if(!xs.length)return;
-  let x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys);if(x1===x0)x1=x0+1;if(y1===y0){y1+=1;y0-=1}const py=(y1-y0)*.06;y0-=py;y1+=py;if(fig.xlim){[x0,x1]=fig.xlim}if(fig.ylim){[y0,y1]=fig.ylim.map(T)}
+  // 坐标轴可以是线性或对数（xscale / yscale = 'log'），对数轴先取 log10 再按线性画
+  const pl=50,pr=12,pt=fig.legend?30:12,pb=36,lx=fig.xscale==='log',ly=fig.yscale==='log',TX=v=>lx?(v>0?Math.log10(v):NaN):v,TY=v=>ly?(v>0?Math.log10(v):NaN):v;
+  const xs=fig.series.flatMap(s=>s.x).map(TX).filter(Number.isFinite),ys=[...fig.series.flatMap(s=>s.y),...fig.hlines].map(TY).filter(Number.isFinite);if(!xs.length||!ys.length)return;
+  let x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys);if(x1===x0)x1=x0+1;if(y1===y0){y1+=1;y0-=1}const py=(y1-y0)*.06;y0-=py;y1+=py;
+  if(fig.xlim){const[a,b]=fig.xlim.map(TX);if(Number.isFinite(a))x0=a;if(Number.isFinite(b))x1=b}if(fig.ylim){const[a,b]=fig.ylim.map(TY);if(Number.isFinite(a))y0=a;if(Number.isFinite(b))y1=b}
   const nice=(lo,hi,n)=>{const sp=hi-lo,st0=sp/n,mg=10**Math.floor(Math.log10(st0)),e=st0/mg,st=(e>=7.5?10:e>=3.5?5:e>=1.5?2:1)*mg;const t=[];for(let v=Math.ceil(lo/st)*st;v<=hi+st*1e-9;v+=st)t.push(+v.toFixed(10));return t};
-  const sx=x=>pl+(x-x0)/(x1-x0)*(W-pl-pr),sy0=y=>pt+(y1-y)/(y1-y0)*(H-pt-pb),sy=y=>sy0(T(y));const SUP={'-':'⁻',0:'⁰',1:'¹',2:'²',3:'³',4:'⁴',5:'⁵',6:'⁶',7:'⁷',8:'⁸',9:'⁹'};
+  const SUP={'-':'⁻',0:'⁰',1:'¹',2:'²',3:'³',4:'⁴',5:'⁵',6:'⁶',7:'⁷',8:'⁸',9:'⁹'};
+  const ticks=(lo,hi,n,lg)=>{if(!lg)return nice(lo,hi,n).map(t=>[t,String(+t.toPrecision(6))]);const p=nice(lo,hi,n+1).filter(Number.isInteger);if(p.length>=2)return p.map(t=>[t,'10'+String(t).replace(/./g,c=>SUP[c])]);
+    const r=[];for(let k=Math.floor(lo);k<=Math.ceil(hi);k++)for(const m of[1,2,5]){const t=Math.log10(m)+k;if(t>=lo&&t<=hi)r.push([t,String(+(10**t).toPrecision(2))])}return r};
+  const sx0=x=>pl+(x-x0)/(x1-x0)*(W-pl-pr),sy0=y=>pt+(y1-y)/(y1-y0)*(H-pt-pb),sx=x=>sx0(TX(x)),sy=y=>sy0(TY(y));
   ctx.font=MONO;ctx.fillStyle=C.muted;ctx.strokeStyle=C.line;ctx.lineWidth=1;ctx.textAlign='right';ctx.textBaseline='middle';
-  let yt=lg?nice(y0,y1,5).filter(Number.isInteger):nice(y0,y1,4);const pow=lg&&yt.length>=2;if(lg&&!pow){yt=[];for(let k=Math.floor(y0);k<=Math.ceil(y1);k++)for(const m of[1,2,5]){const t=Math.log10(m)+k;if(t>=y0&&t<=y1)yt.push(t)}}for(const t of yt){const y=Math.round(sy0(t))+.5;ctx.beginPath();ctx.moveTo(pl,y);ctx.lineTo(W-pr,y);ctx.stroke();ctx.fillText(pow?'10'+String(t).replace(/./g,c=>SUP[c]):lg?String(+(10**t).toPrecision(2)):String(+t.toPrecision(6)),pl-6,y)}
-  ctx.textAlign='center';ctx.textBaseline='top';for(const t of nice(x0,x1,5)){const x=Math.round(sx(t))+.5;ctx.fillText(String(+t.toPrecision(6)),x,H-pb+6)}
+  for(const[t,lab]of ticks(y0,y1,4,ly)){const y=Math.round(sy0(t))+.5;ctx.beginPath();ctx.moveTo(pl,y);ctx.lineTo(W-pr,y);ctx.stroke();ctx.fillText(lab,pl-6,y)}
+  ctx.textAlign='center';ctx.textBaseline='top';for(const[t,lab]of ticks(x0,x1,5,lx)){const x=Math.round(sx0(t))+.5;ctx.fillText(lab,x,H-pb+6)}
   ctx.font=bodyFont(12);ctx.fillStyle=C.ink;if(fig.xlabel)ctx.fillText(fig.xlabel,(pl+W-pr)/2,H-16);if(fig.ylabel){ctx.save();ctx.translate(13,(pt+H-pb)/2);ctx.rotate(-Math.PI/2);ctx.textBaseline='middle';ctx.fillText(fig.ylabel,0,0);ctx.restore()}
   for(const h of fig.hlines){ctx.strokeStyle=C.ink;ctx.setLineDash([5,4]);ctx.beginPath();ctx.moveTo(pl,sy(h));ctx.lineTo(W-pr,sy(h));ctx.stroke();ctx.setLineDash([])}
   ctx.save();ctx.beginPath();ctx.rect(pl,pt,W-pl-pr,H-pt-pb);ctx.clip();
-  fig.series.forEach((s,i)=>{const col=s.color?cs.getPropertyValue(s.color).trim():cs.getPropertyValue(SERIESC[i%4]).trim();if(s.scatter){ctx.fillStyle=col;ctx.globalAlpha=.7;s.x.forEach((x,k)=>{ctx.beginPath();ctx.arc(sx(x),sy(s.y[k]),1.8,0,7);ctx.fill()});ctx.globalAlpha=1;return}ctx.strokeStyle=col;ctx.lineWidth=2;ctx.setLineDash(s.dash||(i===1?[6,4]:i===2?[2,3]:[]));ctx.beginPath();s.x.forEach((x,k)=>{const X=sx(x),Y=sy(s.y[k]);k?ctx.lineTo(X,Y):ctx.moveTo(X,Y)});ctx.stroke();ctx.setLineDash([]);if(s.x.length<=30){ctx.fillStyle=col;s.x.forEach((x,k)=>{ctx.beginPath();ctx.arc(sx(x),sy(s.y[k]),2.5,0,7);ctx.fill()})}});ctx.restore();
-  if(fig.legend){let lx=pl;ctx.font=bodyFont(12);ctx.textAlign='left';ctx.textBaseline='middle';fig.series.forEach((s,i)=>{if(!s.label)return;const col=s.color?cs.getPropertyValue(s.color).trim():cs.getPropertyValue(SERIESC[i%4]).trim();ctx.strokeStyle=col;ctx.lineWidth=2;ctx.setLineDash(s.dash||(i===1?[6,4]:i===2?[2,3]:[]));ctx.beginPath();ctx.moveTo(lx,12);ctx.lineTo(lx+18,12);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle=C.ink;ctx.fillText(s.label,lx+22,12);lx+=ctx.measureText(s.label).width+44})}
+  const dashOf=(s,i)=>Array.isArray(s.dash)?s.dash:(i===1?[6,4]:i===2?[2,3]:i===3?[8,3,2,3]:[]);
+  fig.series.forEach((s,i)=>{const col=s.color?cs.getPropertyValue(s.color).trim():cs.getPropertyValue(SERIESC[i%4]).trim();if(s.scatter){ctx.fillStyle=col;ctx.globalAlpha=.7;s.x.forEach((x,k)=>{ctx.beginPath();ctx.arc(sx(x),sy(s.y[k]),1.8,0,7);ctx.fill()});ctx.globalAlpha=1;return}
+    ctx.strokeStyle=col;ctx.lineWidth=2;ctx.setLineDash(dashOf(s,i));ctx.beginPath();let pen=false;s.x.forEach((x,k)=>{const X=sx(x),Y=sy(s.y[k]);if(!Number.isFinite(X)||!Number.isFinite(Y)){pen=false;return}pen?ctx.lineTo(X,Y):ctx.moveTo(X,Y);pen=true});ctx.stroke();ctx.setLineDash([]);
+    if(s.x.length<=30){ctx.fillStyle=col;s.x.forEach((x,k)=>{const X=sx(x),Y=sy(s.y[k]);if(Number.isFinite(X)&&Number.isFinite(Y)){ctx.beginPath();ctx.arc(X,Y,2.5,0,7);ctx.fill()}})}});ctx.restore();
+  if(fig.legend){let lx0=pl,row=0;ctx.font=bodyFont(12);ctx.textAlign='left';ctx.textBaseline='middle';fig.series.forEach((s,i)=>{if(!s.label)return;const w=ctx.measureText(s.label).width+44;if(lx0+w>W&&lx0>pl){lx0=pl;row++}const y=12+row*16;const col=s.color?cs.getPropertyValue(s.color).trim():cs.getPropertyValue(SERIESC[i%4]).trim();ctx.strokeStyle=col;ctx.lineWidth=2;ctx.setLineDash(dashOf(s,i));ctx.beginPath();ctx.moveTo(lx0,y);ctx.lineTo(lx0+18,y);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle=C.ink;ctx.fillText(s.label,lx0+22,y);lx0+=w})}
   cv._fig=fig}
 
 // ---------- 代码格 ----------
@@ -116,7 +127,7 @@ function setupCells(){$$('.cell').forEach((cell,i)=>{const ta=cell.querySelector
     else if(e.key==='Tab'&&!e.shiftKey){e.preventDefault();const s=ta.selectionStart;ta.setRangeText('    ',s,ta.selectionEnd,'end');autoSize(ta)}})})}
 function runAll(day){ENVS[day]=MT.newEnv();EXEC[day]=0;MT.resetFS();let errs=0;const main=$('#day'+day);
   $$('.cell',main).forEach(c=>{if(c.dataset.manual){const out=c.querySelector('.out');out.className='out';out.textContent='';const t=document.createElement('span');t.className='tip';t.textContent=`这一格要手动运行：${c.dataset.manual}。准备好了点这一格右上角的“运行”。`;out.appendChild(t);out.hidden=false;return}if(!runCellEl(c))errs++});RAN[day]=true;
-  const expected={'1':0,'2':5,'3':3,'4':0,'5':0,'6':0,'7':0,'8':0,'9':0,'10':0,'11':2}[day]||0;
+  const expected={'1':0,'2':5,'3':3,'4':0,'5':0,'6':0,'7':0,'8':0,'9':0,'10':0,'11':2,'12':0}[day]||0;
   $$('.runAllMsg',main).forEach(m=>m.textContent=errs>expected?`运行完了，有 ${errs} 个格子报错，往下找红字。`:expected?`全部运行完了。其中 ${expected} 个格子是故意报错的，用来练习读报错。`:'全部运行完了，没有报错。')}
 document.addEventListener('click',e=>{const b=e.target.closest('.runAll');if(b)runAll(b.dataset.day)});
 
@@ -332,7 +343,7 @@ function drawImage(cv,img,px){const{H,W}=img;cv.width=W;cv.height=H;cv.style.wid
   for(let k=0;k<W*H;k++){const[r,g,b]=viridis((img.px[k]-lo)/rg);d.data[k*4]=r;d.data[k*4+1]=g;d.data[k*4+2]=b;d.data[k*4+3]=255}c.putImageData(d,0,0)}
 function renderFig(wrap,fig){if(fig.axes.some(a=>a.image)){const grid=document.createElement('div');grid.className='imgrid';grid.style.gridTemplateColumns=`repeat(${fig.cols},minmax(0,1fr))`;
     for(const ax of fig.axes){const cell=document.createElement('figure');if(ax.title){const t=document.createElement('figcaption');t.textContent=ax.title;cell.appendChild(t)}if(ax.image){const cv=document.createElement('canvas');cv.setAttribute('aria-label',ax.title||'图片');cell.appendChild(cv);drawImage(cv,ax.image,72)}grid.appendChild(cell)}wrap.appendChild(grid);return}
-  for(const ax of fig.axes){if(!ax.lines.length)continue;const spec={series:ax.lines.map((l,i)=>({x:l.x,y:l.y,label:ax.legend[i]||'',...fmtStyle(l.fmt,i)})),hlines:[],xlabel:ax.xlabel,ylabel:ax.ylabel,legend:ax.legend.length>0,xlim:ax.xlim,ylim:ax.ylim,yscale:ax.yscale};const cv=document.createElement('canvas');cv.setAttribute('aria-label','训练曲线');wrap.appendChild(cv);drawPlot(cv,spec)}}
+  for(const ax of fig.axes){if(!ax.lines.length)continue;const spec={series:ax.lines.map((l,i)=>({x:l.x,y:l.y,label:ax.legend[i]||'',...fmtStyle(l.fmt,i)})),hlines:[],xlabel:ax.xlabel,ylabel:ax.ylabel,legend:ax.legend.length>0,xlim:ax.xlim,ylim:ax.ylim,xscale:ax.xscale,yscale:ax.yscale};const cv=document.createElement('canvas');cv.setAttribute('aria-label','训练曲线');wrap.appendChild(cv);drawPlot(cv,spec)}}
 
 // ---------- 第 7 天：解压内嵌的 Fashion-MNIST，像素查看器 ----------
 let FM_U8=null;
@@ -453,6 +464,39 @@ function pcRender(){const K=+$('#pcDs').value,d=+$('#pcD').value,g=$('#pcG').val
   $('#pcTbl').innerHTML='<thead><tr><th>名字</th><th>形状</th><th class="num">个数</th><th>是什么</th></tr></thead><tbody>'+rows.map(([n,s,w])=>`<tr><td><code>${n}</code></td><td style="white-space:nowrap"><code>(${s.join(', ')})</code></td><td class="num">${fmt(cnt(s))}</td><td class="small">${w}</td></tr>`).join('')+`<tr><td><b>合计</b></td><td></td><td class="num"><b>${fmt(tot)}</b></td><td></td></tr></tbody>`;
   const lstm=2*4*d*d+2*4*d;$('#pcCalc').textContent=`一共 ${fmt(tot)} 个参数。\nLSTM 占 ${fmt(lstm)} 个（${(100*lstm/tot).toFixed(0)}%），和 K 无关，只看 d：2 × 4d² + 2 × 4d。\n和 K 有关的部分：嵌入 2Kd，输出头 Kd + K${g?'，策略头 Kd + K':''}。\n${K===681?'Junyi 有 681 个知识点，所以和 K 有关的部分比 LSTM 还大。':''}${d!==64?`\n你论文用的是 d = 64（D_MODEL = 64）。`:''}\n\n对照：真 PyTorch 里 sum(p.numel() for p in DKT(145, policy_head=True).parameters()) = 70,690。`}
 ['#pcDs','#pcG'].forEach(s=>$(s).onchange=pcRender);$('#pcD').addEventListener('input',pcRender);
+// ---------- 第 12 天：做题记录变成词元 ----------
+const TK={K:5,seq:[]};
+function tkNew(){TK.seq=Array.from({length:10},()=>[Math.floor(Math.random()*TK.K),Math.random()<0.6?1:0]);tkRender()}
+function tkRender(){const K=TK.K;if(!TK.seq.length){TK.seq=[[0,1],[0,1],[2,0],[2,0],[2,1],[1,1],[3,0],[3,1],[4,0],[0,1]]}
+  $('#tkRow').innerHTML=TK.seq.map(([s,r],t)=>`<button class="tk ${r?'ok':'no'}" data-t="${t}" aria-label="第 ${t+1} 题，知识点 ${s}，${r?'答对':'答错'}"><span class="small muted">第 ${t+1} 题</span><span>知识点 ${s}</span><b>${r?'对':'错'}</b><code>${s+K*r}</code></button>`).join('');
+  $$('#tkRow .tk').forEach(b=>b.onclick=()=>{const t=+b.dataset.t;TK.seq[t][1]^=1;tkRender()});
+  const sk=TK.seq.map(x=>x[0]),rs=TK.seq.map(x=>x[1]),ix=TK.seq.map(([s,r])=>s+K*r);
+  $('#tkCalc').textContent=`sk（知识点）  = [${sk.join(', ')}]\nrs（对错）    = [${rs.join(', ')}]\nsk + K * rs   = [${ix.join(', ')}]    K = ${K}\n\n编号 0 到 ${K-1}：知识点 0 到 ${K-1} 答错\n编号 ${K} 到 ${2*K-1}：知识点 0 到 ${K-1} 答对\n\nself.emb = nn.Embedding(2 * K, d) 是一张 ${2*K} 行、d 列的表，\n每个编号取出其中一行（d 维向量）作为这一步 LSTM 的输入。\n一个批量的形状：(批量, 时间步) 的整数 → 嵌入后 (批量, 时间步, d)。`}
+$('#tkRand').onclick=tkNew;
+// ---------- 第 12 天：随机抽样和顺序分区 ----------
+function ptRender(){const mode=$('#ptMode').value,N=35,bs=2,ns=5,cell=new Array(N).fill(null),batches=[];
+  if(mode==='seq'){const off=Math.floor(Math.random()*(ns+1)),nt=Math.floor((N-off-1)/bs)*bs,cols=nt/bs,nb=Math.floor(cols/ns);
+    for(let b=0;b<nb;b++){const rows=[];for(let r=0;r<bs;r++){const st=off+r*cols+b*ns;rows.push(st);for(let k=0;k<ns;k++)cell[st+k]={b,r}}batches.push(rows)}
+    ptDraw(cell,batches,ns,`顺序分区：随机偏移 offset = ${off}\n先取 ${nt} 个数排成 ${bs} 行，每行 ${cols} 个，再每 ${ns} 列切一个小批量，共 ${nb} 个。\n${batches.map((rows,b)=>`小批量 ${b+1}：X 的两行从 ${rows.join(' 和 ')} 开始`).join('\n')}\n\n同一行里，小批量 1 后面紧接着小批量 2：上一批最后的隐状态可以直接接着用。`)}
+  else{const off=Math.floor(Math.random()*ns),ns2=Math.floor((N-off-1)/ns),starts=Array.from({length:ns2},(_,i)=>off+i*ns);for(let i=starts.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[starts[i],starts[j]]=[starts[j],starts[i]]}
+    const nb=Math.floor(ns2/bs);for(let b=0;b<nb;b++){const rows=starts.slice(b*bs,b*bs+bs);rows.forEach((st,r)=>{for(let k=0;k<ns;k++)cell[st+k]={b,r}});batches.push(rows)}
+    ptDraw(cell,batches,ns,`随机抽样：随机偏移 ${off}，切出 ${ns2} 段（每段 ${ns} 个），打乱顺序后每 ${bs} 段组成一个小批量，共 ${nb} 个。\n${batches.map((rows,b)=>`小批量 ${b+1}：两段从 ${rows.join(' 和 ')} 开始`).join('\n')}\n\n相邻的小批量在原序列里不一定挨着，所以每个小批量都要重新初始化隐状态。`)}}
+function ptDraw(cell,batches,ns,text){const cols=['--accent','--pos','--neg','--muted'];$('#ptGrid').innerHTML=cell.map((c,i)=>`<div class="pt" style="${c?`background:color-mix(in srgb,var(${cols[c.b%4]}) ${c.r?18:34}%,var(--surface))`:''}"><b>${i}</b><span class="small muted">${c?`批 ${c.b+1}·第 ${c.r+1} 行`:'没用到'}</span></div>`).join('');$('#ptCalc').textContent=text}
+$('#ptMode').onchange=ptRender;$('#ptGo').onclick=ptRender;
+// ---------- 第 12 天：迷你 DKT 的隐状态 ----------
+const RN={ans:[1,1,0,1,1,1,0,0,0,1]};
+function rnRun(mem){const wx=[1.1,0.5],Whh=[[0.9*mem,0.25*mem],[-0.1*mem,0.95*mem]],wq=[1.6,0.9],bq=0.1;let h=[0,0];const H=[],P=[];
+  const p0=1/(1+Math.exp(-bq));for(const a of RN.ans){const x=a?1:-1;h=[Math.tanh(x*wx[0]+h[0]*Whh[0][0]+h[1]*Whh[1][0]),Math.tanh(x*wx[1]+h[0]*Whh[0][1]+h[1]*Whh[1][1])];H.push(h);P.push(1/(1+Math.exp(-(h[0]*wq[0]+h[1]*wq[1]+bq))))}return{H,P,p0,Whh}}
+function rnRender(){const host=$('#rnHost');if(!host.offsetParent)return;const mem=+$('#rnMem').value;$('#rnMemv').textContent=mem.toFixed(2);const r=rnRun(mem),C=colors(),n=RN.ans.length;
+  $('#rnRow').innerHTML=RN.ans.map((a,t)=>`<button class="tk ${a?'ok':'no'}" data-t="${t}" aria-label="第 ${t+1} 步${a?'答对':'答错'}"><span class="small muted">t = ${t+1}</span><b>${a?'对':'错'}</b></button>`).join('');
+  $$('#rnRow .tk').forEach(b=>b.onclick=()=>{RN.ans[+b.dataset.t]^=1;rnRender()});
+  const W=Math.max(260,host.clientWidth),Hh=Math.round(Math.min(260,W*.6)),ctx=fitCanvas($('#rnCv'),W,Hh),pl=34,pr=10,pt=24,pb=24,cw=(W-pl-pr)/n,sx=t=>pl+cw*(t+.5),sy=v=>pt+(1-v)/2*(Hh-pt-pb);
+  ctx.strokeStyle=C.line;ctx.lineWidth=1;ctx.font=MONO;ctx.fillStyle=C.muted;ctx.textAlign='right';ctx.textBaseline='middle';for(const v of[-1,0,0.5,1]){ctx.beginPath();ctx.moveTo(pl,sy(v));ctx.lineTo(W-pr,sy(v));ctx.stroke();ctx.fillText(String(v),pl-4,sy(v))}
+  r.P.forEach((p,t)=>{ctx.fillStyle=C.pos;ctx.globalAlpha=.35;const y0=sy(0),y1=sy(p);ctx.fillRect(sx(t)-cw*.3,y1,cw*.6,y0-y1);ctx.globalAlpha=1});
+  [[0,C.accent,[]],[1,C.ink,[5,4]]].forEach(([k,col,d])=>{ctx.strokeStyle=col;ctx.lineWidth=2;ctx.setLineDash(d);ctx.beginPath();r.H.forEach((h,t)=>{t?ctx.lineTo(sx(t),sy(h[k])):ctx.moveTo(sx(t),sy(h[k]))});ctx.stroke();ctx.setLineDash([])});
+  ctx.textAlign='left';ctx.textBaseline='middle';ctx.font=bodyFont(12);[[C.accent,[],'h 第 1 维'],[C.ink,[5,4],'h 第 2 维']].forEach(([c,d,t],i)=>{const x=pl+i*96;ctx.strokeStyle=c;ctx.setLineDash(d);ctx.beginPath();ctx.moveTo(x,10);ctx.lineTo(x+18,10);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle=C.ink;ctx.fillText(t,x+22,10)});ctx.fillStyle=C.pos;ctx.globalAlpha=.5;ctx.fillRect(pl+192,4,14,12);ctx.globalAlpha=1;ctx.fillStyle=C.ink;ctx.fillText('预测下一题答对的概率',pl+212,10);
+  const last=r.H[n-1];$('#rnCalc').textContent=`W_hh = ${mem.toFixed(2)} × [[0.90, 0.25], [−0.10, 0.95]]\n\n${r.P.map((p,t)=>`t = ${String(t+1).padStart(2)}  ${RN.ans[t]?'对':'错'}  h = (${r.H[t][0].toFixed(2).padStart(5)}, ${r.H[t][1].toFixed(2).padStart(5)})  下一题答对概率 ${p.toFixed(2)}`).join('\n')}\n\n${mem<0.1?'W_hh ≈ 0：没有记忆，预测只看最后一题的对错。':mem>1?'记忆很强：很久以前的对错也一直影响预测，改一下第 1 步试试。':'改一下前几步的对错，最后一步的预测也会跟着变：这就是隐状态在“记住”历史。'}`}
+['#rnAll1','#rnAll0','#rnAlt'].forEach((s,i)=>$(s).onclick=()=>{RN.ans=RN.ans.map((_,t)=>i===0?1:i===1?0:(t+1)%2);rnRender()});$('#rnMem').addEventListener('input',rnRender);
 // ---------- 小结勾选、课程表、切换天数 ----------
 function checksSetup(){$$('.check-list').forEach(ul=>{const day=ul.dataset.day,key='checks'+day,st=store.get(key,{});$$('input',ul).forEach(c=>{c.checked=!!st[c.dataset.k];c.onchange=()=>{const s=store.get(key,{});s[c.dataset.k]=c.checked;store.set(key,s);checkMsg(ul)}});checkMsg(ul)})}
 function checkMsg(ul){const day=ul.dataset.day,all=$$('input',ul),n=all.filter(c=>c.checked).length,msg=ul.parentElement.querySelector('.check-msg');const done=n===all.length;
@@ -465,7 +509,7 @@ const ROAD=[['1','第 1 章 引言 + 2.1 数据操作'],['2','2.2 数据预处�
   ['18','11.4 至 11.6 + 11.10 小批量随机梯度下降、动量、Adam（论文用的优化器）','paper'],['19','论文专题：离线策略评估 IPS、SNIPS、DR（书里没有）','paper'],['20','论文专题：逐行读你的 experiment.py','paper'],
   ['选学','4.7 前向传播、反向传播和计算图；4.10 Kaggle 房价预测'],['选学','第 6 至 7 章 卷积神经网络（LeNet、ResNet 等）'],['选学','9.3 至 9.8 深度和双向循环网络、机器翻译、seq2seq'],['选学','第 11 章其余优化算法、第 12 章计算性能'],['选学','第 13 至 15 章 计算机视觉、自然语言处理']];
 function roadRender(){$('#roadList').innerHTML=ROAD.map(([d,t,f])=>{const live=DAYS.includes(d);return`<div><span class="d">${/^\d+$/.test(d)?`第 ${d} 天`:d}</span><span>${live?`<a href="#day${d}">${esc(t)}</a>`:esc(t)}${f==='paper'?' <span class="mark">论文</span>':''}</span><span class="st${live?' now':''}">${live?'已上线':'未上线'}</span></div>`}).join('')}
-const REDRAW={'1':()=>{kRender();imRender();ofRender()},'2':()=>{dotRender();normRender()},'3':()=>{secRender();gradRender()},'4':()=>{diceRender();bayesRender();bktRender()},'5':()=>{houseRender();if(!sgd.X)sgdData();sgdRender()},'6':()=>{smRender();calRender()},'7':()=>{pixRender()},'8':()=>{uaRender();actRender()},'9':()=>{spRender();rdRender();dpRender()},'10':()=>{sgRender();shRender()},'11':()=>{pcRender()}};
+const REDRAW={'1':()=>{kRender();imRender();ofRender()},'2':()=>{dotRender();normRender()},'3':()=>{secRender();gradRender()},'4':()=>{diceRender();bayesRender();bktRender()},'5':()=>{houseRender();if(!sgd.X)sgdData();sgdRender()},'6':()=>{smRender();calRender()},'7':()=>{pixRender()},'8':()=>{uaRender();actRender()},'9':()=>{spRender();rdRender();dpRender()},'10':()=>{sgRender();shRender()},'11':()=>{pcRender()},'12':()=>{tkRender();ptRender();rnRender()}};
 function showDay(day,scroll){if(!DAYS.includes(day))day='1';$$('main.day').forEach(m=>m.hidden=m.dataset.day!==day);$$('[data-nav]').forEach(a=>a.classList.toggle('on',a.dataset.nav===day));store.set('lastDay',day);
   if(!RAN[day]){if(day==='7'&&!FM_U8){fmReady.then(ok=>{if(ok&&!RAN['7']){runAll('7');REDRAW['7']()}});}else runAll(day)}$$('#day'+day+' textarea').forEach(autoSize);REDRAW[day]();if(scroll)window.scrollTo(0,0)}
 function route(){const h=location.hash.replace('#','');const m=h.match(/^day(\d+)$/);if(m){showDay(m[1],true);return}

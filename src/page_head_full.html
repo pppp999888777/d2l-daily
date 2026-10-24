@@ -85,6 +85,12 @@ input[type=text]{font:inherit;font-family:var(--f-mono);font-size:14px;color:var
 .dpgrid .on{background:color-mix(in srgb,var(--accent) 14%,var(--surface))}.dpgrid .off{background:var(--sunk);opacity:.6}
 .calc.pw{white-space:pre-wrap}
 .math{font-family:var(--f-mono);font-size:14px;padding:6px 10px;background:var(--sunk);border-radius:8px;overflow-x:auto;margin:0}
+.tkrow{display:grid;grid-template-columns:repeat(auto-fill,minmax(70px,1fr));gap:6px}
+.tk{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:6px 8px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:inherit;font-size:13px;cursor:pointer;text-align:left;min-width:0}
+.tk.ok{background:color-mix(in srgb,var(--pos) 16%,var(--surface))}.tk.no{background:color-mix(in srgb,var(--neg) 14%,var(--surface))}.tk code{font-size:12px}
+.ptgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(54px,1fr));gap:4px}
+.pt{display:flex;flex-direction:column;gap:1px;padding:4px 6px;border-radius:6px;border:1px solid var(--line);font-family:var(--f-mono);font-size:12px;min-width:0}
+.pt span{font-family:var(--f-body,inherit);font-size:10.5px;line-height:1.2}
 .calc{font-family:var(--f-mono);font-size:13px;background:var(--sunk);border-radius:8px;padding:10px 12px;white-space:pre;overflow-x:auto;line-height:1.7}
 .ok{color:var(--ok);font-weight:600} .bad{color:var(--bad);font-weight:600}
 table.t{border-collapse:collapse;width:100%;font-size:14px}

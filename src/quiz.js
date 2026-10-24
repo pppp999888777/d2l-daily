@@ -110,6 +110,17 @@ const QUIZ={
  {t:'c',q:'clone = MLP(); clone.load_state_dict(torch.load("mlp.params")) 为什么要先写 MLP()？',o:['文件里只有参数，没有网络结构，要先用同样的类建一个模型','为了随机初始化','load_state_dict 要求先训练','没必要，可以省略'],a:0,why:'state_dict 只是“名字 → 张量”的字典。网络怎么连接写在类的代码里，所以要先建同样结构的模型，再把参数填进去。'},
  {t:'code',q:'写代码：写一个类 Scale(nn.Module)，它有一个可训练参数 self.s（初始值是 torch.ones(1)），forward 返回 X * self.s。建一个 m = Scale()，最后一行写 m(torch.tensor([1.0, 2.0]))。',start:'class Scale(nn.Module):\n    def __init__(self):\n        super().__init__()\n        self.s = \n    def forward(self, X):\n        return \n\nm = Scale()\nm(torch.tensor([1.0, 2.0]))',check:env=>{const m=env.vars.m;if(!m||m.t!=='obj')return'还没有名为 m 的模型';const s=m.attrs.s;if(!s||!MT.isT(s)||!s.isParam)return'self.s 应该是 nn.Parameter(torch.ones(1))，这样它才是可训练参数';const r=MT.runCell('[n for n, _ in m.named_parameters()], m(torch.tensor([1.0, 2.0]))',env);if(!r.ok)return'运行 m(...) 出错了：'+r.text.split('\n').pop();if(!/'s'/.test(r.text)||!/tensor\(\[1\., 2\.\]/.test(r.text))return'm(torch.tensor([1.0, 2.0])) 应该得到 tensor([1., 2.], grad_fn=...)，现在是：'+r.text;return true},why:'self.s = nn.Parameter(torch.ones(1))；forward 里 return X * self.s。输出带 grad_fn=<MulBackward0>，说明 s 会被训练。'},
 ],
+'12':[
+ {t:'c',q:'自回归模型 xₜ ≈ f(x_{t−1}, …, x_{t−τ}) 和隐变量自回归模型最大的区别是？',o:['前者用神经网络，后者不用','前者只看最近 τ 步；后者用一个隐状态 hₜ 概括全部历史，每步更新','前者只能预测一步','没有区别'],a:1,why:'隐变量模型的 hₜ = g(h_{t−1}, x_{t−1}) 可以带着很久以前的信息。BKT 和 DKT 都是隐变量模型。'},
+ {t:'c',q:'用自己的预测当输入一直往后预测（多步预测），为什么越来越不准？',o:['模型过拟合了','每一步的误差都会被带到下一步的输入里，误差不断累积','学习率太大','数据太少'],a:1,why:'单步预测每次都用真实数据当输入，多步预测用的是带误差的预测值。'},
+ {t:'c',q:'词表 Vocab 里编号 0 留给什么？',o:['最常见的词','<unk>，表示词表里没有的未知词元','空格','句号'],a:1,why:'vocab["没见过的词"] 返回 0。按出现次数排序后，最常见的词元编号是 1。'},
+ {t:'c',q:'你论文 DKT 有 K = 145 个知识点。学生在知识点 7 上答对了，输入嵌入层的编号是多少？',o:['7','152','8','14'],a:1,why:'sk + K * rs = 7 + 145 × 1 = 152。答错的话是 7。所以嵌入表有 2K = 290 行。'},
+ {t:'c',q:'齐普夫定律说的是什么？',o:['词频和排名成正比','第 i 常见的词出现次数大致和 1/iᵅ 成正比，在双对数坐标上是一条直线','所有词出现次数差不多','词越长越常见'],a:1,why:'少数词极其常见，大量的词只出现一两次。'},
+ {t:'c',q:'顺序分区相比随机抽样，好处是什么？',o:['训练更快','同一行里相邻小批量在原序列里是接着的，上一批的隐状态可以传给下一批','不需要标签','随机性更大'],a:1,why:'随机抽样时相邻小批量在原序列里不挨着，每批都要重新初始化隐状态。'},
+ {t:'shape',q:'RNN 一步：批量 3，输入 1 维，隐藏 4 维。下面结果的形状是？',code:'X, W_xh = torch.ones(3, 1), torch.ones(1, 4)\nH, W_hh = torch.ones(3, 4), torch.ones(4, 4)\ntorch.tanh(X @ W_xh + H @ W_hh)',why:'(3, 1) @ (1, 4) 和 (3, 4) @ (4, 4) 都是 (3, 4)，加起来还是 (3, 4)，就是新的隐状态 Hₜ。'},
+ {t:'c',q:'RNN 处理长度为 100 的序列和长度为 10 的序列，参数个数相比如何？',o:['长序列的参数多 10 倍','一样多，每个时间步共用同一组 W_xh、W_hh、b_h','长序列的参数少','取决于批量大小'],a:1,why:'这是 RNN 的关键：参数在时间步之间共享，所以能处理任意长度的序列。'},
+ {t:'c',q:'一个预测对错的模型，每次都说答对概率 0.5。它的 BCE 和困惑度分别是多少？',o:['0.5 和 0.5','log 2 ≈ 0.693 和 2','1 和 e','0 和 1'],a:1,why:'每次 −log 0.5 = log 2，困惑度 = exp(log 2) = 2，相当于在两个选项里完全犹豫。'},
+],
 };
 function quizState(day){return store.get('quiz'+day,{})}
 function quizSave(day,s){store.set('quiz'+day,s)}

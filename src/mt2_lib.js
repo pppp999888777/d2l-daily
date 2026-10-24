@@ -23,13 +23,20 @@ function getItem(T,items){if(items.filter(it=>it.tensor).length>=2)return paired
   const nm=sel.some(s=>s.adv)?'IndexBackward0':sel.some(s=>!s.keep&&!s.newaxis)&&!sel.some(s=>s.slice)?'SelectBackward0':sel.some(s=>s.slice)?'SliceBackward0':'AliasBackward0';
   return track(R,[T],nm,g=>{const r=new Float64Array(T.data.length);offs.forEach((o,c)=>r[o]+=g[c]);return[r]})}
 function setItem(T,items,v){checkInplace(T);if(items.length===1&&items[0].bool){const M=items[0].bool,x=numOf(v);T.data.forEach((_,i)=>{if(M.data[i])T.data[i]=castVal(x,T.dtype)});return}
-  const sel=selection(T,items),shape=selShape(sel),mask=new Uint8Array(T.data.length);let src=null,x=0;
-  if(isT(v)){const V=v;bshape(shape,V.shape);const n=prod(shape),sb=bidx(V.shape,shape),idx=new Array(shape.length).fill(0);src=new Float64Array(n);
-    for(let k=0;k<n;k++){let ib=0;for(let d=0;d<shape.length;d++)ib+=idx[d]*sb[d];src[k]=V.data[ib];for(let d=shape.length-1;d>=0;d--){if(++idx[d]<shape[d])break;idx[d]=0}}}else x=numOf(v);
-  forEachSel(T,sel,(off,c)=>{T.data[off]=castVal(src?src[c]:x,T.dtype);mask[off]=1});T.meta={kind:'assign',mask}}
+  const sel=selection(T,items),shape=selShape(sel),mask=new Uint8Array(T.data.length);let src=null,x=0,ibs=null;
+  if(isT(v)){const V=v;bshape(shape,V.shape);const n=prod(shape),sb=bidx(V.shape,shape),idx=new Array(shape.length).fill(0);src=new Float64Array(n);ibs=new Int32Array(n);
+    for(let k=0;k<n;k++){let ib=0;for(let d=0;d<shape.length;d++)ib+=idx[d]*sb[d];src[k]=V.data[ib];ibs[k]=ib;for(let d=shape.length-1;d>=0;d--){if(++idx[d]<shape[d])break;idx[d]=0}}}else x=numOf(v);
+  const pos=[];forEachSel(T,sel,(off,c)=>{T.data[off]=castVal(src?src[c]:x,T.dtype);mask[off]=1;pos[c]=off});T.meta={kind:'assign',mask};
+  // 自动求导：往张量里赋值一个需要梯度的值（或者给已经在计算图里的张量赋值），记成 CopySlices
+  const V=isT(v)?v:null;if(gradEnabled&&(T.requires_grad||(V&&V.requires_grad))){const prev=mkT(T.shape.slice(),[],T.dtype);prev.requires_grad=T.requires_grad;prev.grad_fn=T.grad_fn;T.requires_grad=false;T.grad_fn=null;
+    track(T,V?[prev,V]:[prev],'CopySlices',g=>{const gp=Float64Array.from(g);for(const off of pos)gp[off]=0;if(!V)return[gp];const gv=new Float64Array(V.data.length);pos.forEach((off,c)=>{gv[ibs[c]]+=g[off]});return[gp,gv]})}}
 
 // ---------- 模拟文件系统 ----------
 const FS=new Map();const DIRS=new Set(['.','..']);
+// 网页里内置的数据文件（比如时光机器文本）：重置文件系统后还在
+const STATIC_FILES=new Map();
+function addStatic(){for(const[p,t]of STATIC_FILES){FS.set(p,t);let d=p;while(d.includes('/')){d=d.slice(0,d.lastIndexOf('/'));DIRS.add(d)}}}
+function setStaticFile(path,text){STATIC_FILES.set(normPath(path),text);addStatic()}
 function normPath(p){const parts=[];for(const s of p.split('/')){if(s===''||s==='.')continue;if(s==='..'){if(parts.length&&parts[parts.length-1]!=='..')parts.pop();else parts.push('..')}else parts.push(s)}return parts.join('/')||'.'}
 function openFile(path,mode){const p=normPath(path);mode=mode||'r';
   if(mode.startsWith('r')){if(!FS.has(p))err('FileNotFoundError',`[Errno 2] No such file or directory: '${path}'`);return{t:'file',path,p,mode,pos:0}}

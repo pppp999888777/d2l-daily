@@ -75,6 +75,20 @@ const numpy=mod('numpy',{
   random:mod('numpy.random',{normal:fn('normal',(a,kw)=>{const m=numOf(kwOr(kw,a,'loc',0,F(0))),sd=numOf(kwOr(kw,a,'scale',1,F(1))),s=dimsArg([kwOr(kw,a,'size',2,tup([]))]);return mkT(s,Array.from({length:prod(s)},()=>m+sd*gauss()),'float64',true)}),rand:fn('rand',a=>{const s=dimsArg(a);return mkT(s,Array.from({length:prod(s)},rand),'float64',true)}),
     shuffle:fn('shuffle',a=>{const T=a[0];if(isT(T)){const n=T.shape[0],row=T.data.length/n,d=T.data;for(let i=n-1;i>0;i--){const j=Math.floor(rand()*(i+1));for(let k=0;k<row;k++){const t=d[i*row+k];d[i*row+k]=d[j*row+k];d[j*row+k]=t}}}else{const L=a[0].items;for(let i=L.length-1;i>0;i--){const j=Math.floor(rand()*(i+1));[L[i],L[j]]=[L[j],L[i]]}}return NONE}),seed:fn('seed',a=>{seed=intOf(a[0])*2654435761|0;return NONE})}),
 });
+// ---------- re：把 Python 正则转成 JavaScript 正则（只处理课程用到的写法） ----------
+function pyRe(p){return new RegExp(str(p).replace(/\(\?P<(\w+)>/g,'(?<$1>').replace(/\\A/g,'^').replace(/\\Z/g,'$'),'g')}
+const pyRepl=r=>str(r).replace(/\\g<(\d+)>/g,'$$$1').replace(/\\(\d)/g,'$$$1');
+const reMod=mod('re',{
+  sub:fn('sub',(a,kw)=>{const n=kw.count?intOf(kw.count):a[3]?intOf(a[3]):0,re=pyRe(a[0]),rep=a[1].t==='str'?pyRepl(a[1]):null;let k=0;
+    return S(str(a[2]).replace(re,(...m)=>{if(n&&k>=n)return m[0];k++;if(rep==null)return str(callValue(a[1],[{t:'match',m:m.slice(0,-2)}]));return rep.replace(/\$(\d)/g,(_,i)=>m[+i]||'')}))}),
+  split:fn('split',a=>list(str(a[1]).split(pyRe(a[0])).map(x=>S(x??'')))),
+  findall:fn('findall',a=>{const out=[];for(const m of str(a[1]).matchAll(pyRe(a[0])))out.push(m.length>2?tup(m.slice(1).map(x=>S(x??''))):S(m.length===2?m[1]??'':m[0]));return list(out)})});
+// ---------- collections：Counter、OrderedDict、defaultdict ----------
+function counterAdd(d,items){for(const x of items){const k=numKey(x),e=d.m.get(k);d.m.set(k,[x,I(e?e[1].v+1:1)])}}
+const collectionsMod=mod('collections',{
+  Counter:fn('Counter',a=>{const d=mkDict([]);d.counter=true;if(a[0]){if(a[0].t==='dict')for(const[k,v]of a[0].m.values())d.m.set(numKey(k),[k,v]);else counterAdd(d,iterate(a[0]))}return d}),
+  OrderedDict:fn('OrderedDict',a=>{const d=mkDict(a[0]?(a[0].t==='dict'?[...a[0].m.values()]:iterate(a[0]).map(p=>iterate(p))):[]);d.odict=true;return d}),
+  defaultdict:fn('defaultdict',a=>{const d=mkDict([]);d.dflt=a[0]&&a[0].t!=='none'?a[0]:null;return d})});
 const pandas=mod('pandas',{read_csv:fn('read_csv',a=>readCSV(str(a[0]))),get_dummies:fn('get_dummies',(a,kw)=>getDummies(a[0],kw)),DataFrame:fn('DataFrame',a=>a[0].t==='dict'?dfFromDict(a[0]):err('TypeError','本页的 DataFrame 只支持用字典创建')),
   Series:fn('Series',(a,kw)=>{const c=pyListCol(iterate(a[0]));return mkSeries(c.v,c.dt,c.v.map((_,i)=>i),kw.name?str(kw.name):null)}),isna:fn('isna',a=>dfAttr(a[0],'isna').call([],{})),NA:F(NaN)});
 const os=mod('os',{makedirs:fn('makedirs',(a,kw)=>{const p=normPath(str(a[0]));if(DIRS.has(p)&&!(kw.exist_ok&&kw.exist_ok.v))err('FileExistsError',`[Errno 17] File exists: '${str(a[0])}'`);let cur='';for(const part of p.split('/')){cur=cur?cur+'/'+part:part;DIRS.add(cur)}return NONE}),
@@ -91,7 +105,8 @@ function plotFig(ctx){if(!ctx.fig){ctx.fig={series:[],hlines:[],xlabel:'',ylabel
 function d2lPlot(a,kw,ctx){let X=a[0],Y=kwOr(kw,a,'Y',1,null);const xl=kwOr(kw,a,'xlabel',2,NONE),yl=kwOr(kw,a,'ylabel',3,NONE),lg=kwOr(kw,a,'legend',4,NONE);
   const isList=v=>v&&(v.t==='list'||v.t==='tuple')&&v.items.length&&(isT(v.items[0])||v.items[0].t==='list');
   let Xs=isList(X)?X.items:[X],Ys;if(!Y||Y.t==='none'){Ys=Xs;Xs=Ys.map(y=>null)}else Ys=isList(Y)?Y.items:[Y];if(Xs.length===1&&Ys.length>1)Xs=Ys.map(()=>Xs[0]);
-  const labels=lg&&lg.t!=='none'?lg.items.map(str):[];const fig={series:Ys.map((y,i)=>{const yv=toXY(y),xv=Xs[i]?toXY(Xs[i]):yv.map((_,k)=>k);return{x:xv,y:yv,label:labels[i]||''}}),hlines:[],xlabel:xl.t==='str'?xl.v:'',ylabel:yl.t==='str'?yl.v:'',legend:labels.length>0};
+  const labels=lg&&lg.t!=='none'?lg.items.map(str):[];const lim=v=>v&&v.t!=='none'?iterate(v).map(numOf):null,xlim=lim(kwOr(kw,a,'xlim',5,NONE)),ylim=lim(kwOr(kw,a,'ylim',6,NONE)),xs=kwOr(kw,a,'xscale',7,NONE),ys=kwOr(kw,a,'yscale',8,NONE);
+  const fig={series:Ys.map((y,i)=>{const yv=toXY(y),xv=Xs[i]?toXY(Xs[i]):yv.map((_,k)=>k);return{x:xv,y:yv,label:labels[i]||''}}),hlines:[],xlabel:xl.t==='str'?xl.v:'',ylabel:yl.t==='str'?yl.v:'',legend:labels.length>0,xlim,ylim,xscale:xs.t==='str'?xs.v:'linear',yscale:ys.t==='str'?ys.v:'linear'};
   ctx.plots.push(fig);return NONE}
 const pltAxes={t:'mod',name:'Axes',attrs:{}};
 function pltMod(ctx){return{t:'mod',name:'matplotlib.pyplot',attrs:new Proxy({},{get:(o,name)=>{

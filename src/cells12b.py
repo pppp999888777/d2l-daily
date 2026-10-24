@@ -1,0 +1,18 @@
+CELLS = [
+"%matplotlib inline\nfrom d2l import torch as d2l\nimport torch\nfrom torch import nn",
+"T = 1000  # 总共产生1000个点\ntime = d2l.arange(1, T + 1, dtype=d2l.float32)\nx = d2l.sin(0.01 * time) + d2l.normal(0, 0.2, (T,))\nd2l.plot(time, [x], 'time', 'x', xlim=[1, 1000], figsize=(6, 3))\ntime[:3], time.shape, x.shape",
+"tau = 4\nfeatures = d2l.zeros((T - tau, tau))\nfor i in range(tau):\n    features[:, i] = x[i: T - tau + i]\nlabels = d2l.reshape(x[tau:], (-1, 1))\nfeatures.shape, labels.shape, bool((features[1:, 0] == features[:-1, 1]).all()), bool((labels[:-1, 0] == features[1:, 3]).all())",
+"batch_size, n_train = 16, 600\n# 只有前n_train个样本用于训练\ntrain_iter = d2l.load_array((features[:n_train], labels[:n_train]),\n                            batch_size, is_train=True)",
+"# 初始化网络权重的函数\ndef init_weights(m):\n    if type(m) == nn.Linear:\n        nn.init.xavier_uniform_(m.weight)\n\n# 一个简单的多层感知机\ndef get_net():\n    net = nn.Sequential(nn.Linear(4, 10),\n                        nn.ReLU(),\n                        nn.Linear(10, 1))\n    net.apply(init_weights)\n    return net\n\n# 平方损失。注意：MSELoss计算平方误差时不带系数1/2\nloss = nn.MSELoss(reduction='none')",
+"def train(net, train_iter, loss, epochs, lr):\n    trainer = torch.optim.Adam(net.parameters(), lr)\n    for epoch in range(epochs):\n        for X, y in train_iter:\n            trainer.zero_grad()\n            l = loss(net(X), y)\n            l.sum().backward()\n            trainer.step()\n        print(f'epoch {epoch + 1}, '\n              f'loss: {d2l.evaluate_loss(net, train_iter, loss):f}')\n\nnet = get_net()\ntrain(net, train_iter, loss, 5, 0.01)",
+"d2l.evaluate_loss(net, train_iter, loss) < 0.1",
+"onestep_preds = net(features)\nd2l.plot([time, time[tau:]], \n         [d2l.numpy(x), d2l.numpy(onestep_preds)], 'time',\n         'x', legend=['data', '1-step preds'], xlim=[1, 1000], \n         figsize=(6, 3))\nonestep_preds.shape",
+"multistep_preds = d2l.zeros(T)\nmultistep_preds[: n_train + tau] = x[: n_train + tau]\nfor i in range(n_train + tau, T):\n    multistep_preds[i] = net(\n        d2l.reshape(multistep_preds[i - tau: i], (1, -1)))\nmultistep_preds.grad_fn, multistep_preds.requires_grad, multistep_preds.shape",
+"d2l.plot([time, time[tau:], time[n_train + tau:]],\n         [d2l.numpy(x), d2l.numpy(onestep_preds),\n          d2l.numpy(multistep_preds[n_train + tau:])], 'time',\n         'x', legend=['data', '1-step preds', 'multistep preds'],\n         xlim=[1, 1000], figsize=(6, 3))",
+"max_steps = 64",
+"features = d2l.zeros((T - tau - max_steps + 1, tau + max_steps))\n# 列i（i<tau）是来自x的观测，其时间步从（i）到（i+T-tau-max_steps+1）\nfor i in range(tau):\n    features[:, i] = x[i: i + T - tau - max_steps + 1]\n\n# 列i（i>=tau）是来自（i-tau+1）步的预测，其时间步从（i）到（i+T-tau-max_steps+1）\nfor i in range(tau, tau + max_steps):\n    features[:, i] = d2l.reshape(net(features[:, i - tau: i]), -1)\nfeatures.shape, features.grad_fn",
+"steps = (1, 4, 16, 64)\nd2l.plot([time[tau + i - 1: T - max_steps + i] for i in steps],\n         [d2l.numpy(features[:, tau + i - 1]) for i in steps], 'time', 'x',\n         legend=[f'{i}-step preds' for i in steps], xlim=[5, 1000],\n         figsize=(6, 3))\n[tuple(time[tau + i - 1: T - max_steps + i].shape) for i in steps]",
+"z = torch.zeros(3)\nz[1] = torch.ones(1, 1) * 5\nz",
+"w = torch.tensor([1.0, 2.0], requires_grad=True)\nbuf = torch.zeros(4)\nbuf[1:3] = w * 3\nbuf[0] = w[0] ** 2\n(buf * torch.tensor([1.0, 10.0, 100.0, 1000.0])).sum().backward()\nbuf, w.grad",
+"a = torch.ones(3, requires_grad=True)\nb = a * 2\nb[0] = 5.0\nb.sum().backward()\nb, a.grad",
+]

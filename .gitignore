@@ -4,3 +4,4 @@ src/t*.js
 src/all2.js
 __pycache__/
 .DS_Store
+src/ref2/data/
