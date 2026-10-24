@@ -8,7 +8,7 @@ function colors(){const cs=getComputedStyle(document.documentElement),g=n=>cs.ge
 function fitCanvas(cv,W,H){const r=window.devicePixelRatio||1;cv.width=Math.round(W*r);cv.height=Math.round(H*r);cv.style.width=W+'px';cv.style.height=H+'px';const c=cv.getContext('2d');c.setTransform(r,0,0,r,0,0);return c}
 const MONO='11px "JetBrains Mono",ui-monospace,monospace';
 const bodyFont=px=>`${px}px ${getComputedStyle(document.body).fontFamily}`;
-const DAYS=['1','2','3','4','5','6','7','8','9','10','11','12','13'];
+const DAYS=['1','2','3','4','5','6','7','8','9','10','11','12','13','14'];
 
 // ---------- 张量图示 ----------
 function cellText(v,dtype){if(dtype==='bool')return v?'T':'F';if(dtype==='int64')return String(v);if(!Number.isFinite(v))return String(v);return Number.isInteger(v)?String(v):(Math.abs(v)>=100?v.toFixed(0):v.toFixed(2))}
@@ -85,7 +85,7 @@ function drawPlot(cv,fig){const C=colors(),cs=getComputedStyle(document.document
   ctx.font=bodyFont(12);ctx.fillStyle=C.ink;if(fig.xlabel)ctx.fillText(fig.xlabel,(pl+W-pr)/2,H-16);if(fig.ylabel){ctx.save();ctx.translate(13,(pt+H-pb)/2);ctx.rotate(-Math.PI/2);ctx.textBaseline='middle';ctx.fillText(fig.ylabel,0,0);ctx.restore()}
   for(const h of fig.hlines){ctx.strokeStyle=C.ink;ctx.setLineDash([5,4]);ctx.beginPath();ctx.moveTo(pl,sy(h));ctx.lineTo(W-pr,sy(h));ctx.stroke();ctx.setLineDash([])}
   ctx.save();ctx.beginPath();ctx.rect(pl,pt,W-pl-pr,H-pt-pb);ctx.clip();
-  const dashOf=(s,i)=>Array.isArray(s.dash)?s.dash:(i===1?[6,4]:i===2?[2,3]:i===3?[8,3,2,3]:[]);
+  const dashOf=(s,i)=>Array.isArray(s.dash)?s.dash:(i===1?[6,4]:i===2?[2,3]:i===3?[8,3,2,3]:i===4?[1,4]:[]);
   fig.series.forEach((s,i)=>{const col=s.color?cs.getPropertyValue(s.color).trim():cs.getPropertyValue(SERIESC[i%4]).trim();if(s.scatter){ctx.fillStyle=col;ctx.globalAlpha=.7;s.x.forEach((x,k)=>{ctx.beginPath();ctx.arc(sx(x),sy(s.y[k]),1.8,0,7);ctx.fill()});ctx.globalAlpha=1;return}
     ctx.strokeStyle=col;ctx.lineWidth=2;ctx.setLineDash(dashOf(s,i));ctx.beginPath();let pen=false;s.x.forEach((x,k)=>{const X=sx(x),Y=sy(s.y[k]);if(!Number.isFinite(X)||!Number.isFinite(Y)){pen=false;return}pen?ctx.lineTo(X,Y):ctx.moveTo(X,Y);pen=true});ctx.stroke();ctx.setLineDash([]);
     if(s.x.length<=30){ctx.fillStyle=col;s.x.forEach((x,k)=>{const X=sx(x),Y=sy(s.y[k]);if(Number.isFinite(X)&&Number.isFinite(Y)){ctx.beginPath();ctx.arc(X,Y,2.5,0,7);ctx.fill()}})}});ctx.restore();
@@ -127,7 +127,7 @@ function setupCells(){$$('.cell').forEach((cell,i)=>{const ta=cell.querySelector
     else if(e.key==='Tab'&&!e.shiftKey){e.preventDefault();const s=ta.selectionStart;ta.setRangeText('    ',s,ta.selectionEnd,'end');autoSize(ta)}})})}
 function runAll(day){ENVS[day]=MT.newEnv();EXEC[day]=0;MT.resetFS();let errs=0;const main=$('#day'+day);
   $$('.cell',main).forEach(c=>{if(c.dataset.manual){const out=c.querySelector('.out');out.className='out';out.textContent='';const t=document.createElement('span');t.className='tip';t.textContent=`这一格要手动运行：${c.dataset.manual}。准备好了点这一格右上角的“运行”。`;out.appendChild(t);out.hidden=false;return}if(!runCellEl(c))errs++});RAN[day]=true;
-  const expected={'1':0,'2':5,'3':3,'4':0,'5':0,'6':0,'7':0,'8':0,'9':0,'10':0,'11':2,'12':0,'13':0}[day]||0;
+  const expected={'1':0,'2':5,'3':3,'4':0,'5':0,'6':0,'7':0,'8':0,'9':0,'10':0,'11':2,'12':0,'13':0,'14':0}[day]||0;
   $$('.runAllMsg',main).forEach(m=>m.textContent=errs>expected?`运行完了，有 ${errs} 个格子报错，往下找红字。`:expected?`全部运行完了。其中 ${expected} 个格子是故意报错的，用来练习读报错。`:'全部运行完了，没有报错。')}
 document.addEventListener('click',e=>{const b=e.target.closest('.runAll');if(b)runAll(b.dataset.day)});
 
@@ -517,6 +517,15 @@ function btRender(){const host=$('#btHost');if(!host.offsetParent)return;const w
   const g1=Math.abs(g[1]),g30=Math.abs(g[30]);
   $('#btCalc').textContent=`每往回一步，梯度乘上 w × tanh′(·)${act==='lin'?'（线性时就是乘 w）':''}\n第 60 步：1\n第 30 步：${tr&&T-30>=tr?'被截断，为 0':g30.toExponential(2)}\n第 1 步：${tr&&T-1>=tr?'被截断，为 0':g1.toExponential(2)}\n\n${act==='lin'?(w<1?'w < 1：梯度按 w 的幂次衰减，远处几乎为 0（梯度消失）。':w>1?'w > 1：梯度按 w 的幂次放大（梯度爆炸），这时就需要梯度裁剪。':'w = 1：梯度不变。'):(w<1?'w < 1：梯度消失。':'tanh 会饱和（导数小于 1），把 w 放大的效果抵消掉一部分；w 很大时 h 贴近 ±1，导数接近 0，梯度反而又消失了。')}${tr?`\n截断：只往回传 ${tr} 步，更早的梯度直接是 0。`:''}`}
 $('#btW').addEventListener('input',btRender);['#btTr','#btAct'].forEach(s=>$(s).onchange=btRender);
+// ---------- 第 14 天：门控怎样留住记忆 ----------
+function gtRender(){const host=$('#gtHost');if(!host.offsetParent)return;const F=+$('#gtF').value,I=+$('#gtI').value,mode=$('#gtM').value;$('#gtFv').textContent=F.toFixed(2);$('#gtIv').textContent=I.toFixed(2);
+  const T=40,noise=Array.from({length:T},(_,t)=>Math.sin(t*2.3)*0.8+Math.cos(t*5.1)*0.4);let c=1,cn=0;const keep=[1],grad=[1];let g=1,h=1,hn=0;
+  for(let t=1;t<T;t++){if(mode==='lstm'){c=F*c;cn=F*cn+I*Math.tanh(noise[t]);keep.push(Math.abs(c));g*=F;grad.push(Math.abs(g))}
+    else{const hp=Math.tanh(0.9*h+noise[t]),hq=Math.tanh(0.9*hn+noise[t]);g*=0.9*(1-hp*hp);h=hp;hn=hq;keep.push(Math.abs(h-hn));grad.push(Math.abs(g))}}
+  const xs=Array.from({length:T},(_,i)=>i+1);host.innerHTML='<canvas id="gtCv" aria-label="记忆随时间的变化"></canvas>';
+  drawPlot($('#gtCv'),{series:[{x:xs,y:keep.map(v=>Math.max(v,1e-12)),label:'第 1 步的信息还剩多少'},{x:xs,y:grad.map(v=>Math.max(v,1e-30)),label:'梯度 ∂(第 t 步)/∂(第 1 步)'}],hlines:[],xlabel:'时间步 t',ylabel:'',legend:true,yscale:'log',ylim:[1e-12,2]});
+  $('#gtCalc').textContent=mode==='lstm'?`记忆元：Cₜ = F·C_{t−1} + I·C̃ₜ\n第 1 步写入的信息每一步乘 F，40 步后还剩 F³⁹ = ${(F**39).toExponential(2)}\n梯度 ∂C₄₀/∂C₁ = F³⁹，也是 ${(F**39).toExponential(2)}（所以图上两条线重合）\n\n${F>0.98?'遗忘门接近 1：信息和梯度都几乎原样穿过 40 步。':F<0.6?'遗忘门小：很快就忘了，梯度也消失。':'遗忘门适中：慢慢忘掉。'}\n输入门 I 只影响新写入的噪声有多少，不影响旧信息能留多久。\n真实 LSTM 里 F 每一步都是学出来的：需要记住时接近 1，需要清空时接近 0。`:`普通 RNN：hₜ = tanh(0.9·h_{t−1} + xₜ)\n每一步梯度乘 0.9 × tanh′，40 步后约 ${grad[T-1].toExponential(2)}\n第 1 步的不同（h₁ = 1 和 h₁ = 0 两条轨迹的差）也很快被噪声淹没。\n切回 LSTM，把遗忘门调到 0.99 对比一下。`}
+['#gtF','#gtI'].forEach(s=>$(s).addEventListener('input',gtRender));$('#gtM').onchange=gtRender;
 // ---------- 小结勾选、课程表、切换天数 ----------
 function checksSetup(){$$('.check-list').forEach(ul=>{const day=ul.dataset.day,key='checks'+day,st=store.get(key,{});$$('input',ul).forEach(c=>{c.checked=!!st[c.dataset.k];c.onchange=()=>{const s=store.get(key,{});s[c.dataset.k]=c.checked;store.set(key,s);checkMsg(ul)}});checkMsg(ul)})}
 function checkMsg(ul){const day=ul.dataset.day,all=$$('input',ul),n=all.filter(c=>c.checked).length,msg=ul.parentElement.querySelector('.check-msg');const done=n===all.length;
@@ -529,7 +538,7 @@ const ROAD=[['1','第 1 章 引言 + 2.1 数据操作'],['2','2.2 数据预处�
   ['18','11.4 至 11.6 + 11.10 小批量随机梯度下降、动量、Adam（论文用的优化器）','paper'],['19','论文专题：离线策略评估 IPS、SNIPS、DR（书里没有）','paper'],['20','论文专题：逐行读你的 experiment.py','paper'],
   ['选学','4.7 前向传播、反向传播和计算图；4.10 Kaggle 房价预测'],['选学','第 6 至 7 章 卷积神经网络（LeNet、ResNet 等）'],['选学','9.3 至 9.8 深度和双向循环网络、机器翻译、seq2seq'],['选学','第 11 章其余优化算法、第 12 章计算性能'],['选学','第 13 至 15 章 计算机视觉、自然语言处理']];
 function roadRender(){$('#roadList').innerHTML=ROAD.map(([d,t,f])=>{const live=DAYS.includes(d);return`<div><span class="d">${/^\d+$/.test(d)?`第 ${d} 天`:d}</span><span>${live?`<a href="#day${d}">${esc(t)}</a>`:esc(t)}${f==='paper'?' <span class="mark">论文</span>':''}</span><span class="st${live?' now':''}">${live?'已上线':'未上线'}</span></div>`}).join('')}
-const REDRAW={'1':()=>{kRender();imRender();ofRender()},'2':()=>{dotRender();normRender()},'3':()=>{secRender();gradRender()},'4':()=>{diceRender();bayesRender();bktRender()},'5':()=>{houseRender();if(!sgd.X)sgdData();sgdRender()},'6':()=>{smRender();calRender()},'7':()=>{pixRender()},'8':()=>{uaRender();actRender()},'9':()=>{spRender();rdRender();dpRender()},'10':()=>{sgRender();shRender()},'11':()=>{pcRender()},'12':()=>{tkRender();ptRender();rnRender()},'13':()=>{clRender();btRender()}};
+const REDRAW={'1':()=>{kRender();imRender();ofRender()},'2':()=>{dotRender();normRender()},'3':()=>{secRender();gradRender()},'4':()=>{diceRender();bayesRender();bktRender()},'5':()=>{houseRender();if(!sgd.X)sgdData();sgdRender()},'6':()=>{smRender();calRender()},'7':()=>{pixRender()},'8':()=>{uaRender();actRender()},'9':()=>{spRender();rdRender();dpRender()},'10':()=>{sgRender();shRender()},'11':()=>{pcRender()},'12':()=>{tkRender();ptRender();rnRender()},'13':()=>{clRender();btRender()},'14':()=>{gtRender()}};
 function showDay(day,scroll){if(!DAYS.includes(day))day='1';$$('main.day').forEach(m=>m.hidden=m.dataset.day!==day);$$('[data-nav]').forEach(a=>a.classList.toggle('on',a.dataset.nav===day));store.set('lastDay',day);
   if(!RAN[day]){if(day==='7'&&!FM_U8){fmReady.then(ok=>{if(ok&&!RAN['7']){runAll('7');REDRAW['7']()}});}else runAll(day)}$$('#day'+day+' textarea').forEach(autoSize);REDRAW[day]();if(scroll)window.scrollTo(0,0)}
 function route(){const h=location.hash.replace('#','');const m=h.match(/^day(\d+)$/);if(m){showDay(m[1],true);return}

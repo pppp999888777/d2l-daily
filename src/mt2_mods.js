@@ -59,6 +59,11 @@ function pyDeepCopy(v){if(isT(v)){const c=mkT(v.shape.slice(),v.data,v.dtype,v.n
   if(v.t==='list')return list(v.items.map(pyDeepCopy));if(v.t==='tuple')return tup(v.items.map(pyDeepCopy));
   if(v.t==='dict'){const d=mkDict([...v.m.values()].map(([k,x])=>[k,pyDeepCopy(x)]));d.odict=v.odict;return d}
   if(['int','float','bool','str','none'].includes(v.t))return v;err('TypeError',`本页的 torch.save 只支持张量、列表、元组、字典和数字，不支持 ${typeName(v)}。保存模型请用 torch.save(net.state_dict(), 路径)`)}
+torch.attrs.randint=fn('randint',(a,kw)=>{let lo=0,hi,sz;const nums=a.filter(x=>x.t==='int'||x.t==='float');if(kw.low)lo=intOf(kw.low);if(kw.high)hi=intOf(kw.high);if(nums.length>=2){lo=intOf(nums[0]);hi=intOf(nums[1])}else if(nums.length===1)hi=intOf(nums[0]);const sv=kw.size||a.find(x=>x.t==='tuple'||x.t==='list'||x.t==='size');sz=sv?dimsArg([sv]):[];
+  return mkT(sz,Array.from({length:prod(sz)},()=>lo+Math.floor(rand()*(hi-lo))),dtypeKw(kw,'int64'))});
+torch.attrs.randperm=fn('randperm',(a,kw)=>{const n=intOf(a[0]),p=Array.from({length:n},(_,i)=>i);for(let i=n-1;i>0;i--){const j=Math.floor(rand()*(i+1));[p[i],p[j]]=[p[j],p[i]]}return mkT([n],p,dtypeKw(kw,'int64'))});
+torch.attrs.gather=fn('gather',(a,kw)=>gatherT(asTensor(a[0]),intOf(kwOr(kw,a,'dim',1)),asTensor(kwOr(kw,a,'index',2))));
+torch.attrs.index_select=fn('index_select',(a,kw)=>indexSelectT(asTensor(a[0]),intOf(kwOr(kw,a,'dim',1)),asTensor(kwOr(kw,a,'index',2))));
 torch.attrs.linspace=fn('linspace',(a,kw)=>{const s0=numOf(kwOr(kw,a,'start',0)),e=numOf(kwOr(kw,a,'end',1)),n=intOf(kwOr(kw,a,'steps',2));const st=n>1?(e-s0)/(n-1):0;
   return withGrad(mkT([n],Array.from({length:n},(_,i)=>n===1?s0:i<n/2?s0+i*st:e-(n-1-i)*st),dtypeKw(kw,'float32')),kw)});
 torch.attrs.device=fn('device',a=>({t:'device',name:str(a[0]).split(':')[0]}));

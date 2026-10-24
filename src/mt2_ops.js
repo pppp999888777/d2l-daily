@@ -117,6 +117,16 @@ function reshapeT(T,dims){let neg=dims.indexOf(-1);const known=prod(dims.filter(
   if(prod(dims)!==T.data.length)err('RuntimeError',`shape '[${dims.join(', ')}]' is invalid for input of size ${T.data.length}`);
   const R=mkT(dims,[],T.dtype,T.np);R.data=T.data;return track(R,[T],'ViewBackward0',g=>[g])}
 function normDims(T,dim){const nd=T.shape.length;const ds=(Array.isArray(dim)?dim:[dim]).map(d=>{if(d<0)d+=nd;if(d<0||d>=nd)err('IndexError',`Dimension out of range (expected to be in range of [${-nd}, ${nd-1}], but got ${d})`);return d});return[...new Set(ds)].sort((a,b)=>a-b)}
+// gather / index_select：按下标取值，反向时把梯度加回原位置
+function gatherT(T,dim,Ix){const nd=T.shape.length;if(dim<0)dim+=nd;if(Ix.dtype!=='int64')err('RuntimeError','gather(): Expected dtype int64 for index');if(Ix.shape.length!==nd)err('RuntimeError','Index tensor must have the same number of dimensions as input tensor');
+  const st=strides(T.shape),is=strides(Ix.shape),n=Ix.data.length,out=new Float64Array(n),src=new Int32Array(n);
+  for(let q=0;q<n;q++){let off=0,r=q;for(let d=0;d<nd;d++){const c=Math.floor(r/is[d]);r-=c*is[d];let v=d===dim?Ix.data[q]:c;if(d===dim){if(v<0)v+=T.shape[d];if(v<0||v>=T.shape[d])err('RuntimeError',`index ${Ix.data[q]} is out of bounds for dimension ${d} with size ${T.shape[d]}`)}else if(c>=T.shape[d])err('RuntimeError',`Size does not match at dimension ${d} expected index [${Ix.shape.join(', ')}] to be smaller than self [${T.shape.join(', ')}] apart from dimension ${dim}`);off+=v*st[d]}src[q]=off;out[q]=T.data[off]}
+  return track(mkT(Ix.shape.slice(),out,T.dtype,T.np),[T],'GatherBackward0',g=>{const r=new Float64Array(T.data.length);for(let q=0;q<n;q++)r[src[q]]+=g[q];return[r]})}
+function indexSelectT(T,dim,Ix){const nd=T.shape.length;if(dim<0)dim+=nd;if(Ix.shape.length>1)err('IndexError','index_select(): Index is supposed to be a vector');const idx=[...Ix.data].map(v=>{if(v<0||v>=T.shape[dim])err('IndexError','index out of range in self');return v});
+  const outer=prod(T.shape.slice(0,dim)),inner=prod(T.shape.slice(dim+1)),D=T.shape[dim],m=idx.length,out=new Float64Array(outer*m*inner);
+  for(let o=0;o<outer;o++)for(let k=0;k<m;k++){const so=(o*D+idx[k])*inner,dO=(o*m+k)*inner;for(let i=0;i<inner;i++)out[dO+i]=T.data[so+i]}
+  const shape=T.shape.slice();shape[dim]=m;
+  return track(mkT(shape,out,T.dtype,T.np),[T],'IndexSelectBackward0',g=>{const r=new Float64Array(T.data.length);for(let o=0;o<outer;o++)for(let k=0;k<m;k++){const so=(o*D+idx[k])*inner,dO=(o*m+k)*inner;for(let i=0;i<inner;i++)r[so+i]+=g[dO+i]}return[r]})}
 function clampT(T,lo,hi){const L=lo&&lo.t!=='none'?numOf(lo):-Infinity,H=hi&&hi.t!=='none'?numOf(hi):Infinity;if(L===-Infinity&&H===Infinity)err('RuntimeError',"torch.clamp: At least one of 'min' or 'max' must not be None");
   const dt=T.dtype==='bool'?'int64':T.dtype,out=Float64Array.from(T.data,v=>Number.isNaN(v)?v:Math.min(H,Math.max(L,v)));
   return track(mkT(T.shape.slice(),out,dt,T.np),[T],'ClampBackward1',g=>[Float64Array.from(g,(gv,k)=>T.data[k]>=L&&T.data[k]<=H?gv:0)])}

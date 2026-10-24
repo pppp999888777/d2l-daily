@@ -1,7 +1,7 @@
 <header class="top"><div class="wrap">
   <span class="brand">动手学深度学习每日课</span>
   <nav class="days" id="dayNav" aria-label="课程天数">
-    <a href="#day1" data-nav="1">第 1 天</a><a href="#day2" data-nav="2">第 2 天</a><a href="#day3" data-nav="3">第 3 天</a><a href="#day4" data-nav="4">第 4 天</a><a href="#day5" data-nav="5">第 5 天</a><a href="#day6" data-nav="6">第 6 天</a><a href="#day7" data-nav="7">第 7 天</a><a href="#day8" data-nav="8">第 8 天</a><a href="#day9" data-nav="9">第 9 天</a><a href="#day10" data-nav="10">第 10 天</a><a href="#day11" data-nav="11">第 11 天</a><a href="#day12" data-nav="12">第 12 天</a><a href="#day13" data-nav="13">第 13 天</a>
+    <a href="#day1" data-nav="1">第 1 天</a><a href="#day2" data-nav="2">第 2 天</a><a href="#day3" data-nav="3">第 3 天</a><a href="#day4" data-nav="4">第 4 天</a><a href="#day5" data-nav="5">第 5 天</a><a href="#day6" data-nav="6">第 6 天</a><a href="#day7" data-nav="7">第 7 天</a><a href="#day8" data-nav="8">第 8 天</a><a href="#day9" data-nav="9">第 9 天</a><a href="#day10" data-nav="10">第 10 天</a><a href="#day11" data-nav="11">第 11 天</a><a href="#day12" data-nav="12">第 12 天</a><a href="#day13" data-nav="13">第 13 天</a><a href="#day14" data-nav="14">第 14 天</a>
     <a href="#road" class="road-link">课程表</a>
     <a class="soon" href="#road">第 9 天</a><a class="soon" href="#road">第 10 天</a>
   </nav>
@@ -3760,6 +3760,334 @@ d2l.train_ch8(net, train_iter, vocab, lr, num_epochs, device)</textarea></div>
     <div class="panel stack">
       <h3>明天（第 14 天）学什么</h3>
       <p>原书 9.1 GRU 和 9.2 LSTM：用“门”控制记住什么、忘掉什么。然后专题：照着你论文第 1032 行，在网页里从头搭一个 DKT，用模拟的学生做题数据训练它，看它预测答对概率。</p>
+    </div>
+  </div>
+</section>
+</main>
+
+<main class="wrap day" id="day14" data-day="14" hidden>
+<section class="hero">
+  <div class="eyebrow">第 14 天 · 原书第 9.1 节 + 第 9.2 节 + 专题：动手写一个 DKT · 论文路线第 7 课</div>
+  <h1>门控：GRU 和 LSTM，然后亲手训练一个 DKT</h1>
+  <p class="lead">普通 RNN 的梯度沿时间连乘，很快就消失了（昨天的交互）。GRU 和 LSTM 加了“门”：一组 0 到 1 之间的数，决定这一步记住多少、忘掉多少、输出多少。门开着的时候，信息和梯度能几乎不变地穿过很多步。你论文的 DKT 用的就是 LSTM。今天最后一部分，照着你论文第 1032 行的 DKT 类，在网页里搭一个一模一样结构的模型，用模拟学生的做题数据训练它。</p>
+  <div class="plan">
+    <div><b class="k">今天的时间</b>大约 90 分钟。文本训练格要手动运行，每个 40 秒左右；DKT 训练大约 10 秒。</div>
+    <div><b class="k">学完你能</b><ul><li>写出 GRU 的重置门、更新门公式</li><li>写出 LSTM 的输入门、遗忘门、输出门和记忆元</li><li>说清门控为什么能缓解梯度消失</li><li>从数据、模型、损失、训练到评估，完整跑一遍 DKT</li></ul></div>
+    <div><b class="k">和你的论文</b><ul><li><code>class DKT</code> 的 <code>encode</code> 和 <code>readout</code></li><li><code>batch_loss</code> 里的 <code>gather</code> 和 BCE</li><li><code>train_kt</code>：Adam、裁剪、按验证集选检查点</li></ul></div>
+  </div>
+</section>
+
+<section class="part" id="gru">
+  <div class="part-h"><div class="eyebrow">第一部分</div><h2>9.1 门控循环单元（GRU）</h2><span class="src">对应原书第 9.1 节，代码来自原书 PyTorch 版。训练规模缩小了</span></div>
+  <div class="prose"><div class="row"><button class="btn primary runAll" data-day="14">从头全部运行</button><span class="small muted runAllMsg"></span></div></div>
+  <div class="blk">
+    <div class="prose">
+      <p>GRU 有两个门，都是用当前输入和上一步隐状态算出来、经过 sigmoid 落在 0 到 1 之间：</p>
+      <p class="math">重置门 Rₜ = σ(Xₜ W_xr + H_{t−1} W_hr + b_r)<br>更新门 Zₜ = σ(Xₜ W_xz + H_{t−1} W_hz + b_z)</p>
+      <p>先用重置门算一个<b>候选隐状态</b>：Rₜ 接近 0 时，忘掉过去，只看当前输入；接近 1 时就是普通 RNN。</p>
+      <p class="math">H̃ₜ = tanh(Xₜ W_xh + (Rₜ ⊙ H_{t−1}) W_hh + b_h)</p>
+      <p>再用更新门在“旧状态”和“候选状态”之间插值。Zₜ 接近 1 时，隐状态几乎原样保留，这一步的输入被跳过；这正是让信息（和梯度）跨越很多步的关键。</p>
+      <p class="math">Hₜ = Zₜ ⊙ H_{t−1} + (1 − Zₜ) ⊙ H̃ₜ</p>
+    </div>
+    <div class="cell"><textarea>from d2l import torch as d2l
+import torch
+from torch import nn
+
+batch_size, num_steps = 32, 35
+train_iter, vocab = d2l.load_data_time_machine(batch_size, num_steps)</textarea></div>
+    <div class="cell"><textarea>def get_params(vocab_size, num_hiddens, device):
+    num_inputs = num_outputs = vocab_size
+
+    def normal(shape):
+        return torch.randn(size=shape, device=device)*0.01
+
+    def three():
+        return (normal((num_inputs, num_hiddens)),
+                normal((num_hiddens, num_hiddens)),
+                d2l.zeros(num_hiddens, device=device))
+
+    W_xz, W_hz, b_z = three()  # 更新门参数
+    W_xr, W_hr, b_r = three()  # 重置门参数
+    W_xh, W_hh, b_h = three()  # 候选隐状态参数
+    # 输出层参数
+    W_hq = normal((num_hiddens, num_outputs))
+    b_q = d2l.zeros(num_outputs, device=device)
+    # 附加梯度
+    params = [W_xz, W_hz, b_z, W_xr, W_hr, b_r, W_xh, W_hh, b_h, W_hq, b_q]
+    for param in params:
+        param.requires_grad_(True)
+    return params</textarea></div>
+    <div class="cell"><textarea>def init_gru_state(batch_size, num_hiddens, device):
+    return (torch.zeros((batch_size, num_hiddens), device=device), )</textarea></div>
+    <div class="cell"><textarea>def gru(inputs, state, params):
+    W_xz, W_hz, b_z, W_xr, W_hr, b_r, W_xh, W_hh, b_h, W_hq, b_q = params
+    H, = state
+    outputs = []
+    for X in inputs:
+        Z = torch.sigmoid((X @ W_xz) + (H @ W_hz) + b_z)
+        R = torch.sigmoid((X @ W_xr) + (H @ W_hr) + b_r)
+        H_tilda = torch.tanh((X @ W_xh) + ((R * H) @ W_hh) + b_h)
+        H = Z * H + (1 - Z) * H_tilda
+        Y = H @ W_hq + b_q
+        outputs.append(Y)
+    return torch.cat(outputs, dim=0), (H,)</textarea></div>
+    <div class="prose"><p><b>和原书的不同</b>：原书 256 个隐藏单元、500 轮；这里 64 个、100 轮，电脑上约 40 秒。我在真 PyTorch 上跑过同样的设置：从零实现的 GRU 最后困惑度约 8.7，简洁实现约 7.2。门控网络起步比普通 RNN 慢，轮数多了以后会反超。</p></div>
+    <div class="cell" data-manual="训练 100 轮，电脑上约 40 秒，期间页面会卡住"><textarea># 原书：num_hiddens = 256，num_epochs = 500
+vocab_size, num_hiddens, device = len(vocab), 64, d2l.try_gpu()
+num_epochs, lr = 100, 1
+model = d2l.RNNModelScratch(len(vocab), num_hiddens, device, get_params,
+                            init_gru_state, gru)
+d2l.train_ch8(model, train_iter, vocab, lr, num_epochs, device)</textarea></div>
+    <div class="cell" data-manual="训练 100 轮，电脑上约 30 秒"><textarea>num_inputs = vocab_size
+gru_layer = nn.GRU(num_inputs, num_hiddens)
+model = d2l.RNNModel(gru_layer, len(vocab))
+model = model.to(device)
+d2l.train_ch8(model, train_iter, vocab, lr, num_epochs, device)</textarea></div>
+  </div>
+</section>
+
+<section class="part" id="lstm">
+  <div class="part-h"><div class="eyebrow">第二部分</div><h2>9.2 长短期记忆网络（LSTM）</h2><span class="src">对应原书第 9.2 节，代码来自原书 PyTorch 版。训练规模缩小了</span></div>
+  <div class="blk">
+    <div class="prose">
+      <p>LSTM 比 GRU 早（1997 年），多了一个<b>记忆元</b> Cₜ，专门用来长期保存信息；隐状态 Hₜ 是从记忆元里“读出来”的。三个门：</p>
+      <p class="math">输入门 Iₜ = σ(Xₜ W_xi + H_{t−1} W_hi + b_i)<br>遗忘门 Fₜ = σ(Xₜ W_xf + H_{t−1} W_hf + b_f)<br>输出门 Oₜ = σ(Xₜ W_xo + H_{t−1} W_ho + b_o)</p>
+      <p>候选记忆元 C̃ₜ = tanh(Xₜ W_xc + H_{t−1} W_hc + b_c)。然后：</p>
+      <p class="math">Cₜ = Fₜ ⊙ C_{t−1} + Iₜ ⊙ C̃ₜ<br>Hₜ = Oₜ ⊙ tanh(Cₜ)</p>
+      <p>遗忘门决定旧记忆留多少，输入门决定新内容写多少，输出门决定这一步对外显示多少。关键在 Cₜ 的更新是<b>加法</b>：∂Cₜ/∂C_{t−1} = Fₜ。只要遗忘门接近 1，梯度沿着记忆元往回传时几乎不衰减。</p>
+    </div>
+    <div class="panel stack" id="gtLab">
+      <h4>门控怎样留住记忆</h4>
+      <p class="small muted">一个 1 维的记忆元。第 1 步写入一个重要信息（C₁ = 1），后面 39 步的输入都是随机噪声。拖动门的大小（假设每一步门的值都一样），看第 1 步的信息到后面还剩多少（实线），以及梯度 ∂C₄₀/∂C₁ 有多大（虚线，对数刻度）。</p>
+      <div class="row"><label class="ctrl" for="gtF">遗忘门 F <output id="gtFv">0.95</output><input type="range" id="gtF" min="0" max="1" step="0.01" value="0.95"></label><label class="ctrl" for="gtI">输入门 I <output id="gtIv">0.10</output><input type="range" id="gtI" min="0" max="1" step="0.01" value="0.1"></label><label class="ctrl" for="gtM">对照 <select id="gtM"><option value="lstm">LSTM 记忆元</option><option value="rnn">普通 RNN（w = 0.9，tanh）</option></select></label></div>
+      <div class="cv" id="gtHost"><canvas id="gtCv" aria-label="记忆随时间的变化"></canvas></div>
+      <div class="calc pw" id="gtCalc"></div>
+    </div>
+    <div class="cell"><textarea>def get_lstm_params(vocab_size, num_hiddens, device):
+    num_inputs = num_outputs = vocab_size
+
+    def normal(shape):
+        return torch.randn(size=shape, device=device)*0.01
+
+    def three():
+        return (normal((num_inputs, num_hiddens)),
+                normal((num_hiddens, num_hiddens)),
+                d2l.zeros(num_hiddens, device=device))
+
+    W_xi, W_hi, b_i = three()  # 输入门参数
+    W_xf, W_hf, b_f = three()  # 遗忘门参数
+    W_xo, W_ho, b_o = three()  # 输出门参数
+    W_xc, W_hc, b_c = three()  # 候选记忆元参数
+    # 输出层参数
+    W_hq = normal((num_hiddens, num_outputs))
+    b_q = d2l.zeros(num_outputs, device=device)
+    # 附加梯度
+    params = [W_xi, W_hi, b_i, W_xf, W_hf, b_f, W_xo, W_ho, b_o, W_xc, W_hc,
+              b_c, W_hq, b_q]
+    for param in params:
+        param.requires_grad_(True)
+    return params</textarea></div>
+    <div class="prose"><p>LSTM 的状态有两个：隐状态和记忆元。</p></div>
+    <div class="cell"><textarea>def init_lstm_state(batch_size, num_hiddens, device):
+    return (torch.zeros((batch_size, num_hiddens), device=device),
+            torch.zeros((batch_size, num_hiddens), device=device))</textarea></div>
+    <div class="cell"><textarea>def lstm(inputs, state, params):
+    [W_xi, W_hi, b_i, W_xf, W_hf, b_f, W_xo, W_ho, b_o, W_xc, W_hc, b_c,
+     W_hq, b_q] = params
+    (H, C) = state
+    outputs = []
+    for X in inputs:
+        I = torch.sigmoid((X @ W_xi) + (H @ W_hi) + b_i)
+        F = torch.sigmoid((X @ W_xf) + (H @ W_hf) + b_f)
+        O = torch.sigmoid((X @ W_xo) + (H @ W_ho) + b_o)
+        C_tilda = torch.tanh((X @ W_xc) + (H @ W_hc) + b_c)
+        C = F * C + I * C_tilda
+        H = O * torch.tanh(C)
+        Y = (H @ W_hq) + b_q
+        outputs.append(Y)
+    return torch.cat(outputs, dim=0), (H, C)</textarea></div>
+    <div class="prose"><p>同样缩小到 64 个隐藏单元、100 轮。真 PyTorch 上同样设置的困惑度：从零实现约 10.5，简洁实现约 8.2。</p></div>
+    <div class="cell" data-manual="训练 100 轮，电脑上约 40 秒"><textarea># 原书：num_hiddens = 256，num_epochs = 500
+vocab_size, num_hiddens, device = len(vocab), 64, d2l.try_gpu()
+num_epochs, lr = 100, 1
+model = d2l.RNNModelScratch(len(vocab), num_hiddens, device, get_lstm_params,
+                            init_lstm_state, lstm)
+d2l.train_ch8(model, train_iter, vocab, lr, num_epochs, device)</textarea></div>
+    <div class="cell" data-manual="训练 100 轮，电脑上约 55 秒"><textarea>num_inputs = vocab_size
+lstm_layer = nn.LSTM(num_inputs, num_hiddens)
+model = d2l.RNNModel(lstm_layer, len(vocab))
+model = model.to(device)
+d2l.train_ch8(model, train_iter, vocab, lr, num_epochs, device)</textarea></div>
+    <div class="callout"><h4>对照你的论文：LSTM 的参数为什么是 4d × d</h4><p>第 11 天的参数清单里，<code>lstm.weight_ih_l0</code> 的形状是 (256, 64)。现在能看懂了：上面从零实现里的 W_xi、W_xf、W_xc、W_xo 四个 (d, d) 矩阵，PyTorch 把它们（转置后）竖着拼成一个 (4d, d)，一次矩阵乘法算出四个门，再切成四段。顺序是输入门、遗忘门、候选记忆元、输出门。</p></div>
+  </div>
+</section>
+
+<section class="part" id="dkt">
+  <div class="part-h"><div class="eyebrow">第三部分</div><h2>专题：照着论文写一个 DKT</h2><span class="src">本页补充。模型和损失照抄你论文 <code>experiment.py</code>，只是数据换成了模拟学生</span></div>
+  <div class="blk"><div class="blk-h"><span class="n">1</span><h3>模拟学生</h3></div>
+    <div class="prose"><p>按 BKT 的假设造数据（第 4 天学过 BKT）：每个知识点只有“会”和“不会”两种状态；会的时候以 1 − slip 的概率答对，不会的时候以 guess 的概率蒙对；每练一次，有 p_learn 的概率学会。真实答对概率 <code>truth</code> 记下来，但模型看不到，最后用来对比。</p></div>
+    <div class="cell"><textarea>import torch
+from torch import nn
+from torch.nn import functional as F
+from d2l import torch as d2l
+torch.manual_seed(0)
+K, N, T = 5, 600, 50                  # 5 个知识点，600 个学生，每人做 50 题
+p_learn = torch.tensor([0.15, 0.10, 0.20, 0.05, 0.12])   # 每做一次学会的概率
+p_guess, p_slip = 0.2, 0.1            # 不会也蒙对的概率、会了却做错的概率
+known = (torch.rand(N, K) < 0.2).float()   # 一开始就会的知识点
+sk = torch.randint(0, K, (N, T))       # 每一步做哪个知识点的题
+rs = torch.zeros(N, T)                 # 对错
+truth = torch.zeros(N, T)              # 真实的答对概率（模型看不到）
+for t in range(T):
+    oh = F.one_hot(sk[:, t], K).float()
+    k = (known * oh).sum(1)            # 这一题的知识点会不会
+    p = k * (1 - p_slip) + (1 - k) * p_guess
+    truth[:, t] = p
+    rs[:, t] = (torch.rand(N) < p).float()
+    learn = (torch.rand(N) < (oh * p_learn).sum(1)).float()
+    known = known + oh * (1 - known) * learn.unsqueeze(1)
+sk.shape, rs.shape, sk.dtype, rs.dtype</textarea></div>
+    <div class="cell"><textarea>print('第 1 个学生前 10 题的知识点：', sk[0, :10].tolist())
+print('第 1 个学生前 10 题的对错：  ', rs[0, :10].long().tolist())</textarea></div>
+    <div class="prose"><p>和论文一样按学生划分：20% 测试，剩下的 10% 验证，其余训练（第 9 天讲过）。</p></div>
+    <div class="cell"><textarea>perm = torch.randperm(N)
+te, va, tr = perm[:120], perm[120:168], perm[168:]
+len(tr), len(va), len(te)</textarea></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">2</span><h3>模型：和论文第 1032 行一样</h3></div>
+    <div class="prose"><p>下面的类只删掉了策略头 <code>g</code>，其余每一行都和你论文的 DKT 相同。d 改成 32（论文是 64），因为这里只有 5 个知识点。</p></div>
+    <div class="cell"><textarea>class DKT(nn.Module):
+    def __init__(self, K, d=32):
+        super().__init__()
+        self.K = K
+        self.emb = nn.Embedding(2 * K, d); self.lstm = nn.LSTM(d, d, batch_first=True)
+        self.drop = nn.Dropout(0.2); self.out = nn.Linear(d, K)
+
+    def encode(self, sk, rs):
+        x = self.emb(sk + self.K * rs.long()); h, _ = self.lstm(x)
+        return {"h": self.drop(h), "B": sk.shape[0]}
+
+    def readout_all(self, H, qpos):
+        return self.out(H["h"].index_select(1, qpos))
+
+    def readout(self, H, q, qpos):
+        return self.readout_all(H, qpos).gather(-1, q)
+
+model = DKT(K)
+model</textarea></div>
+    <div class="prose"><p>一步步看形状。取 2 个学生：</p></div>
+    <div class="cell"><textarea>H = model.encode(sk[:2], rs[:2])
+qpos = torch.arange(T - 1)
+print('LSTM 每一步的隐状态 h：', H['h'].shape)            # (学生, 时间步, d)
+print('每一步对所有知识点的 logit：', model.readout_all(H, qpos).shape)   # (学生, 时间步-1, K)
+print('只取下一题那个知识点的 logit：', model.readout(H, sk[:2, 1:].unsqueeze(-1), qpos).shape)</textarea></div>
+    <div class="callout"><h4>逐行对照</h4><ul>
+      <li><code>sk + self.K * rs.long()</code>：（知识点，对错）编成 0 到 2K−1 的编号（第 12 天）。</li>
+      <li><code>self.emb(...)</code>：查嵌入表，(学生, 时间步) → (学生, 时间步, d)（第 13 天：独热乘矩阵 = 查表）。</li>
+      <li><code>h, _ = self.lstm(x)</code>：<code>batch_first=True</code>，只要每一步的 h，不要最后的状态。</li>
+      <li><code>index_select(1, qpos)</code>：在时间维上取第 0 到 T−2 步，因为第 t 步的 h 用来预测第 t+1 题。</li>
+      <li><code>.gather(-1, q)</code>：K 个知识点的 logit 里，只挑出下一题实际考的那个知识点。</li>
+    </ul></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3</span><h3>损失：和论文第 1248 行的 batch_loss 一样</h3></div>
+    <div class="prose"><p>论文里还乘了掩码 <code>m</code>（窗口不满 100 步时补的位置不算）；这里每个学生都是完整的 50 步，用不到掩码。</p></div>
+    <div class="cell"><textarea>def batch_loss(model, sk, rs):
+    H = model.encode(sk, rs)
+    qpos = torch.arange(sk.shape[1] - 1)
+    logit = model.readout(H, sk[:, 1:].unsqueeze(-1), qpos).squeeze(-1)
+    y = rs[:, 1:]
+    return F.binary_cross_entropy_with_logits(logit, y), logit
+
+l, logit = batch_loss(model, sk[:4], rs[:4])
+l, logit.shape</textarea></div>
+    <div class="prose"><p>还没训练，BCE 在 0.69（= log 2，相当于每题都猜 0.5）附近。</p></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">4</span><h3>训练：和论文第 1340 行的 train_kt 一样</h3></div>
+    <div class="prose"><p>Adam、学习率 2×10⁻³（论文第 1237 行给 DKT 设的就是这个）、批量 32、每一步把梯度裁剪到 5、每轮结束在验证集上算 BCE，最后恢复验证集最好的那一轮。前面几天学的东西全在这里了。</p></div>
+    <div class="cell"><textarea>def auc(y, p):
+    """AUC：随机挑一道答对的题和一道答错的题，模型给答对那道更高分的概率"""
+    pairs = sorted(zip(p, y))
+    pos = sum(y); neg = len(y) - pos
+    r, i = 0, 0
+    while i < len(pairs):
+        j = i
+        while j < len(pairs) and pairs[j][0] == pairs[i][0]:
+            j += 1
+        r += (i + j + 1) / 2 * sum(1 for q in range(i, j) if pairs[q][1] == 1)
+        i = j
+    return (r - pos * (pos + 1) / 2) / (pos * neg)
+
+def eval_bce(model, idx):
+    model.eval()
+    with torch.no_grad():
+        l, logit = batch_loss(model, sk[idx], rs[idx])
+    return l.item(), torch.sigmoid(logit)
+
+def train_kt(model, epochs=15, lr=2e-3, BS=32):
+    opt = torch.optim.Adam(model.parameters(), lr=lr)
+    best, best_ep, best_state = float('inf'), -1, None
+    for ep in range(epochs):
+        model.train(); p = tr[torch.randperm(len(tr))]
+        for i in range(0, len(p), BS):
+            b = p[i:i + BS]
+            loss, _ = batch_loss(model, sk[b], rs[b])
+            opt.zero_grad(); loss.backward()
+            nn.utils.clip_grad_norm_(model.parameters(), 5.0); opt.step()
+        vb, _ = eval_bce(model, va)
+        if vb < best:
+            best = vb; best_ep = ep
+            best_state = {k: v.detach().clone() for k, v in model.state_dict().items()}
+        print(f'epoch {ep + 1:2d}  验证集 BCE {vb:.4f}' + ('  ← 目前最好' if best_ep == ep else ''))
+    model.load_state_dict(best_state)
+    model.eval()
+    return best_ep</textarea></div>
+    <div class="cell" data-manual="训练 15 轮，电脑上大约 10 秒"><textarea>torch.manual_seed(1)
+model = DKT(K)
+best_ep = train_kt(model)
+print('选中的是第', best_ep + 1, '轮')</textarea></div>
+    <div class="prose"><p>在测试集上评估。“上限”是知道每个学生真实掌握状态时的 AUC：就算掌握状态全知道，蒙对和失误也无法预测，所以到不了 1。我在真 PyTorch 上跑同样的代码，DKT 的测试 AUC 约 0.79，上限约 0.86。</p></div>
+    <div class="cell" data-manual="先运行上面的训练格"><textarea>tb, p_te = eval_bce(model, te)
+y = rs[te][:, 1:].reshape(-1).tolist()
+print('测试集 BCE', round(tb, 4), '  AUC', round(auc(y, p_te.reshape(-1).tolist()), 4))
+print('知道真实掌握状态时的 AUC（上限）', round(auc(y, truth[te][:, 1:].reshape(-1).tolist()), 4))</textarea></div>
+    <div class="prose"><p>看一个测试学生：DKT 每一步对 5 个知识点的预测。答对一个知识点的题，那条线往上走；没练的知识点基本不动。</p></div>
+    <div class="cell" data-manual="先运行上面的训练格"><textarea>s = int(te[0])
+with torch.no_grad():
+    H = model.encode(sk[s:s + 1], rs[s:s + 1])
+    P = torch.sigmoid(model.readout_all(H, torch.arange(T)))[0]   # (T, K)
+d2l.plot(list(range(1, T + 1)), [P[:, k] for k in range(K)], 'step', 'P(答对)',
+         legend=[f'知识点 {k}' for k in range(K)], ylim=[0, 1], figsize=(6, 3))
+print('知识点：', sk[s].tolist())
+print('对错：  ', rs[s].long().tolist())</textarea></div>
+    <div class="callout"><h4>和论文的差别</h4><p>你论文的 DKT 还有三样这里没有的东西：（1）策略头 <code>g</code> 和决策损失（第 20 天读代码时细看）；（2）序列按 100 步切窗口，用掩码处理不满的窗口；（3）真实数据集，知识点多（145 到 681 个），学生的行为也远没有 BKT 这么规整。但训练骨架完全一样：编码 → 读出 → gather → BCE → Adam → 裁剪 → 按验证集选检查点。</p></div>
+  </div>
+</section>
+
+<section class="part quiz-sec">
+  <div class="part-h"><div class="eyebrow">课后题</div><h2>做几道题检查一下</h2><span class="src">选择题点选项马上出结果；写形状和写代码的题，网页会现场运行代码判断对错。答题记录只存在你这台设备的浏览器里。</span></div>
+  <div class="quiz dayquiz" data-day="14"></div>
+  <div class="row small muted quizscore" data-day="14"></div>
+</section>
+
+<section class="part">
+  <div class="part-h"><div class="eyebrow">今日小结</div><h2>今天学会了吗？</h2></div>
+  <div class="two">
+    <div class="panel stack">
+      <ul class="check-list" data-day="14">
+        <li><label><input type="checkbox" data-k="c1">GRU：重置门管候选状态看多少过去，更新门在新旧状态之间插值</label></li>
+        <li><label><input type="checkbox" data-k="c2">LSTM：输入门、遗忘门、输出门，记忆元用加法更新</label></li>
+        <li><label><input type="checkbox" data-k="c3">遗忘门接近 1 时，梯度沿记忆元几乎不衰减</label></li>
+        <li><label><input type="checkbox" data-k="c4">DKT：编号 → 嵌入 → LSTM → 线性层 → gather 下一题的知识点 → BCE</label></li>
+        <li><label><input type="checkbox" data-k="c5">我能自己跑一遍训练、按验证集选检查点、在测试集上算 AUC</label></li>
+      </ul>
+      <span class="small check-msg"></span>
+    </div>
+    <div class="panel stack">
+      <h3>明天（第 15 天）学什么</h3>
+      <p>第 10 章注意力机制：查询、键、值，注意力汇聚，注意力评分函数。DKVMN 的“读记忆”就是用注意力权重对记忆槽加权求和，SAKT、AKT、simpleKT 更是整个建立在注意力上。</p>
     </div>
   </div>
 </section>

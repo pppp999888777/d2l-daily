@@ -132,6 +132,17 @@ const QUIZ={
  {t:'c',q:'沿时间往回传梯度时，每步乘一个约 0.5 的数。传 30 步后梯度变成多少？',o:['15','0.5 × 30','0.5³⁰ ≈ 10⁻⁹','不变'],a:2,why:'连乘。远处时间步几乎收不到梯度，学不到长距离依赖。LSTM 的门控就是为了缓解这个问题。'},
  {t:'code',q:'写代码：照 grad_clipping 的写法，把两个梯度 g1 = torch.tensor([3.0, 4.0]) 和 g2 = torch.tensor([12.0]) 当成一个整体裁剪到 θ = 1。算出 norm（总长度），把裁剪后的结果存成 c1 和 c2。',start:'g1 = torch.tensor([3.0, 4.0])\ng2 = torch.tensor([12.0])\ntheta = 1\nnorm = \nc1 = \nc2 = \nc1, c2',check:env=>{const n=env.vars.norm,c1=env.vars.c1,c2=env.vars.c2;const nv=n&&(MT.isT(n)?n.data[0]:n.v);if(nv==null||Math.abs(nv-13)>1e-4)return'norm 应该是 √(3² + 4² + 12²) = 13';if(!c1||!MT.isT(c1)||Math.abs(c1.data[0]-3/13)>1e-4||Math.abs(c1.data[1]-4/13)>1e-4)return'c1 应该是 g1 × θ / norm = [0.2308, 0.3077]';if(!c2||!MT.isT(c2)||Math.abs(c2.data[0]-12/13)>1e-4)return'c2 应该是 g2 × θ / norm = [0.9231]';return true},why:'norm = torch.sqrt((g1 ** 2).sum() + (g2 ** 2).sum()) = 13；c1 = g1 * theta / norm，c2 = g2 * theta / norm。裁剪后总长度正好是 1。'},
 ],
+'14':[
+ {t:'c',q:'GRU 的更新门 Zₜ 全都接近 1 时，这一步会怎样？',o:['隐状态几乎原样保留，这一步的输入基本被跳过','隐状态被清零','变成普通 RNN','输出全是 1'],a:0,why:'Hₜ = Zₜ ⊙ H_{t−1} + (1 − Zₜ) ⊙ H̃ₜ，Z ≈ 1 时 Hₜ ≈ H_{t−1}。'},
+ {t:'c',q:'GRU 的重置门 Rₜ 接近 0 时，候选隐状态 H̃ₜ 主要取决于什么？',o:['上一步的隐状态','当前输入 Xₜ','输出层','什么都不取决'],a:1,why:'H̃ₜ = tanh(Xₜ W_xh + (Rₜ ⊙ H_{t−1}) W_hh + b_h)，R ≈ 0 时过去被“重置”掉了。'},
+ {t:'c',q:'LSTM 里梯度沿记忆元往回传一步，乘的是什么？',o:['W_hh','遗忘门 Fₜ','输出门 Oₜ','tanh 的导数'],a:1,why:'Cₜ = Fₜ ⊙ C_{t−1} + Iₜ ⊙ C̃ₜ，所以 ∂Cₜ/∂C_{t−1} = Fₜ。F 接近 1 时梯度几乎不衰减。'},
+ {t:'c',q:'LSTM 有几个状态需要从一个时间步传到下一个？',o:['1 个：隐状态','2 个：隐状态 H 和记忆元 C','3 个：三个门','4 个'],a:1,why:'所以 nn.LSTM 返回 (out, (h_n, c_n))，初始状态也要传一个元组。'},
+ {t:'shape',q:'DKT：2 个学生，每人 50 步，d = 32。nn.LSTM(32, 32, batch_first=True) 的输出 h 的形状是？',code:'lstm = nn.LSTM(32, 32, batch_first=True)\nx = torch.zeros(2, 50, 32)\nh, _ = lstm(x)\nh',why:'batch_first=True：(批量, 时间步, 隐藏维) = (2, 50, 32)。'},
+ {t:'shape',q:'论文的 readout：从 (2, 49, 5) 的 logit 里，按下一题的知识点挑出一个。结果的形状是？',code:'logits = torch.zeros(2, 49, 5)\nq = torch.zeros(2, 49, 1, dtype=torch.int64)\nlogits.gather(-1, q)',why:'gather 的结果和下标 q 形状一样：(2, 49, 1)。再 .squeeze(-1) 变成 (2, 49)，和对错 rs[:, 1:] 对齐算 BCE。'},
+ {t:'c',q:'DKT 用第 t 步的隐状态去预测哪一题？',o:['第 t 题','第 t + 1 题','第 1 题','最后一题'],a:1,why:'h_t 已经看过第 t 题的对错，用它预测下一题。所以 qpos 是 0 到 T−2，目标是 rs[:, 1:]。'},
+ {t:'c',q:'模拟数据里“知道真实掌握状态时的 AUC”为什么到不了 1？',o:['代码有错','即使知道会不会，蒙对（guess）和失误（slip）还是随机的','因为用了 Dropout','因为学生太少'],a:1,why:'这是数据本身的随机性，任何模型都无法消除。真实数据里也一样，所以 KT 的 AUC 一般在 0.7 到 0.85 之间。'},
+ {t:'code',q:'写代码：logits = torch.tensor([[0.0, 2.0, -1.0], [1.0, 0.5, 3.0]])，每行是对 3 个知识点的 logit。下一题考的知识点是 q = [1, 2]，真实对错是 y = [1.0, 0.0]。用 gather 取出对应的 logit 存成 picked（形状 (2,)），再算 loss = F.binary_cross_entropy_with_logits(picked, y)。',start:'from torch.nn import functional as F\nlogits = torch.tensor([[0.0, 2.0, -1.0], [1.0, 0.5, 3.0]])\nq = torch.tensor([1, 2])\ny = torch.tensor([1.0, 0.0])\npicked = \nloss = \nloss',check:env=>{const p=env.vars.picked,l=env.vars.loss;if(!p||!MT.isT(p)||p.shape.join()!=='2'||Math.abs(p.data[0]-2)>1e-6||Math.abs(p.data[1]-3)>1e-6)return'picked 应该是 tensor([2., 3.])，形状 (2,)。提示：logits.gather(-1, q.unsqueeze(-1)).squeeze(-1)';const want=(Math.log(1+Math.exp(-2))+Math.log(1+Math.exp(3)))/2;if(!l||!MT.isT(l)||Math.abs(l.data[0]-want)>1e-4)return`loss 应该约等于 ${want.toFixed(4)}`;return true},why:'picked = logits.gather(-1, q.unsqueeze(-1)).squeeze(-1) 得到 [2., 3.]。第一题答对，logit 2 预测得不错；第二题答错，logit 3 却很有信心说会对，损失主要来自这里。'},
+],
 };
 function quizState(day){return store.get('quiz'+day,{})}
 function quizSave(day,s){store.set('quiz'+day,s)}

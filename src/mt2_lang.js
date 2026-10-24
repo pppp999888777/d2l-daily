@@ -26,7 +26,8 @@ function tensorMethod(T,name){
     fill_:a=>{T.data.fill(castVal(numOf(a[0]),T.dtype));return T},
     sub_:a=>{checkInplace(T);const r=binop('-',T,a[0]);T.data.set(r.data);return T},add_:a=>{checkInplace(T);const r=binop('+',T,a[0]);T.data.set(r.data);return T},
     argmax:(a,kw)=>argmaxT(T,dimArg(a,kw),keepArg(kw),1),argmin:(a,kw)=>argmaxT(T,dimArg(a,kw),keepArg(kw),-1),
-    unsqueeze:a=>{const s=T.shape.slice();let d=intOf(a[0]);if(d<0)d+=s.length+1;s.splice(d,0,1);return reshapeT(T,s)},squeeze:()=>reshapeT(T,T.shape.filter(d=>d!==1)),
+    unsqueeze:a=>{const s=T.shape.slice();let d=intOf(a[0]);if(d<0)d+=s.length+1;s.splice(d,0,1);return reshapeT(T,s)},squeeze:(a,kw)=>{const dv=kw.dim||a[0];if(!dv||dv.t==='none')return reshapeT(T,T.shape.filter(d=>d!==1));let d=intOf(dv);if(d<0)d+=T.shape.length;return T.shape[d]===1?reshapeT(T,T.shape.filter((_,i)=>i!==d)):T},
+    gather:(a,kw)=>gatherT(T,intOf(kwOr(kw,a,'dim',0)),asTensor(kwOr(kw,a,'index',1))),index_select:(a,kw)=>indexSelectT(T,intOf(kwOr(kw,a,'dim',0)),asTensor(kwOr(kw,a,'index',1))),
     flatten:()=>reshapeT(T,[-1]),pow:a=>binop('**',T,a[0]),softmax:(a,kw)=>softmaxT(T,intOf(kwOr(kw,a,'dim',0))),log_softmax:(a,kw)=>softmaxT(T,intOf(kwOr(kw,a,'dim',0)),true),all:()=>mkT([],[T.data.every(Boolean)?1:0],'bool',T.np),any:()=>mkT([],[T.data.some(Boolean)?1:0],'bool',T.np),round:()=>mkT(T.shape.slice(),Array.from(T.data,v=>Math.round(v)),T.dtype,T.np),__len__:()=>I(T.shape[0])};
   return M[name]}
 

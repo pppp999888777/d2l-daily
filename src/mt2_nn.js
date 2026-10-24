@@ -173,7 +173,10 @@ const nnF=mod('torch.nn.functional',{one_hot:fn('one_hot',(a,kw)=>{const T=asTen
   cross_entropy:fn('cross_entropy',(a,kw)=>crossEntropy(a[0],a[1],redOf(kw))),mse_loss:fn('mse_loss',(a,kw)=>mseLoss(a[0],a[1],redOf(kw))),
   binary_cross_entropy:fn('binary_cross_entropy',(a,kw)=>bceLoss(a[0],a[1],redOf(kw),false)),binary_cross_entropy_with_logits:fn('binary_cross_entropy_with_logits',(a,kw)=>bceLoss(a[0],a[1],redOf(kw),true)),
   huber_loss:fn('huber_loss',(a,kw)=>huberLoss(a[0],a[1],redOf(kw),kw.delta?numOf(kw.delta):1)),dropout:fn('dropout',(a,kw)=>{const p=numOf(kwOr(kw,a,'p',1,F(0.5)));const tr=kw.training?truthy(kw.training):true;return tr?nnForward(nnObj('Dropout',{p}),[a[0]],null):a[0]})});
-const nnMod=mod('torch.nn',{Module:ModuleCls,init:nnInit,functional:nnF,Parameter:fn('Parameter',(a,kw)=>{const T=asTensor(a[0]);const p=mkParam(T.shape.slice(),T.data);p.dtype=T.dtype;if(kw.requires_grad&&!truthy(kw.requires_grad))p.requires_grad=false;return p})});
+const nnUtils=mod('torch.nn.utils',{clip_grad_norm_:fn('clip_grad_norm_',(a,kw)=>{const ps=(isT(a[0])?[a[0]]:iterate(a[0])).filter(p=>p.grad),mx=numOf(kwOr(kw,a,'max_norm',1));let s=0;for(const p of ps)for(const v of p.grad.data)s+=v*v;const n=Math.fround(Math.sqrt(s)),k=mx/(n+1e-6);
+    if(k<1)for(const p of ps)for(let i=0;i<p.grad.data.length;i++)p.grad.data[i]=castVal(p.grad.data[i]*k,p.grad.dtype);return mkT([],[n],'float32')}),
+  clip_grad_value_:fn('clip_grad_value_',(a,kw)=>{const ps=(isT(a[0])?[a[0]]:iterate(a[0])).filter(p=>p.grad),c=numOf(kwOr(kw,a,'clip_value',1));for(const p of ps)for(let i=0;i<p.grad.data.length;i++)p.grad.data[i]=Math.max(-c,Math.min(c,p.grad.data[i]));return NONE})});
+const nnMod=mod('torch.nn',{utils:nnUtils,Module:ModuleCls,init:nnInit,functional:nnF,Parameter:fn('Parameter',(a,kw)=>{const T=asTensor(a[0]);const p=mkParam(T.shape.slice(),T.data);p.dtype=T.dtype;if(kw.requires_grad&&!truthy(kw.requires_grad))p.requires_grad=false;return p})});
 for(const k of NN_KINDS){nnMod.attrs[k]=fn(k,(a,kw)=>nnMake(k,a,kw));nnMod.attrs[k].nnKind=k}
 // 优化器
 function optMake(kind,a,kw){const items=a[0].t==='list'||a[0].t==='tuple'||a[0].t==='iter'?iterate(a[0]):[a[0]];const toList=v=>isT(v)?[v]:iterate(v).filter(isT);
