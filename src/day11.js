@@ -1,0 +1,8 @@
+// ---------- 第 11 天：DKT 的参数清单 ----------
+function pcRender(){const K=+$('#pcDs').value,d=+$('#pcD').value,g=$('#pcG').value==='1';$('#pcDv').textContent=d;
+  const rows=[['emb.weight',[2*K,d],'嵌入表：每个（知识点，答对或答错）组合一行，共 2K 行'],['lstm.weight_ih_l0',[4*d,d],'LSTM 输入到 4 个门的权重（第 14 天讲 4 个门）'],['lstm.weight_hh_l0',[4*d,d],'LSTM 上一步隐状态到 4 个门的权重'],['lstm.bias_ih_l0',[4*d],'LSTM 偏置'],['lstm.bias_hh_l0',[4*d],'LSTM 偏置（PyTorch 有两份，加在一起用）'],['out.weight',[K,d],'输出头：隐状态到每个知识点的答对概率（logit）'],['out.bias',[K],'输出头偏置']];
+  if(g)rows.push(['g.weight',[K,d],'策略头：给每个知识点的出题打分加一个修正，初始化为 0'],['g.bias',[K],'策略头偏置，初始化为 0']);
+  const cnt=s=>s.reduce((a,b)=>a*b,1),tot=rows.reduce((a,r)=>a+cnt(r[1]),0),fmt=n=>n.toLocaleString('en-US');
+  $('#pcTbl').innerHTML='<thead><tr><th>名字</th><th>形状</th><th class="num">个数</th><th>是什么</th></tr></thead><tbody>'+rows.map(([n,s,w])=>`<tr><td><code>${n}</code></td><td style="white-space:nowrap"><code>(${s.join(', ')})</code></td><td class="num">${fmt(cnt(s))}</td><td class="small">${w}</td></tr>`).join('')+`<tr><td><b>合计</b></td><td></td><td class="num"><b>${fmt(tot)}</b></td><td></td></tr></tbody>`;
+  const lstm=2*4*d*d+2*4*d;$('#pcCalc').textContent=`一共 ${fmt(tot)} 个参数。\nLSTM 占 ${fmt(lstm)} 个（${(100*lstm/tot).toFixed(0)}%），和 K 无关，只看 d：2 × 4d² + 2 × 4d。\n和 K 有关的部分：嵌入 2Kd，输出头 Kd + K${g?'，策略头 Kd + K':''}。\n${K===681?'Junyi 有 681 个知识点，所以和 K 有关的部分比 LSTM 还大。':''}${d!==64?`\n你论文用的是 d = 64（D_MODEL = 64）。`:''}\n\n对照：真 PyTorch 里 sum(p.numel() for p in DKT(145, policy_head=True).parameters()) = 70,690。`}
+['#pcDs','#pcG'].forEach(s=>$(s).onchange=pcRender);$('#pcD').addEventListener('input',pcRender);

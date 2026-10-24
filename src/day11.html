@@ -1,0 +1,361 @@
+<main class="wrap day" id="day11" data-day="11" hidden>
+<section class="hero">
+  <div class="eyebrow">第 11 天 · 原书第 5.1 节 + 第 5.2 节 + 第 5.4 节 + 第 5.5 节 · 论文路线第 4 课</div>
+  <h1>自己写 nn.Module，管理和保存参数</h1>
+  <p class="lead">到现在为止，网络都是用 <code>nn.Sequential</code> 一层层堆起来的。你论文里的 DKT、DKVMN、SAKT 却都是 <code>class DKT(KTBase)</code> 这样自己写的类。今天学怎么写这样的类，怎么查看、初始化、共享参数，以及怎么保存和恢复参数。学完以后，论文里每个模型的类定义和“保存最佳检查点”的代码就都能读懂了。</p>
+  <div class="plan">
+    <div><b class="k">今天的时间</b>大约 60 分钟。代码格都很快，自动运行。</div>
+    <div><b class="k">学完你能</b><ul><li>继承 <code>nn.Module</code> 写自己的块</li><li>用 <code>named_parameters</code>、<code>state_dict</code> 查看参数</li><li>用 <code>nn.Parameter</code> 写自定义层</li><li>保存、加载参数，知道为什么要 <code>clone()</code></li></ul></div>
+    <div><b class="k">和你的论文</b><ul><li><code>class DKT(KTBase)</code> 的每一行</li><li>DKT 一共有多少参数</li><li><code>best_state</code> 和 <code>load_state_dict</code></li></ul></div>
+  </div>
+</section>
+
+<section class="part" id="blocks">
+  <div class="part-h"><div class="eyebrow">第一部分</div><h2>5.1 层和块</h2><span class="src">对应原书第 5.1 节，代码来自原书 PyTorch 版</span></div>
+  <div class="prose"><div class="row"><button class="btn primary runAll" data-day="11">从头全部运行</button><span class="small muted runAllMsg"></span></div></div>
+  <div class="blk">
+    <div class="prose"><p><b>块</b>（block）可以是一层，也可以是很多层的组合，甚至是整个模型。在 PyTorch 里，块就是 <code>nn.Module</code> 的子类。先回顾第 8 天的写法：</p></div>
+    <div class="cell"><textarea>import torch
+from torch import nn
+from torch.nn import functional as F
+
+net = nn.Sequential(nn.Linear(20, 256), nn.ReLU(), nn.Linear(256, 10))
+
+X = torch.rand(2, 20)
+net(X)</textarea></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">5.1.1</span><h3>自定义块</h3></div>
+    <div class="prose"><p>自己写一个块，只要做两件事：在 <code>__init__</code> 里创建要用的层（先调用 <code>super().__init__()</code>），在 <code>forward</code> 里写怎么从输入算到输出。反向传播不用写，自动求导会处理。</p></div>
+    <div class="cell"><textarea>class MLP(nn.Module):
+    # 用模型参数声明层。这里，我们声明两个全连接的层
+    def __init__(self):
+        # 调用MLP的父类Module的构造函数来执行必要的初始化。
+        # 这样，在类实例化时也可以指定其他函数参数，例如模型参数params（稍后将介绍）
+        super().__init__()
+        self.hidden = nn.Linear(20, 256)  # 隐藏层
+        self.out = nn.Linear(256, 10)  # 输出层
+
+    # 定义模型的前向传播，即如何根据输入X返回所需的模型输出
+    def forward(self, X):
+        # 注意，这里我们使用ReLU的函数版本，其在nn.functional模块中定义。
+        return self.out(F.relu(self.hidden(X)))</textarea></div>
+    <div class="cell"><textarea>net = MLP()
+net(X)</textarea></div>
+    <div class="prose"><p><code>net(X)</code> 其实调用的是 <code>net.__call__(X)</code>，它再去调用 <code>forward</code>。打印 <code>net</code> 会列出所有子块，名字就是你在 <code>__init__</code> 里起的属性名：</p></div>
+    <div class="cell"><textarea>net</textarea></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">5.1.2</span><h3>顺序块</h3></div>
+    <div class="prose"><p>自己实现一个 <code>Sequential</code>：把传进来的块按顺序存进 <code>_modules</code>（一个有序字典），前向传播时依次调用。存进 <code>_modules</code> 的块，PyTorch 才知道它们的参数要一起训练。</p></div>
+    <div class="cell"><textarea>class MySequential(nn.Module):
+    def __init__(self, *args):
+        super().__init__()
+        for idx, module in enumerate(args):
+            # 这里，module是Module子类的一个实例。我们把它保存在'Module'类的成员
+            # 变量_modules中。_module的类型是OrderedDict
+            self._modules[str(idx)] = module
+
+    def forward(self, X):
+        # OrderedDict保证了按照成员添加的顺序遍历它们
+        for block in self._modules.values():
+            X = block(X)
+        return X</textarea></div>
+    <div class="cell"><textarea>net = MySequential(nn.Linear(20, 256), nn.ReLU(), nn.Linear(256, 10))
+net(X)</textarea></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">5.1.3</span><h3>在前向传播中执行代码</h3></div>
+    <div class="prose"><p><code>forward</code> 里可以写任何 Python 代码：常数参数、复用同一层、循环和判断。下面这个块里，<code>rand_weight</code> 不是参数（不会被训练），<code>self.linear</code> 用了两次（两次共享同一组参数），最后还有一个 <code>while</code> 循环。</p></div>
+    <div class="cell"><textarea>class FixedHiddenMLP(nn.Module):
+    def __init__(self):
+        super().__init__()
+        # 不计算梯度的随机权重参数。因此其在训练期间保持不变
+        self.rand_weight = torch.rand((20, 20), requires_grad=False)
+        self.linear = nn.Linear(20, 20)
+
+    def forward(self, X):
+        X = self.linear(X)
+        # 使用创建的常量参数以及relu和mm函数
+        X = F.relu(torch.mm(X, self.rand_weight) + 1)
+        # 复用全连接层。这相当于两个全连接层共享参数
+        X = self.linear(X)
+        # 控制流
+        while X.abs().sum() > 1:
+            X /= 2
+        return X.sum()</textarea></div>
+    <div class="cell"><textarea>net = FixedHiddenMLP()
+net(X), len(list(net.parameters()))   # 只有 linear 的 weight 和 bias 两个参数</textarea></div>
+    <div class="prose"><p>块可以嵌套：</p></div>
+    <div class="cell"><textarea>class NestMLP(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.net = nn.Sequential(nn.Linear(20, 64), nn.ReLU(),
+                                 nn.Linear(64, 32), nn.ReLU())
+        self.linear = nn.Linear(32, 16)
+
+    def forward(self, X):
+        return self.linear(self.net(X))
+
+chimera = nn.Sequential(NestMLP(), nn.Linear(16, 20), FixedHiddenMLP())
+chimera(X)</textarea></div>
+    <div class="callout"><h4>对照你的论文：KTBase 和 DKT</h4><p>你论文 <code>experiment.py</code> 第 1012 行先定义了一个所有 KT 模型共用的父类，第 1032 行的 DKT 再继承它：</p>
+<pre class="code">class KTBase(nn.Module):
+    def __init__(self, K):
+        super().__init__()
+        self.K = K                        <span class="c"># 知识点个数，普通属性，不是参数</span>
+
+class DKT(KTBase):
+    def __init__(self, K, d=D_MODEL, policy_head=False):     <span class="c"># D_MODEL = 64</span>
+        super().__init__(K)               <span class="c"># 调用 KTBase.__init__，它再调用 nn.Module.__init__</span>
+        self.emb = nn.Embedding(2 * K, d); self.lstm = nn.LSTM(d, d, batch_first=True)
+        self.drop = nn.Dropout(0.2); self.out = nn.Linear(d, K)
+        self.is_df = policy_head
+        if policy_head:                   <span class="c"># 只有 Safe-DFKT 系列才有策略头</span>
+            self.g = nn.Linear(d, K)
+            nn.init.zeros_(self.g.weight); nn.init.zeros_(self.g.bias)
+
+    def encode(self, sk, rs):
+        x = self.emb(sk + self.K * rs.long()); h, _ = self.lstm(x)
+        return {"h": self.drop(h), "B": sk.shape[0]}</pre>
+      <p>注意两点。第一，<code>if policy_head:</code> 是在 <code>__init__</code> 里根据参数决定要不要创建一层，同一个类能造出两种模型（这也是 5.1.3 说的“块里可以写任何 Python 代码”）。第二，这个类<b>没有写 <code>forward</code></b>，而是写了 <code>encode</code>、<code>readout</code> 这些自己起名的方法，训练代码直接调用 <code>model.encode(...)</code>。这样做是可以的：<code>forward</code> 只在你写 <code>model(x)</code> 时才被用到。要是对这个类写 <code>model(x)</code>，就会报下面这种错：</p></div>
+    <div class="cell"><textarea>class KTBase(nn.Module):
+    def __init__(self, K):
+        super().__init__()
+        self.K = K
+
+class Tiny(KTBase):
+    def __init__(self, K, d=4):
+        super().__init__(K)
+        self.emb = nn.Linear(2 * K, d)
+        self.out = nn.Linear(d, K)
+    def encode(self, x):
+        return torch.relu(self.emb(x))
+
+m = Tiny(3)
+print(m.K, [n for n, _ in m.named_parameters()])
+m.encode(torch.ones(1, 6)).shape</textarea></div>
+    <div class="cell"><textarea>m(torch.ones(1, 6))   # 故意报错：没有 forward</textarea></div>
+  </div>
+</section>
+
+<section class="part" id="params">
+  <div class="part-h"><div class="eyebrow">第二部分</div><h2>5.2 参数管理</h2><span class="src">对应原书第 5.2 节，代码来自原书 PyTorch 版</span></div>
+  <div class="blk"><div class="blk-h"><span class="n">5.2.1</span><h3>访问参数</h3></div>
+    <div class="cell"><textarea>net = nn.Sequential(nn.Linear(4, 8), nn.ReLU(), nn.Linear(8, 1))
+X = torch.rand(size=(2, 4))
+net(X)</textarea></div>
+    <div class="prose"><p><code>net[2]</code> 取出第 3 个子块（第二个线性层）。<code>state_dict()</code> 是一个有序字典，名字对应参数：</p></div>
+    <div class="cell"><textarea>print(net[2].state_dict())</textarea></div>
+    <div class="cell"><textarea>print(type(net[2].bias))
+print(net[2].bias)
+print(net[2].bias.data)</textarea></div>
+    <div class="prose"><p>参数是 <code>Parameter</code> 类型，它是一种特殊的张量，带着 <code>requires_grad=True</code>。还没有反向传播过，所以梯度是 <code>None</code>：</p></div>
+    <div class="cell"><textarea>net[2].weight.grad == None</textarea></div>
+    <div class="prose"><p>一次看所有参数。名字里的数字是子块在 <code>Sequential</code> 里的位置，点号表示嵌套：</p></div>
+    <div class="cell"><textarea>print(*[(name, param.shape) for name, param in net[0].named_parameters()])
+print(*[(name, param.shape) for name, param in net.named_parameters()])</textarea></div>
+    <div class="cell"><textarea>net.state_dict()['2.bias'].data</textarea></div>
+    <div class="prose"><p>嵌套块：<code>add_module</code> 可以给子块起任意名字。</p></div>
+    <div class="cell"><textarea>def block1():
+    return nn.Sequential(nn.Linear(4, 8), nn.ReLU(),
+                         nn.Linear(8, 4), nn.ReLU())
+
+def block2():
+    net = nn.Sequential()
+    for i in range(4):
+        # 在这里嵌套
+        net.add_module(f'block {i}', block1())
+    return net
+
+rgnet = nn.Sequential(block2(), nn.Linear(4, 1))
+rgnet(X)</textarea></div>
+    <div class="cell"><textarea>print(rgnet)</textarea></div>
+    <div class="cell"><textarea>rgnet[0][1][0].bias.data</textarea></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">5.2.2</span><h3>参数初始化</h3></div>
+    <div class="prose"><p><code>net.apply(f)</code> 会对每一个子块（包括自己）调用一次 <code>f</code>。常见写法是在 <code>f</code> 里判断类型，只处理线性层：</p></div>
+    <div class="cell"><textarea>def init_normal(m):
+    if type(m) == nn.Linear:
+        nn.init.normal_(m.weight, mean=0, std=0.01)
+        nn.init.zeros_(m.bias)
+net.apply(init_normal)
+net[0].weight.data[0], net[0].bias.data[0]</textarea></div>
+    <div class="cell"><textarea>def init_constant(m):
+    if type(m) == nn.Linear:
+        nn.init.constant_(m.weight, 1)
+        nn.init.zeros_(m.bias)
+net.apply(init_constant)
+net[0].weight.data[0], net[0].bias.data[0]</textarea></div>
+    <div class="prose"><p>不同的层用不同的初始化：</p></div>
+    <div class="cell"><textarea>def init_xavier(m):
+    if type(m) == nn.Linear:
+        nn.init.xavier_uniform_(m.weight)
+def init_42(m):
+    if type(m) == nn.Linear:
+        nn.init.constant_(m.weight, 42)
+
+net[0].apply(init_xavier)
+net[2].apply(init_42)
+print(net[0].weight.data[0])
+print(net[2].weight.data)</textarea></div>
+    <div class="prose"><p>自定义初始化：先从 U(−10, 10) 里取，再把绝对值小于 5 的置 0。也可以直接改参数的值。</p></div>
+    <div class="cell"><textarea>def my_init(m):
+    if type(m) == nn.Linear:
+        print("Init", *[(name, param.shape)
+                        for name, param in m.named_parameters()][0])
+        nn.init.uniform_(m.weight, -10, 10)
+        m.weight.data *= m.weight.data.abs() >= 5
+
+net.apply(my_init)
+net[0].weight[:2]</textarea></div>
+    <div class="cell"><textarea>net[0].weight.data[:] += 1
+net[0].weight.data[0, 0] = 42
+net[0].weight.data[0]</textarea></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">5.2.3</span><h3>参数绑定（共享）</h3></div>
+    <div class="prose"><p>同一个层对象放在两个位置，两处用的就是同一组参数：改一处，另一处跟着变。反向传播时，两处的梯度会加在一起。</p></div>
+    <div class="cell"><textarea># 我们需要给共享层一个名称，以便可以引用它的参数
+shared = nn.Linear(8, 8)
+net = nn.Sequential(nn.Linear(4, 8), nn.ReLU(),
+                    shared, nn.ReLU(),
+                    shared, nn.ReLU(),
+                    nn.Linear(8, 1))
+net(X)
+# 检查参数是否相同
+print(net[2].weight.data[0] == net[4].weight.data[0])
+net[2].weight.data[0, 0] = 100
+# 确保它们实际上是同一个对象，而不只是有相同的值
+print(net[2].weight.data[0] == net[4].weight.data[0])</textarea></div>
+    <div class="prose"><p>一个细节：<code>parameters()</code> 会去掉重复，只算 6 个；<code>state_dict()</code> 不去重，有 8 项，<code>2.weight</code> 和 <code>4.weight</code> 都在。</p></div>
+    <div class="cell"><textarea>len(list(net.parameters())), list(net.state_dict().keys())</textarea></div>
+    <div class="panel stack" id="pcLab">
+      <h4>你论文的 DKT 有多少参数</h4>
+      <p class="small muted">下面是 <code>DKT(K, d, policy_head)</code> 的 <code>named_parameters()</code>，名字和形状都和真 PyTorch 打印的一样。选数据集（K 是知识点个数）、拖动隐藏维度 d，看每一项的参数量怎么变。</p>
+      <div class="row">
+        <label class="ctrl" for="pcDs">数据集 <select id="pcDs"><option value="145">ASSISTments 2009（K = 145）</option><option value="98">EdNet（K = 98）</option><option value="107">Algebra 2005（K = 107）</option><option value="681">Junyi（K = 681）</option></select></label>
+        <label class="ctrl" for="pcD">隐藏维度 d <output id="pcDv">64</output><input type="range" id="pcD" min="8" max="256" step="8" value="64"></label>
+        <label class="ctrl" for="pcG"><span>策略头 g</span><select id="pcG"><option value="1">有（Safe-DFKT 系列）</option><option value="0">没有（普通 DKT）</option></select></label>
+      </div>
+      <div class="tblwrap"><table class="t" id="pcTbl"></table></div>
+      <div class="calc pw" id="pcCalc"></div>
+    </div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">5.4</span><h3>自定义层和 nn.Parameter</h3></div>
+    <div class="prose"><p>原书 5.4 节：层也是块，写法一样。第一个层没有参数，只是把输入减去均值：</p></div>
+    <div class="cell"><textarea>import torch.nn.functional as F
+
+class CenteredLayer(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, X):
+        return X - X.mean()
+
+layer = CenteredLayer()
+layer(torch.FloatTensor([1, 2, 3, 4, 5]))</textarea></div>
+    <div class="prose"><p>带参数的层：用 <code>nn.Parameter</code> 包一个张量，赋给 <code>self</code> 的属性，它就会自动出现在 <code>parameters()</code> 里，被优化器训练。</p></div>
+    <div class="cell"><textarea>class MyLinear(nn.Module):
+    def __init__(self, in_units, units):
+        super().__init__()
+        self.weight = nn.Parameter(torch.randn(in_units, units))
+        self.bias = nn.Parameter(torch.randn(units,))
+    def forward(self, X):
+        linear = torch.matmul(X, self.weight.data) + self.bias.data
+        return F.relu(linear)
+
+linear = MyLinear(5, 3)
+linear.weight.shape, [n for n, _ in linear.named_parameters()]</textarea></div>
+    <div class="callout"><h4>对照你的论文</h4><p>DKVMN 的记忆矩阵就是这样定义的（第 1116 行）：<code>self.Mk = nn.Parameter(torch.randn(N, d) * 0.1)</code>，N 个记忆槽、每个 d 维，乘 0.1 让初始值小一点（第 10 天讲过初始化尺度）。simpleKT 的 <code>self.dvec = nn.Parameter(torch.randn(d) * 0.05)</code> 也一样。它们不是哪种现成的层，就是一块可以训练的张量。</p></div>
+  </div>
+</section>
+
+<section class="part" id="saveload">
+  <div class="part-h"><div class="eyebrow">第三部分</div><h2>5.5 读写文件</h2><span class="src">对应原书第 5.5 节。本页的“文件”存在网页内存里，刷新就没了</span></div>
+  <div class="blk">
+    <div class="prose"><p><code>torch.save</code> 和 <code>torch.load</code> 可以保存张量、张量列表、字典：</p></div>
+    <div class="cell"><textarea>x = torch.arange(4)
+torch.save(x, 'x-file')
+x2 = torch.load('x-file')
+x2</textarea></div>
+    <div class="cell"><textarea>y = torch.zeros(4)
+torch.save([x, y],'x-files')
+x2, y2 = torch.load('x-files')
+(x2, y2)</textarea></div>
+    <div class="cell"><textarea>mydict = {'x': x, 'y': y}
+torch.save(mydict, 'mydict')
+mydict2 = torch.load('mydict')
+mydict2</textarea></div>
+    <div class="prose"><p>保存模型时，保存的是<b>参数</b>（<code>state_dict</code>），不是整个模型。要恢复，先用同样的类建一个新模型，再把参数加载进去。</p></div>
+    <div class="cell"><textarea>class MLP(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.hidden = nn.Linear(20, 256)
+        self.output = nn.Linear(256, 10)
+
+    def forward(self, x):
+        return self.output(F.relu(self.hidden(x)))
+
+net = MLP()
+X = torch.randn(size=(2, 20))
+Y = net(X)</textarea></div>
+    <div class="cell"><textarea>torch.save(net.state_dict(), 'mlp.params')</textarea></div>
+    <div class="cell"><textarea>clone = MLP()
+clone.load_state_dict(torch.load('mlp.params'))
+clone.eval()</textarea></div>
+    <div class="cell"><textarea>Y_clone = clone(X)
+Y_clone == Y</textarea></div>
+    <div class="prose"><p>形状对不上、少了或多了参数名，<code>load_state_dict</code> 会报错并列出原因：</p></div>
+    <div class="cell"><textarea>small = nn.Linear(3, 2)
+small.load_state_dict({'weight': torch.ones(3, 3), 'bias': torch.zeros(2)})   # 故意报错</textarea></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">补充</span><h3>在内存里存检查点：为什么要 clone()</h3></div>
+    <div class="prose"><p>你论文没有把检查点写到硬盘，而是存在内存里的一个字典。这里有个坑：<code>state_dict()</code> 返回的张量和模型参数<b>共用同一块内存</b>。不 <code>clone()</code> 的话，以后参数一更新，“存下来的最佳参数”也跟着变了。</p></div>
+    <div class="cell"><textarea>net = MLP()
+nn.init.constant_(net.output.bias, 0.5)
+best_wrong = net.state_dict()          # 没有 clone：和参数共用内存
+best_right = {k: v.detach().clone() for k, v in net.state_dict().items()}
+with torch.no_grad():
+    net.output.bias.fill_(7.0)         # 假装又训练了几步，参数变了
+print(best_wrong['output.bias'][:3])   # 跟着变成了 7
+print(best_right['output.bias'][:3])   # 还是 0.5</textarea></div>
+    <div class="cell"><textarea>net.load_state_dict(best_right)        # 训练完，恢复到最佳检查点
+net.output.bias[:3]</textarea></div>
+    <div class="callout"><h4>对照你的论文</h4><p>第 9 天看过的这两行，现在每个词都认识了。<code>.detach()</code> 断开计算图，<code>.clone()</code> 复制一份新内存：</p>
+<pre class="code">best_state = {k: v.detach().clone() for k, v in model.state_dict().items()}   <span class="c"># 第 1369 行</span>
+...
+model.load_state_dict(best_state)                                            <span class="c"># 第 1394 行</span></pre>
+      <p>第 1664 行把基础模型的参数存进缓存时还多了 <code>.cpu()</code>，是为了把参数从显卡搬到内存；第 1691 行加载时用 <code>.to(DEV)</code> 再搬回去。本页没有显卡，这两步可以忽略。</p></div>
+  </div>
+</section>
+
+<section class="part quiz-sec">
+  <div class="part-h"><div class="eyebrow">课后题</div><h2>做几道题检查一下</h2><span class="src">选择题点选项马上出结果；写形状和写代码的题，网页会现场运行代码判断对错。答题记录只存在你这台设备的浏览器里。</span></div>
+  <div class="quiz dayquiz" data-day="11"></div>
+  <div class="row small muted quizscore" data-day="11"></div>
+</section>
+
+<section class="part">
+  <div class="part-h"><div class="eyebrow">今日小结</div><h2>今天学会了吗？</h2></div>
+  <div class="two">
+    <div class="panel stack">
+      <ul class="check-list" data-day="11">
+        <li><label><input type="checkbox" data-k="c1">自定义块：<code>__init__</code> 里先 <code>super().__init__()</code> 再建层，<code>forward</code> 写计算</label></li>
+        <li><label><input type="checkbox" data-k="c2">参数名怎么来的：属性名或下标，用点号连起来，比如 <code>lstm.weight_ih_l0</code></label></li>
+        <li><label><input type="checkbox" data-k="c3">用 <code>apply</code> 初始化，同一个层对象放两处就是参数共享</label></li>
+        <li><label><input type="checkbox" data-k="c4"><code>nn.Parameter</code> 让一个张量变成可训练参数</label></li>
+        <li><label><input type="checkbox" data-k="c5">保存 <code>state_dict</code>；在内存里存检查点要 <code>detach().clone()</code></label></li>
+      </ul>
+      <span class="small check-msg"></span>
+    </div>
+    <div class="panel stack">
+      <h3>明天（第 12 天）学什么</h3>
+      <p>进入第 8 章循环神经网络：序列模型、语言模型、循环神经网络的结构。学生的做题记录就是一个序列，DKT 用 RNN（LSTM）读这个序列。明天会第一次看到“隐状态”是什么。</p>
+    </div>
+  </div>
+</section>
+</main>

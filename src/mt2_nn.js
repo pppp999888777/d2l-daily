@@ -54,10 +54,20 @@ function modRepr(v,ind=''){if(v.t==='nn')return nnRepr(v,ind);if(v.t==='obj'&&is
 function isModuleCls(c){while(c){if(c===ModuleCls)return true;c=c.base}return false}
 const isModuleObj=o=>o.t==='obj'&&isModuleCls(o.cls);
 const isMod=v=>v&&(v.t==='nn'||isModuleObj(v));
-function objChildren(o){return Object.entries(o.attrs).filter(([k,v])=>isMod(v))}
+function objChildren(o){const r=Object.entries(o.attrs).filter(([k,v])=>isMod(v));const d=o.attrs._modules;if(d&&d.t==='dict')for(const[k,v]of d.m.values())if(isMod(v))r.push([str(k),v]);return r}
 function modChildren(m){return m.t==='nn'?m.children:objChildren(m)}
-function namedParams(m,prefix=''){const out=[];if(m.t==='nn'){for(const[k,p]of Object.entries(m.params))if(p)out.push([prefix+k,p])}else for(const[k,v]of Object.entries(m.attrs))if(isT(v)&&v.isParam)out.push([prefix+k,v]);
-  for(const[k,c]of modChildren(m))out.push(...namedParams(c,prefix+k+'.'));const seen=new Set();return out.filter(([k,p])=>seen.has(p)?false:(seen.add(p),true))}
+function namedParams(m,prefix='',dedup=true){const out=[];if(m.t==='nn'){for(const[k,p]of Object.entries(m.params))if(p)out.push([prefix+k,p])}else for(const[k,v]of Object.entries(m.attrs))if(isT(v)&&v.isParam)out.push([prefix+k,v]);
+  for(const[k,c]of modChildren(m))out.push(...namedParams(c,prefix+k+'.',false));if(!dedup)return out;const seen=new Set();return out.filter(([k,p])=>seen.has(p)?false:(seen.add(p),true))}
+function modName(m){return m.t==='nn'?m.kind:m.cls.name}
+function loadStateDict(m,d,strict){if(d.t!=='dict')err('TypeError',`Expected state_dict to be dict-like, got ${typeName(d)}.`);
+  const own=namedParams(m,'',false),ownKeys=new Set(own.map(x=>x[0])),given=[...d.m.values()].map(([k,v])=>[str(k),v]);
+  const missing=own.map(x=>x[0]).filter(k=>!d.m.has(numKey(S(k)))),unexpected=given.map(x=>x[0]).filter(k=>!ownKeys.has(k)),sizeErr=[];
+  for(const[k,p]of own){const e=d.m.get(numKey(S(k)));if(!e)continue;const v=e[1];if(!isT(v))err('TypeError',`expected torch.Tensor or Tensor-like object from checkpoint but received ${typeName(v)}`);
+    if(v.shape.join()!==p.shape.join()){sizeErr.push(`size mismatch for ${k}: copying a param with shape torch.Size([${v.shape.join(', ')}]) from checkpoint, the shape in current model is torch.Size([${p.shape.join(', ')}]).`);continue}
+    for(let q=0;q<p.data.length;q++)p.data[q]=castVal(v.data[q],p.dtype)}
+  const msgs=[];if(strict){if(missing.length)msgs.push('Missing key(s) in state_dict: '+missing.map(k=>`"${k}"`).join(', ')+'. ');if(unexpected.length)msgs.splice(0,0,...[]),msgs.push('Unexpected key(s) in state_dict: '+unexpected.map(k=>`"${k}"`).join(', ')+'. ')}
+  msgs.push(...sizeErr);if(msgs.length)err('RuntimeError',`Error(s) in loading state_dict for ${modName(m)}:\n\t`+msgs.join('\n\t'));
+  return{t:'inckeys',missing,unexpected}}
 function setTraining(m,v){if(m.t==='nn')m.training=v;else m.attrs.training=B(v);for(const[,c]of modChildren(m))setTraining(c,v)}
 function moduleMethods(m){return{
   parameters:()=>({t:'iter',items:namedParams(m).map(x=>x[1]),pos:0}),named_parameters:()=>({t:'iter',items:namedParams(m).map(([k,p])=>tup([S(k),p])),pos:0}),
@@ -65,8 +75,10 @@ function moduleMethods(m){return{
   train:a=>{setTraining(m,a.length?truthy(a[0]):true);return m},eval:()=>{setTraining(m,false);return m},
   apply:(a,kw,ctx)=>{const walk=x=>{for(const[,c]of modChildren(x))walk(c);callValue(a[0],[x],{},ctx)};walk(m);return m},
   zero_grad:()=>{for(const[,p]of namedParams(m))p.grad=null;return NONE},
-  state_dict:()=>mkDict(namedParams(m).map(([k,p])=>{const d=mkT(p.shape.slice(),[],p.dtype);d.data=p.data;return[S(k),d]})),
-  load_state_dict:a=>{const d=a[0];for(const[k,p]of namedParams(m)){const e=d.m.get(numKey(S(k)));if(e)p.data.set(e[1].data)}return NONE},
+  state_dict:()=>{const d=mkDict(namedParams(m,'',false).map(([k,p])=>{const t=mkT(p.shape.slice(),[],p.dtype);t.data=p.data;return[S(k),t]}));d.odict=true;return d},
+  load_state_dict:(a,kw)=>loadStateDict(m,a[0],kw.strict?truthy(kw.strict):a[1]?truthy(a[1]):true),
+  named_children:()=>({t:'iter',items:modChildren(m).map(([k,c])=>tup([S(k),c])),pos:0}),
+  named_modules:()=>{const all=[tup([S(''),m])];const walk=(x,pre)=>{for(const[k,c]of modChildren(x)){all.push(tup([S(pre+k),c]));walk(c,pre+k+'.')}};walk(m,'');return{t:'iter',items:all,pos:0}},
   to:()=>m,cpu:()=>m,cuda:()=>m,double:()=>{for(const[,p]of namedParams(m)){p.dtype='float64'}return m},
   forward:(a,kw,ctx)=>nnForward(m,a,ctx),add_module:a=>{if(m.t==='nn')m.children.push([str(a[0]),a[1]]);else m.attrs[str(a[0])]=a[1];return NONE}}}
 function nnAttr(m,name){const c=m.cfg;
@@ -84,9 +96,9 @@ function nnMake(kind,a,kw){const bkw=(k,d)=>kw[k]!==undefined?truthy(kw[k]):d;
     default:return nnObj(kind,{reduction:redOf(kw)})}}
 // nn.Module：给 class MyNet(nn.Module) 继承用
 const ModuleCls={t:'cls',name:'Module',base:null,attrs:Object.create(null)};
-ModuleCls.attrs.__init__=fn('__init__',a=>{const self=a[0];self.attrs.training=B(true);return NONE});ModuleCls.attrs.__init__.method=true;
+ModuleCls.attrs.__init__=fn('__init__',a=>{const self=a[0];self.attrs.training=B(true);const d=mkDict([]);d.odict=true;self.attrs._modules=d;return NONE});ModuleCls.attrs.__init__.method=true;
 ModuleCls.attrs.__call__=fn('__call__',(a,kw,ctx)=>{const self=a[0];const f=classLookup(self.cls,'forward');if(!f)err('NotImplementedError',`Module [${self.cls.name}] is missing the required "forward" function`);return callValue({t:'bound',f,self},a.slice(1),kw,ctx)});ModuleCls.attrs.__call__.method=true;
-for(const k of['parameters','named_parameters','children','modules','train','eval','apply','zero_grad','state_dict','load_state_dict','to','cpu','cuda','add_module']){ModuleCls.attrs[k]=fn(k,(a,kw,ctx)=>moduleMethods(a[0])[k](a.slice(1),kw,ctx));ModuleCls.attrs[k].method=true}
+for(const k of['parameters','named_parameters','children','named_children','modules','named_modules','train','eval','apply','zero_grad','state_dict','load_state_dict','to','cpu','cuda','add_module']){ModuleCls.attrs[k]=fn(k,(a,kw,ctx)=>moduleMethods(a[0])[k](a.slice(1),kw,ctx));ModuleCls.attrs[k].method=true}
 const NN_KINDS=['Linear','Sequential','Flatten','ReLU','Sigmoid','Tanh','Softmax','LogSoftmax','Dropout','Identity','MSELoss','L1Loss','HuberLoss','SmoothL1Loss','CrossEntropyLoss','BCELoss','BCEWithLogitsLoss'];
 const nnInit=mod('torch.nn.init',{
   normal_:fn('normal_',(a,kw)=>{const T=a[0],m=numOf(kwOr(kw,a,'mean',1,F(0))),s=numOf(kwOr(kw,a,'std',2,F(1)));for(let i=0;i<T.data.length;i++)T.data[i]=castVal(m+s*gauss(),T.dtype);return T}),

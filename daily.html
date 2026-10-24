@@ -207,7 +207,7 @@ code.big{font-size:.8em;background:var(--sunk);padding:0 .25em;border-radius:6px
 </style><header class="top"><div class="wrap">
   <span class="brand">动手学深度学习每日课</span>
   <nav class="days" id="dayNav" aria-label="课程天数">
-    <a href="#day1" data-nav="1">第 1 天</a><a href="#day2" data-nav="2">第 2 天</a><a href="#day3" data-nav="3">第 3 天</a><a href="#day4" data-nav="4">第 4 天</a><a href="#day5" data-nav="5">第 5 天</a><a href="#day6" data-nav="6">第 6 天</a><a href="#day7" data-nav="7">第 7 天</a><a href="#day8" data-nav="8">第 8 天</a><a href="#day9" data-nav="9">第 9 天</a><a href="#day10" data-nav="10">第 10 天</a>
+    <a href="#day1" data-nav="1">第 1 天</a><a href="#day2" data-nav="2">第 2 天</a><a href="#day3" data-nav="3">第 3 天</a><a href="#day4" data-nav="4">第 4 天</a><a href="#day5" data-nav="5">第 5 天</a><a href="#day6" data-nav="6">第 6 天</a><a href="#day7" data-nav="7">第 7 天</a><a href="#day8" data-nav="8">第 8 天</a><a href="#day9" data-nav="9">第 9 天</a><a href="#day10" data-nav="10">第 10 天</a><a href="#day11" data-nav="11">第 11 天</a>
     <a href="#road" class="road-link">课程表</a>
     <a class="soon" href="#road">第 9 天</a><a class="soon" href="#road">第 10 天</a>
   </nav>
@@ -2876,6 +2876,368 @@ w = (pia / W["mu"][bt, 1:Lb]).clamp(max=WCLIP)        <span class="c"># WCLIP = 
 </section>
 </main>
 
+<main class="wrap day" id="day11" data-day="11" hidden>
+<section class="hero">
+  <div class="eyebrow">第 11 天 · 原书第 5.1 节 + 第 5.2 节 + 第 5.4 节 + 第 5.5 节 · 论文路线第 4 课</div>
+  <h1>自己写 nn.Module，管理和保存参数</h1>
+  <p class="lead">到现在为止，网络都是用 <code>nn.Sequential</code> 一层层堆起来的。你论文里的 DKT、DKVMN、SAKT 却都是 <code>class DKT(KTBase)</code> 这样自己写的类。今天学怎么写这样的类，怎么查看、初始化、共享参数，以及怎么保存和恢复参数。学完以后，论文里每个模型的类定义和“保存最佳检查点”的代码就都能读懂了。</p>
+  <div class="plan">
+    <div><b class="k">今天的时间</b>大约 60 分钟。代码格都很快，自动运行。</div>
+    <div><b class="k">学完你能</b><ul><li>继承 <code>nn.Module</code> 写自己的块</li><li>用 <code>named_parameters</code>、<code>state_dict</code> 查看参数</li><li>用 <code>nn.Parameter</code> 写自定义层</li><li>保存、加载参数，知道为什么要 <code>clone()</code></li></ul></div>
+    <div><b class="k">和你的论文</b><ul><li><code>class DKT(KTBase)</code> 的每一行</li><li>DKT 一共有多少参数</li><li><code>best_state</code> 和 <code>load_state_dict</code></li></ul></div>
+  </div>
+</section>
+
+<section class="part" id="blocks">
+  <div class="part-h"><div class="eyebrow">第一部分</div><h2>5.1 层和块</h2><span class="src">对应原书第 5.1 节，代码来自原书 PyTorch 版</span></div>
+  <div class="prose"><div class="row"><button class="btn primary runAll" data-day="11">从头全部运行</button><span class="small muted runAllMsg"></span></div></div>
+  <div class="blk">
+    <div class="prose"><p><b>块</b>（block）可以是一层，也可以是很多层的组合，甚至是整个模型。在 PyTorch 里，块就是 <code>nn.Module</code> 的子类。先回顾第 8 天的写法：</p></div>
+    <div class="cell"><textarea>import torch
+from torch import nn
+from torch.nn import functional as F
+
+net = nn.Sequential(nn.Linear(20, 256), nn.ReLU(), nn.Linear(256, 10))
+
+X = torch.rand(2, 20)
+net(X)</textarea></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">5.1.1</span><h3>自定义块</h3></div>
+    <div class="prose"><p>自己写一个块，只要做两件事：在 <code>__init__</code> 里创建要用的层（先调用 <code>super().__init__()</code>），在 <code>forward</code> 里写怎么从输入算到输出。反向传播不用写，自动求导会处理。</p></div>
+    <div class="cell"><textarea>class MLP(nn.Module):
+    # 用模型参数声明层。这里，我们声明两个全连接的层
+    def __init__(self):
+        # 调用MLP的父类Module的构造函数来执行必要的初始化。
+        # 这样，在类实例化时也可以指定其他函数参数，例如模型参数params（稍后将介绍）
+        super().__init__()
+        self.hidden = nn.Linear(20, 256)  # 隐藏层
+        self.out = nn.Linear(256, 10)  # 输出层
+
+    # 定义模型的前向传播，即如何根据输入X返回所需的模型输出
+    def forward(self, X):
+        # 注意，这里我们使用ReLU的函数版本，其在nn.functional模块中定义。
+        return self.out(F.relu(self.hidden(X)))</textarea></div>
+    <div class="cell"><textarea>net = MLP()
+net(X)</textarea></div>
+    <div class="prose"><p><code>net(X)</code> 其实调用的是 <code>net.__call__(X)</code>，它再去调用 <code>forward</code>。打印 <code>net</code> 会列出所有子块，名字就是你在 <code>__init__</code> 里起的属性名：</p></div>
+    <div class="cell"><textarea>net</textarea></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">5.1.2</span><h3>顺序块</h3></div>
+    <div class="prose"><p>自己实现一个 <code>Sequential</code>：把传进来的块按顺序存进 <code>_modules</code>（一个有序字典），前向传播时依次调用。存进 <code>_modules</code> 的块，PyTorch 才知道它们的参数要一起训练。</p></div>
+    <div class="cell"><textarea>class MySequential(nn.Module):
+    def __init__(self, *args):
+        super().__init__()
+        for idx, module in enumerate(args):
+            # 这里，module是Module子类的一个实例。我们把它保存在'Module'类的成员
+            # 变量_modules中。_module的类型是OrderedDict
+            self._modules[str(idx)] = module
+
+    def forward(self, X):
+        # OrderedDict保证了按照成员添加的顺序遍历它们
+        for block in self._modules.values():
+            X = block(X)
+        return X</textarea></div>
+    <div class="cell"><textarea>net = MySequential(nn.Linear(20, 256), nn.ReLU(), nn.Linear(256, 10))
+net(X)</textarea></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">5.1.3</span><h3>在前向传播中执行代码</h3></div>
+    <div class="prose"><p><code>forward</code> 里可以写任何 Python 代码：常数参数、复用同一层、循环和判断。下面这个块里，<code>rand_weight</code> 不是参数（不会被训练），<code>self.linear</code> 用了两次（两次共享同一组参数），最后还有一个 <code>while</code> 循环。</p></div>
+    <div class="cell"><textarea>class FixedHiddenMLP(nn.Module):
+    def __init__(self):
+        super().__init__()
+        # 不计算梯度的随机权重参数。因此其在训练期间保持不变
+        self.rand_weight = torch.rand((20, 20), requires_grad=False)
+        self.linear = nn.Linear(20, 20)
+
+    def forward(self, X):
+        X = self.linear(X)
+        # 使用创建的常量参数以及relu和mm函数
+        X = F.relu(torch.mm(X, self.rand_weight) + 1)
+        # 复用全连接层。这相当于两个全连接层共享参数
+        X = self.linear(X)
+        # 控制流
+        while X.abs().sum() > 1:
+            X /= 2
+        return X.sum()</textarea></div>
+    <div class="cell"><textarea>net = FixedHiddenMLP()
+net(X), len(list(net.parameters()))   # 只有 linear 的 weight 和 bias 两个参数</textarea></div>
+    <div class="prose"><p>块可以嵌套：</p></div>
+    <div class="cell"><textarea>class NestMLP(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.net = nn.Sequential(nn.Linear(20, 64), nn.ReLU(),
+                                 nn.Linear(64, 32), nn.ReLU())
+        self.linear = nn.Linear(32, 16)
+
+    def forward(self, X):
+        return self.linear(self.net(X))
+
+chimera = nn.Sequential(NestMLP(), nn.Linear(16, 20), FixedHiddenMLP())
+chimera(X)</textarea></div>
+    <div class="callout"><h4>对照你的论文：KTBase 和 DKT</h4><p>你论文 <code>experiment.py</code> 第 1012 行先定义了一个所有 KT 模型共用的父类，第 1032 行的 DKT 再继承它：</p>
+<pre class="code">class KTBase(nn.Module):
+    def __init__(self, K):
+        super().__init__()
+        self.K = K                        <span class="c"># 知识点个数，普通属性，不是参数</span>
+
+class DKT(KTBase):
+    def __init__(self, K, d=D_MODEL, policy_head=False):     <span class="c"># D_MODEL = 64</span>
+        super().__init__(K)               <span class="c"># 调用 KTBase.__init__，它再调用 nn.Module.__init__</span>
+        self.emb = nn.Embedding(2 * K, d); self.lstm = nn.LSTM(d, d, batch_first=True)
+        self.drop = nn.Dropout(0.2); self.out = nn.Linear(d, K)
+        self.is_df = policy_head
+        if policy_head:                   <span class="c"># 只有 Safe-DFKT 系列才有策略头</span>
+            self.g = nn.Linear(d, K)
+            nn.init.zeros_(self.g.weight); nn.init.zeros_(self.g.bias)
+
+    def encode(self, sk, rs):
+        x = self.emb(sk + self.K * rs.long()); h, _ = self.lstm(x)
+        return {"h": self.drop(h), "B": sk.shape[0]}</pre>
+      <p>注意两点。第一，<code>if policy_head:</code> 是在 <code>__init__</code> 里根据参数决定要不要创建一层，同一个类能造出两种模型（这也是 5.1.3 说的“块里可以写任何 Python 代码”）。第二，这个类<b>没有写 <code>forward</code></b>，而是写了 <code>encode</code>、<code>readout</code> 这些自己起名的方法，训练代码直接调用 <code>model.encode(...)</code>。这样做是可以的：<code>forward</code> 只在你写 <code>model(x)</code> 时才被用到。要是对这个类写 <code>model(x)</code>，就会报下面这种错：</p></div>
+    <div class="cell"><textarea>class KTBase(nn.Module):
+    def __init__(self, K):
+        super().__init__()
+        self.K = K
+
+class Tiny(KTBase):
+    def __init__(self, K, d=4):
+        super().__init__(K)
+        self.emb = nn.Linear(2 * K, d)
+        self.out = nn.Linear(d, K)
+    def encode(self, x):
+        return torch.relu(self.emb(x))
+
+m = Tiny(3)
+print(m.K, [n for n, _ in m.named_parameters()])
+m.encode(torch.ones(1, 6)).shape</textarea></div>
+    <div class="cell"><textarea>m(torch.ones(1, 6))   # 故意报错：没有 forward</textarea></div>
+  </div>
+</section>
+
+<section class="part" id="params">
+  <div class="part-h"><div class="eyebrow">第二部分</div><h2>5.2 参数管理</h2><span class="src">对应原书第 5.2 节，代码来自原书 PyTorch 版</span></div>
+  <div class="blk"><div class="blk-h"><span class="n">5.2.1</span><h3>访问参数</h3></div>
+    <div class="cell"><textarea>net = nn.Sequential(nn.Linear(4, 8), nn.ReLU(), nn.Linear(8, 1))
+X = torch.rand(size=(2, 4))
+net(X)</textarea></div>
+    <div class="prose"><p><code>net[2]</code> 取出第 3 个子块（第二个线性层）。<code>state_dict()</code> 是一个有序字典，名字对应参数：</p></div>
+    <div class="cell"><textarea>print(net[2].state_dict())</textarea></div>
+    <div class="cell"><textarea>print(type(net[2].bias))
+print(net[2].bias)
+print(net[2].bias.data)</textarea></div>
+    <div class="prose"><p>参数是 <code>Parameter</code> 类型，它是一种特殊的张量，带着 <code>requires_grad=True</code>。还没有反向传播过，所以梯度是 <code>None</code>：</p></div>
+    <div class="cell"><textarea>net[2].weight.grad == None</textarea></div>
+    <div class="prose"><p>一次看所有参数。名字里的数字是子块在 <code>Sequential</code> 里的位置，点号表示嵌套：</p></div>
+    <div class="cell"><textarea>print(*[(name, param.shape) for name, param in net[0].named_parameters()])
+print(*[(name, param.shape) for name, param in net.named_parameters()])</textarea></div>
+    <div class="cell"><textarea>net.state_dict()['2.bias'].data</textarea></div>
+    <div class="prose"><p>嵌套块：<code>add_module</code> 可以给子块起任意名字。</p></div>
+    <div class="cell"><textarea>def block1():
+    return nn.Sequential(nn.Linear(4, 8), nn.ReLU(),
+                         nn.Linear(8, 4), nn.ReLU())
+
+def block2():
+    net = nn.Sequential()
+    for i in range(4):
+        # 在这里嵌套
+        net.add_module(f'block {i}', block1())
+    return net
+
+rgnet = nn.Sequential(block2(), nn.Linear(4, 1))
+rgnet(X)</textarea></div>
+    <div class="cell"><textarea>print(rgnet)</textarea></div>
+    <div class="cell"><textarea>rgnet[0][1][0].bias.data</textarea></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">5.2.2</span><h3>参数初始化</h3></div>
+    <div class="prose"><p><code>net.apply(f)</code> 会对每一个子块（包括自己）调用一次 <code>f</code>。常见写法是在 <code>f</code> 里判断类型，只处理线性层：</p></div>
+    <div class="cell"><textarea>def init_normal(m):
+    if type(m) == nn.Linear:
+        nn.init.normal_(m.weight, mean=0, std=0.01)
+        nn.init.zeros_(m.bias)
+net.apply(init_normal)
+net[0].weight.data[0], net[0].bias.data[0]</textarea></div>
+    <div class="cell"><textarea>def init_constant(m):
+    if type(m) == nn.Linear:
+        nn.init.constant_(m.weight, 1)
+        nn.init.zeros_(m.bias)
+net.apply(init_constant)
+net[0].weight.data[0], net[0].bias.data[0]</textarea></div>
+    <div class="prose"><p>不同的层用不同的初始化：</p></div>
+    <div class="cell"><textarea>def init_xavier(m):
+    if type(m) == nn.Linear:
+        nn.init.xavier_uniform_(m.weight)
+def init_42(m):
+    if type(m) == nn.Linear:
+        nn.init.constant_(m.weight, 42)
+
+net[0].apply(init_xavier)
+net[2].apply(init_42)
+print(net[0].weight.data[0])
+print(net[2].weight.data)</textarea></div>
+    <div class="prose"><p>自定义初始化：先从 U(−10, 10) 里取，再把绝对值小于 5 的置 0。也可以直接改参数的值。</p></div>
+    <div class="cell"><textarea>def my_init(m):
+    if type(m) == nn.Linear:
+        print("Init", *[(name, param.shape)
+                        for name, param in m.named_parameters()][0])
+        nn.init.uniform_(m.weight, -10, 10)
+        m.weight.data *= m.weight.data.abs() >= 5
+
+net.apply(my_init)
+net[0].weight[:2]</textarea></div>
+    <div class="cell"><textarea>net[0].weight.data[:] += 1
+net[0].weight.data[0, 0] = 42
+net[0].weight.data[0]</textarea></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">5.2.3</span><h3>参数绑定（共享）</h3></div>
+    <div class="prose"><p>同一个层对象放在两个位置，两处用的就是同一组参数：改一处，另一处跟着变。反向传播时，两处的梯度会加在一起。</p></div>
+    <div class="cell"><textarea># 我们需要给共享层一个名称，以便可以引用它的参数
+shared = nn.Linear(8, 8)
+net = nn.Sequential(nn.Linear(4, 8), nn.ReLU(),
+                    shared, nn.ReLU(),
+                    shared, nn.ReLU(),
+                    nn.Linear(8, 1))
+net(X)
+# 检查参数是否相同
+print(net[2].weight.data[0] == net[4].weight.data[0])
+net[2].weight.data[0, 0] = 100
+# 确保它们实际上是同一个对象，而不只是有相同的值
+print(net[2].weight.data[0] == net[4].weight.data[0])</textarea></div>
+    <div class="prose"><p>一个细节：<code>parameters()</code> 会去掉重复，只算 6 个；<code>state_dict()</code> 不去重，有 8 项，<code>2.weight</code> 和 <code>4.weight</code> 都在。</p></div>
+    <div class="cell"><textarea>len(list(net.parameters())), list(net.state_dict().keys())</textarea></div>
+    <div class="panel stack" id="pcLab">
+      <h4>你论文的 DKT 有多少参数</h4>
+      <p class="small muted">下面是 <code>DKT(K, d, policy_head)</code> 的 <code>named_parameters()</code>，名字和形状都和真 PyTorch 打印的一样。选数据集（K 是知识点个数）、拖动隐藏维度 d，看每一项的参数量怎么变。</p>
+      <div class="row">
+        <label class="ctrl" for="pcDs">数据集 <select id="pcDs"><option value="145">ASSISTments 2009（K = 145）</option><option value="98">EdNet（K = 98）</option><option value="107">Algebra 2005（K = 107）</option><option value="681">Junyi（K = 681）</option></select></label>
+        <label class="ctrl" for="pcD">隐藏维度 d <output id="pcDv">64</output><input type="range" id="pcD" min="8" max="256" step="8" value="64"></label>
+        <label class="ctrl" for="pcG"><span>策略头 g</span><select id="pcG"><option value="1">有（Safe-DFKT 系列）</option><option value="0">没有（普通 DKT）</option></select></label>
+      </div>
+      <div class="tblwrap"><table class="t" id="pcTbl"></table></div>
+      <div class="calc pw" id="pcCalc"></div>
+    </div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">5.4</span><h3>自定义层和 nn.Parameter</h3></div>
+    <div class="prose"><p>原书 5.4 节：层也是块，写法一样。第一个层没有参数，只是把输入减去均值：</p></div>
+    <div class="cell"><textarea>import torch.nn.functional as F
+
+class CenteredLayer(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, X):
+        return X - X.mean()
+
+layer = CenteredLayer()
+layer(torch.FloatTensor([1, 2, 3, 4, 5]))</textarea></div>
+    <div class="prose"><p>带参数的层：用 <code>nn.Parameter</code> 包一个张量，赋给 <code>self</code> 的属性，它就会自动出现在 <code>parameters()</code> 里，被优化器训练。</p></div>
+    <div class="cell"><textarea>class MyLinear(nn.Module):
+    def __init__(self, in_units, units):
+        super().__init__()
+        self.weight = nn.Parameter(torch.randn(in_units, units))
+        self.bias = nn.Parameter(torch.randn(units,))
+    def forward(self, X):
+        linear = torch.matmul(X, self.weight.data) + self.bias.data
+        return F.relu(linear)
+
+linear = MyLinear(5, 3)
+linear.weight.shape, [n for n, _ in linear.named_parameters()]</textarea></div>
+    <div class="callout"><h4>对照你的论文</h4><p>DKVMN 的记忆矩阵就是这样定义的（第 1116 行）：<code>self.Mk = nn.Parameter(torch.randn(N, d) * 0.1)</code>，N 个记忆槽、每个 d 维，乘 0.1 让初始值小一点（第 10 天讲过初始化尺度）。simpleKT 的 <code>self.dvec = nn.Parameter(torch.randn(d) * 0.05)</code> 也一样。它们不是哪种现成的层，就是一块可以训练的张量。</p></div>
+  </div>
+</section>
+
+<section class="part" id="saveload">
+  <div class="part-h"><div class="eyebrow">第三部分</div><h2>5.5 读写文件</h2><span class="src">对应原书第 5.5 节。本页的“文件”存在网页内存里，刷新就没了</span></div>
+  <div class="blk">
+    <div class="prose"><p><code>torch.save</code> 和 <code>torch.load</code> 可以保存张量、张量列表、字典：</p></div>
+    <div class="cell"><textarea>x = torch.arange(4)
+torch.save(x, 'x-file')
+x2 = torch.load('x-file')
+x2</textarea></div>
+    <div class="cell"><textarea>y = torch.zeros(4)
+torch.save([x, y],'x-files')
+x2, y2 = torch.load('x-files')
+(x2, y2)</textarea></div>
+    <div class="cell"><textarea>mydict = {'x': x, 'y': y}
+torch.save(mydict, 'mydict')
+mydict2 = torch.load('mydict')
+mydict2</textarea></div>
+    <div class="prose"><p>保存模型时，保存的是<b>参数</b>（<code>state_dict</code>），不是整个模型。要恢复，先用同样的类建一个新模型，再把参数加载进去。</p></div>
+    <div class="cell"><textarea>class MLP(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.hidden = nn.Linear(20, 256)
+        self.output = nn.Linear(256, 10)
+
+    def forward(self, x):
+        return self.output(F.relu(self.hidden(x)))
+
+net = MLP()
+X = torch.randn(size=(2, 20))
+Y = net(X)</textarea></div>
+    <div class="cell"><textarea>torch.save(net.state_dict(), 'mlp.params')</textarea></div>
+    <div class="cell"><textarea>clone = MLP()
+clone.load_state_dict(torch.load('mlp.params'))
+clone.eval()</textarea></div>
+    <div class="cell"><textarea>Y_clone = clone(X)
+Y_clone == Y</textarea></div>
+    <div class="prose"><p>形状对不上、少了或多了参数名，<code>load_state_dict</code> 会报错并列出原因：</p></div>
+    <div class="cell"><textarea>small = nn.Linear(3, 2)
+small.load_state_dict({'weight': torch.ones(3, 3), 'bias': torch.zeros(2)})   # 故意报错</textarea></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">补充</span><h3>在内存里存检查点：为什么要 clone()</h3></div>
+    <div class="prose"><p>你论文没有把检查点写到硬盘，而是存在内存里的一个字典。这里有个坑：<code>state_dict()</code> 返回的张量和模型参数<b>共用同一块内存</b>。不 <code>clone()</code> 的话，以后参数一更新，“存下来的最佳参数”也跟着变了。</p></div>
+    <div class="cell"><textarea>net = MLP()
+nn.init.constant_(net.output.bias, 0.5)
+best_wrong = net.state_dict()          # 没有 clone：和参数共用内存
+best_right = {k: v.detach().clone() for k, v in net.state_dict().items()}
+with torch.no_grad():
+    net.output.bias.fill_(7.0)         # 假装又训练了几步，参数变了
+print(best_wrong['output.bias'][:3])   # 跟着变成了 7
+print(best_right['output.bias'][:3])   # 还是 0.5</textarea></div>
+    <div class="cell"><textarea>net.load_state_dict(best_right)        # 训练完，恢复到最佳检查点
+net.output.bias[:3]</textarea></div>
+    <div class="callout"><h4>对照你的论文</h4><p>第 9 天看过的这两行，现在每个词都认识了。<code>.detach()</code> 断开计算图，<code>.clone()</code> 复制一份新内存：</p>
+<pre class="code">best_state = {k: v.detach().clone() for k, v in model.state_dict().items()}   <span class="c"># 第 1369 行</span>
+...
+model.load_state_dict(best_state)                                            <span class="c"># 第 1394 行</span></pre>
+      <p>第 1664 行把基础模型的参数存进缓存时还多了 <code>.cpu()</code>，是为了把参数从显卡搬到内存；第 1691 行加载时用 <code>.to(DEV)</code> 再搬回去。本页没有显卡，这两步可以忽略。</p></div>
+  </div>
+</section>
+
+<section class="part quiz-sec">
+  <div class="part-h"><div class="eyebrow">课后题</div><h2>做几道题检查一下</h2><span class="src">选择题点选项马上出结果；写形状和写代码的题，网页会现场运行代码判断对错。答题记录只存在你这台设备的浏览器里。</span></div>
+  <div class="quiz dayquiz" data-day="11"></div>
+  <div class="row small muted quizscore" data-day="11"></div>
+</section>
+
+<section class="part">
+  <div class="part-h"><div class="eyebrow">今日小结</div><h2>今天学会了吗？</h2></div>
+  <div class="two">
+    <div class="panel stack">
+      <ul class="check-list" data-day="11">
+        <li><label><input type="checkbox" data-k="c1">自定义块：<code>__init__</code> 里先 <code>super().__init__()</code> 再建层，<code>forward</code> 写计算</label></li>
+        <li><label><input type="checkbox" data-k="c2">参数名怎么来的：属性名或下标，用点号连起来，比如 <code>lstm.weight_ih_l0</code></label></li>
+        <li><label><input type="checkbox" data-k="c3">用 <code>apply</code> 初始化，同一个层对象放两处就是参数共享</label></li>
+        <li><label><input type="checkbox" data-k="c4"><code>nn.Parameter</code> 让一个张量变成可训练参数</label></li>
+        <li><label><input type="checkbox" data-k="c5">保存 <code>state_dict</code>；在内存里存检查点要 <code>detach().clone()</code></label></li>
+      </ul>
+      <span class="small check-msg"></span>
+    </div>
+    <div class="panel stack">
+      <h3>明天（第 12 天）学什么</h3>
+      <p>进入第 8 章循环神经网络：序列模型、语言模型、循环神经网络的结构。学生的做题记录就是一个序列，DKT 用 RNN（LSTM）读这个序列。明天会第一次看到“隐状态”是什么。</p>
+    </div>
+  </div>
+</section>
+</main>
+
 <div class="wrap"><section class="part road-sec" id="road">
   <div class="part-h"><div class="eyebrow">课程表</div><h2>按你的论文排的学习路线</h2><span class="src">第 1 到 7 天是基础，按原书顺序。从第 8 天起只挑你论文用到的章节：多层感知机、正则化、自定义模型、循环网络和 LSTM（DKT）、注意力和 Transformer（SAKT、AKT、simpleKT）、Adam，最后是两个书里没有的论文专题。卷积、计算机视觉、NLP 应用等和论文关系不大的章节放到最后选学。</span></div>
   <div class="road" id="roadList"></div>
@@ -2975,8 +3337,8 @@ function pyFloatRepr(v){if(Number.isNaN(v))return'nan';if(!Number.isFinite(v))re
 function strRepr(s){const q=s.includes("'")&&!s.includes('"')?'"':"'";return q+s.replace(/\\/g,'\\\\').replace(/\n/g,'\\n').replace(/\t/g,'\\t')+q}
 function repr(v){if(isT(v))return(v.isParam?'Parameter containing:\n':'')+tensorRepr(v);
   switch(v.t){case'int':return String(v.v);case'float':return v.np?`np.float64(${pyFloatRepr(v.v)})`:pyFloatRepr(v.v);case'bool':return v.v?'True':'False';case'none':return'None';case'str':return strRepr(v.v);
-    case'tuple':return'('+v.items.map(repr).join(', ')+(v.items.length===1?',':'')+')';case'list':return'['+v.items.map(repr).join(', ')+']';
-    case'dict':return'{'+[...v.m.values()].map(([k,x])=>repr(k)+': '+repr(x)).join(', ')+'}';
+    case'tuple':return'('+v.items.map(repr).join(', ')+(v.items.length===1?',':'')+')';case'list':return(v.view?v.view+'(':'')+'['+v.items.map(repr).join(', ')+']'+(v.view?')':'');case'inckeys':return v.missing.length||v.unexpected.length?`_IncompatibleKeys(missing_keys=[${v.missing.map(strRepr).join(', ')}], unexpected_keys=[${v.unexpected.map(strRepr).join(', ')}])`:'<All keys matched successfully>';
+    case'dict':{const body='{'+[...v.m.values()].map(([k,x])=>repr(k)+': '+repr(x)).join(', ')+'}';return v.odict?(v.m.size?`OrderedDict(${body})`:'OrderedDict()'):body}
     case'range':return`range(${v.start}, ${v.stop}${v.step!==1?', '+v.step:''})`;
     case'size':return`torch.Size([${v.dims.join(', ')}])`;case'dtype':return`torch.${v.name}`;case'type':return`<class '${v.name}'>`;case'mod':return`<module '${v.name}'>`;
     case'fn':return`<built-in function ${v.name}>`;case'func':return`<function ${v.name} at 0x${(v.id||4400000000).toString(16)}>`;case'gradfn':return`<${v.g.name} object at 0x${v.g.id.toString(16)}>`;
@@ -3276,6 +3638,14 @@ const torch=mod('torch',{
   Tensor:{t:'type',name:'torch.Tensor'},
 });
 torch.attrs.distributions.attrs.Multinomial=torch.attrs.distributions.attrs.multinomial.attrs.Multinomial;
+// torch.save / torch.load：存进网页里的模拟文件系统（深拷贝一份，之后改原对象不影响文件）
+function pyDeepCopy(v){if(isT(v)){const c=mkT(v.shape.slice(),v.data,v.dtype,v.np);if(v.isParam){c.isParam=true;c.requires_grad=v.requires_grad}else c.requires_grad=v.requires_grad&&!v.grad_fn;return c}
+  if(v.t==='list')return list(v.items.map(pyDeepCopy));if(v.t==='tuple')return tup(v.items.map(pyDeepCopy));
+  if(v.t==='dict'){const d=mkDict([...v.m.values()].map(([k,x])=>[k,pyDeepCopy(x)]));d.odict=v.odict;return d}
+  if(['int','float','bool','str','none'].includes(v.t))return v;err('TypeError',`本页的 torch.save 只支持张量、列表、元组、字典和数字，不支持 ${typeName(v)}。保存模型请用 torch.save(net.state_dict(), 路径)`)}
+torch.attrs.FloatTensor=fn('FloatTensor',a=>torch.attrs.tensor.call([a[0]],{dtype:torch.attrs.float32}));torch.attrs.LongTensor=fn('LongTensor',a=>torch.attrs.tensor.call([a[0]],{dtype:torch.attrs.int64}));
+torch.attrs.save=fn('save',a=>{const p=normPath(str(a[1]));const dir=p.includes('/')?p.slice(0,p.lastIndexOf('/')):'.';if(dir!=='.'&&!DIRS.has(dir))err('RuntimeError',`Parent directory ${dir} does not exist.`);FS.set(p,{pickled:pyDeepCopy(a[0])});return NONE});
+torch.attrs.load=fn('load',a=>{const p=normPath(str(a[0]));if(!FS.has(p))err('FileNotFoundError',`[Errno 2] No such file or directory: '${str(a[0])}'`);const v=FS.get(p);if(typeof v==='string')err('UnpicklingError','invalid load key, 不是用 torch.save 保存的文件');return pyDeepCopy(v.pickled)});
 function distAttr(d,name){if(name==='sample')return fn('sample',a=>multinomialSample(d.n,d.probs,a[0]?dimsArg([a[0]]):[]));if(name==='probs')return d.probs;err('AttributeError',`'Multinomial' object has no attribute '${name}'`)}
 const npArr=(T)=>{const R=mkT(T.shape.slice(),T.data,T.dtype,true);return R};
 const numpy=mod('numpy',{
@@ -3389,7 +3759,7 @@ const builtins={
   super:fn('super',(a,kw,ctx)=>{const sc=ctx.scope;let cls=null,self=null;try{cls=sc.get('__class__');self=sc.get('__self__')}catch(e){err('RuntimeError','super(): no arguments')}return{t:'super',cls,self}}),
   print:fn('print',(a,kw,ctx)=>{const s=a.map(str).join(kw.sep?str(kw.sep):' ')+(kw.end?str(kw.end):'\n');ctx.outBuf+=s;return NONE}),
   id:fn('id',a=>I(isT(a[0])?a[0].id:a[0].id||(a[0].id=newId()))),
-  type:fn('type',a=>a[0].t==='nn'?nnMod.attrs[a[0].kind]:a[0].t==='obj'?a[0].cls:({t:'type',name:isT(a[0])?(a[0].np?'numpy.ndarray':'torch.Tensor'):a[0].t==='df'?'pandas.DataFrame':a[0].t==='series'?'pandas.Series':typeName(a[0])})),
+  type:fn('type',a=>a[0].t==='nn'?nnMod.attrs[a[0].kind]:a[0].t==='obj'?a[0].cls:({t:'type',name:isT(a[0])?(a[0].np?'numpy.ndarray':a[0].isParam?'torch.nn.parameter.Parameter':'torch.Tensor'):a[0].t==='df'?'pandas.DataFrame':a[0].t==='series'?'pandas.Series':a[0].t==='dict'&&a[0].odict?'collections.OrderedDict':typeName(a[0])})),
   float:fn('float',a=>{const v=a[0];if(!v)return F(0);if(isT(v)){if(v.data.length!==1)err(v.np?'TypeError':'ValueError',v.np?'only length-1 arrays can be converted to Python scalars':'only one element tensors can be converted to Python scalars');return F(v.data[0])}if(v.t==='str'){const s=v.v.trim().toLowerCase();if(s==='nan')return F(NaN);if(s==='inf')return F(Infinity);const x=Number(s);if(s===''||Number.isNaN(x))err('ValueError',`could not convert string to float: '${v.v}'`);return F(x)}return F(numOf(v))}),
   int:fn('int',a=>{const v=a[0];if(!v)return I(0);if(isT(v)){if(v.data.length!==1)err('ValueError','only one element tensors can be converted to Python scalars');return I(Math.trunc(v.data[0]))}if(v.t==='str'){if(!/^\s*[-+]?\d+\s*$/.test(v.v))err('ValueError',`invalid literal for int() with base 10: '${v.v}'`);return I(parseInt(v.v))}return I(Math.trunc(numOf(v)))}),
   bool:fn('bool',a=>B(a[0]?truthy(a[0]):false)),str:fn('str',a=>S(a[0]?str(a[0]):'')),repr:fn('repr',a=>S(repr(a[0]))),
@@ -3507,10 +3877,20 @@ function modRepr(v,ind=''){if(v.t==='nn')return nnRepr(v,ind);if(v.t==='obj'&&is
 function isModuleCls(c){while(c){if(c===ModuleCls)return true;c=c.base}return false}
 const isModuleObj=o=>o.t==='obj'&&isModuleCls(o.cls);
 const isMod=v=>v&&(v.t==='nn'||isModuleObj(v));
-function objChildren(o){return Object.entries(o.attrs).filter(([k,v])=>isMod(v))}
+function objChildren(o){const r=Object.entries(o.attrs).filter(([k,v])=>isMod(v));const d=o.attrs._modules;if(d&&d.t==='dict')for(const[k,v]of d.m.values())if(isMod(v))r.push([str(k),v]);return r}
 function modChildren(m){return m.t==='nn'?m.children:objChildren(m)}
-function namedParams(m,prefix=''){const out=[];if(m.t==='nn'){for(const[k,p]of Object.entries(m.params))if(p)out.push([prefix+k,p])}else for(const[k,v]of Object.entries(m.attrs))if(isT(v)&&v.isParam)out.push([prefix+k,v]);
-  for(const[k,c]of modChildren(m))out.push(...namedParams(c,prefix+k+'.'));const seen=new Set();return out.filter(([k,p])=>seen.has(p)?false:(seen.add(p),true))}
+function namedParams(m,prefix='',dedup=true){const out=[];if(m.t==='nn'){for(const[k,p]of Object.entries(m.params))if(p)out.push([prefix+k,p])}else for(const[k,v]of Object.entries(m.attrs))if(isT(v)&&v.isParam)out.push([prefix+k,v]);
+  for(const[k,c]of modChildren(m))out.push(...namedParams(c,prefix+k+'.',false));if(!dedup)return out;const seen=new Set();return out.filter(([k,p])=>seen.has(p)?false:(seen.add(p),true))}
+function modName(m){return m.t==='nn'?m.kind:m.cls.name}
+function loadStateDict(m,d,strict){if(d.t!=='dict')err('TypeError',`Expected state_dict to be dict-like, got ${typeName(d)}.`);
+  const own=namedParams(m,'',false),ownKeys=new Set(own.map(x=>x[0])),given=[...d.m.values()].map(([k,v])=>[str(k),v]);
+  const missing=own.map(x=>x[0]).filter(k=>!d.m.has(numKey(S(k)))),unexpected=given.map(x=>x[0]).filter(k=>!ownKeys.has(k)),sizeErr=[];
+  for(const[k,p]of own){const e=d.m.get(numKey(S(k)));if(!e)continue;const v=e[1];if(!isT(v))err('TypeError',`expected torch.Tensor or Tensor-like object from checkpoint but received ${typeName(v)}`);
+    if(v.shape.join()!==p.shape.join()){sizeErr.push(`size mismatch for ${k}: copying a param with shape torch.Size([${v.shape.join(', ')}]) from checkpoint, the shape in current model is torch.Size([${p.shape.join(', ')}]).`);continue}
+    for(let q=0;q<p.data.length;q++)p.data[q]=castVal(v.data[q],p.dtype)}
+  const msgs=[];if(strict){if(missing.length)msgs.push('Missing key(s) in state_dict: '+missing.map(k=>`"${k}"`).join(', ')+'. ');if(unexpected.length)msgs.splice(0,0,...[]),msgs.push('Unexpected key(s) in state_dict: '+unexpected.map(k=>`"${k}"`).join(', ')+'. ')}
+  msgs.push(...sizeErr);if(msgs.length)err('RuntimeError',`Error(s) in loading state_dict for ${modName(m)}:\n\t`+msgs.join('\n\t'));
+  return{t:'inckeys',missing,unexpected}}
 function setTraining(m,v){if(m.t==='nn')m.training=v;else m.attrs.training=B(v);for(const[,c]of modChildren(m))setTraining(c,v)}
 function moduleMethods(m){return{
   parameters:()=>({t:'iter',items:namedParams(m).map(x=>x[1]),pos:0}),named_parameters:()=>({t:'iter',items:namedParams(m).map(([k,p])=>tup([S(k),p])),pos:0}),
@@ -3518,8 +3898,10 @@ function moduleMethods(m){return{
   train:a=>{setTraining(m,a.length?truthy(a[0]):true);return m},eval:()=>{setTraining(m,false);return m},
   apply:(a,kw,ctx)=>{const walk=x=>{for(const[,c]of modChildren(x))walk(c);callValue(a[0],[x],{},ctx)};walk(m);return m},
   zero_grad:()=>{for(const[,p]of namedParams(m))p.grad=null;return NONE},
-  state_dict:()=>mkDict(namedParams(m).map(([k,p])=>{const d=mkT(p.shape.slice(),[],p.dtype);d.data=p.data;return[S(k),d]})),
-  load_state_dict:a=>{const d=a[0];for(const[k,p]of namedParams(m)){const e=d.m.get(numKey(S(k)));if(e)p.data.set(e[1].data)}return NONE},
+  state_dict:()=>{const d=mkDict(namedParams(m,'',false).map(([k,p])=>{const t=mkT(p.shape.slice(),[],p.dtype);t.data=p.data;return[S(k),t]}));d.odict=true;return d},
+  load_state_dict:(a,kw)=>loadStateDict(m,a[0],kw.strict?truthy(kw.strict):a[1]?truthy(a[1]):true),
+  named_children:()=>({t:'iter',items:modChildren(m).map(([k,c])=>tup([S(k),c])),pos:0}),
+  named_modules:()=>{const all=[tup([S(''),m])];const walk=(x,pre)=>{for(const[k,c]of modChildren(x)){all.push(tup([S(pre+k),c]));walk(c,pre+k+'.')}};walk(m,'');return{t:'iter',items:all,pos:0}},
   to:()=>m,cpu:()=>m,cuda:()=>m,double:()=>{for(const[,p]of namedParams(m)){p.dtype='float64'}return m},
   forward:(a,kw,ctx)=>nnForward(m,a,ctx),add_module:a=>{if(m.t==='nn')m.children.push([str(a[0]),a[1]]);else m.attrs[str(a[0])]=a[1];return NONE}}}
 function nnAttr(m,name){const c=m.cfg;
@@ -3537,9 +3919,9 @@ function nnMake(kind,a,kw){const bkw=(k,d)=>kw[k]!==undefined?truthy(kw[k]):d;
     default:return nnObj(kind,{reduction:redOf(kw)})}}
 // nn.Module：给 class MyNet(nn.Module) 继承用
 const ModuleCls={t:'cls',name:'Module',base:null,attrs:Object.create(null)};
-ModuleCls.attrs.__init__=fn('__init__',a=>{const self=a[0];self.attrs.training=B(true);return NONE});ModuleCls.attrs.__init__.method=true;
+ModuleCls.attrs.__init__=fn('__init__',a=>{const self=a[0];self.attrs.training=B(true);const d=mkDict([]);d.odict=true;self.attrs._modules=d;return NONE});ModuleCls.attrs.__init__.method=true;
 ModuleCls.attrs.__call__=fn('__call__',(a,kw,ctx)=>{const self=a[0];const f=classLookup(self.cls,'forward');if(!f)err('NotImplementedError',`Module [${self.cls.name}] is missing the required "forward" function`);return callValue({t:'bound',f,self},a.slice(1),kw,ctx)});ModuleCls.attrs.__call__.method=true;
-for(const k of['parameters','named_parameters','children','modules','train','eval','apply','zero_grad','state_dict','load_state_dict','to','cpu','cuda','add_module']){ModuleCls.attrs[k]=fn(k,(a,kw,ctx)=>moduleMethods(a[0])[k](a.slice(1),kw,ctx));ModuleCls.attrs[k].method=true}
+for(const k of['parameters','named_parameters','children','named_children','modules','named_modules','train','eval','apply','zero_grad','state_dict','load_state_dict','to','cpu','cuda','add_module']){ModuleCls.attrs[k]=fn(k,(a,kw,ctx)=>moduleMethods(a[0])[k](a.slice(1),kw,ctx));ModuleCls.attrs[k].method=true}
 const NN_KINDS=['Linear','Sequential','Flatten','ReLU','Sigmoid','Tanh','Softmax','LogSoftmax','Dropout','Identity','MSELoss','L1Loss','HuberLoss','SmoothL1Loss','CrossEntropyLoss','BCELoss','BCEWithLogitsLoss'];
 const nnInit=mod('torch.nn.init',{
   normal_:fn('normal_',(a,kw)=>{const T=a[0],m=numOf(kwOr(kw,a,'mean',1,F(0))),s=numOf(kwOr(kw,a,'std',2,F(1)));for(let i=0;i<T.data.length;i++)T.data[i]=castVal(m+s*gauss(),T.dtype);return T}),
@@ -3892,6 +4274,7 @@ torch.attrs.is_tensor=fn('is_tensor',a=>B(isT(a[0])&&!a[0].np));
 function ensurePrelude(){if(D2L.ready)return;D2L.ready=true;const sc=new Scope(null);sc.set('d2l',D2L);const saved=CUR;const ctx={scope:sc,outBuf:'',touched:[],plots:[],figs:[],fig:null,depth:0,steps:0,yields:null};CUR=ctx;try{for(const s of parse(D2L_PRELUDE))exec(s,sc,ctx)}finally{CUR=saved}for(const[k,v]of Object.entries(sc.vars))if(v.t==='func'||v.t==='cls')D2L.attrs[k]=v}
 D2L.attrs.load_array=fn('load_array',(a,kw)=>({t:'loader',ds:{t:'tdataset',tensors:iterate(a[0]).map(asTensor)},bs:intOf(a[1]),shuffle:truthy(kwOr(kw,a,'is_train',2,B(true))),drop_last:false}));
 function getAttr(o,name){if(isT(o))return tensorAttr(o,name);
+  if(name==='__name__'&&(o.t==='type'||o.t==='cls'||o.t==='fn'||o.t==='func')&&o.name)return S(o.t==='type'?o.name.split('.').pop().replace(/^Tensor$/,'Tensor'):o.name);
   switch(o.t){case'mod':{const v=o.attrs[name];if(v!==undefined)return v;err('AttributeError',`module '${o.name}' has no attribute '${name}'`)}
     case'nn':return nnAttr(o,name);case'ax':return axAttr(o,name);case'fig':return DUMMY;case'axarr':if(name==='flatten')return fn('flatten',()=>list(o.fig.axes.slice()));break;
     case'fmnist':if(name==='targets')return mkT([o.n],FM[o.train?'train':'test'].labels,'int64');if(name==='classes')return list(['T-shirt/top','Trouser','Pullover','Dress','Coat','Sandal','Shirt','Sneaker','Bag','Ankle boot'].map(S));if(name==='train')return B(o.train);break;case'optim':return optAttr(o,name);case'tdataset':if(name==='tensors')return tup(o.tensors);break;
@@ -3910,7 +4293,7 @@ function pyMethod(o,name){const L=o.items;
       index:a=>{const i=L.findIndex(x=>pyEq(x,a[0]));if(i<0)err('ValueError',`${repr(a[0])} is not in list`);return I(i)},count:a=>I(L.filter(x=>pyEq(x,a[0])).length),reverse:()=>{L.reverse();return NONE},clear:()=>{L.length=0;return NONE},copy:()=>list(L.slice()),
       sort:(a,kw)=>{const s=builtins.sorted.call([o],kw).items;L.splice(0,L.length,...s);return NONE}};if(M[name])return fn(name,M[name])}
   if(o.t==='tuple'){const M={index:a=>I(L.findIndex(x=>pyEq(x,a[0]))),count:a=>I(L.filter(x=>pyEq(x,a[0])).length)};if(M[name])return fn(name,M[name])}
-  if(o.t==='dict'){const M={items:()=>list([...o.m.values()].map(([k,v])=>tup([k,v]))),keys:()=>list([...o.m.values()].map(e=>e[0])),values:()=>list([...o.m.values()].map(e=>e[1])),get:a=>{const e=o.m.get(numKey(a[0]));return e?e[1]:(a[1]||NONE)},update:a=>{for(const[k,v]of a[0].m.values())o.m.set(numKey(k),[k,v]);return NONE},pop:a=>{const k=numKey(a[0]),e=o.m.get(k);if(!e){if(a[1])return a[1];err('KeyError',repr(a[0]))}o.m.delete(k);return e[1]},setdefault:a=>{const k=numKey(a[0]);if(!o.m.has(k))o.m.set(k,[a[0],a[1]||NONE]);return o.m.get(k)[1]}};if(M[name])return fn(name,M[name])}
+  if(o.t==='dict'){const vw=(x,n)=>{x.view=(o.odict?'odict_':'dict_')+n;return x};const M={items:()=>vw(list([...o.m.values()].map(([k,v])=>tup([k,v]))),'items'),keys:()=>vw(list([...o.m.values()].map(e=>e[0])),'keys'),values:()=>vw(list([...o.m.values()].map(e=>e[1])),'values'),get:a=>{const e=o.m.get(numKey(a[0]));return e?e[1]:(a[1]||NONE)},update:a=>{for(const[k,v]of a[0].m.values())o.m.set(numKey(k),[k,v]);return NONE},pop:a=>{const k=numKey(a[0]),e=o.m.get(k);if(!e){if(a[1])return a[1];err('KeyError',repr(a[0]))}o.m.delete(k);return e[1]},setdefault:a=>{const k=numKey(a[0]);if(!o.m.has(k))o.m.set(k,[a[0],a[1]||NONE]);return o.m.get(k)[1]}};if(M[name])return fn(name,M[name])}
   if(o.t==='str'){const s=o.v;const M={join:a=>S(iterate(a[0]).map(x=>{if(x.t!=='str')err('TypeError',`sequence item: expected str instance, ${typeName(x)} found`);return x.v}).join(s)),split:a=>{const sep=a[0]&&a[0].t!=='none'?a[0].v:null;return list((sep==null?s.trim().split(/\s+/).filter(Boolean):s.split(sep)).map(S))},strip:a=>S(a[0]?s.replace(new RegExp(`^[${a[0].v}]+|[${a[0].v}]+$`,'g'),''):s.trim()),
       upper:()=>S(s.toUpperCase()),lower:()=>S(s.toLowerCase()),replace:a=>S(s.split(a[0].v).join(a[1].v)),startswith:a=>B(s.startsWith(a[0].v)),endswith:a=>B(s.endsWith(a[0].v)),format:(a,kw)=>{let i=0;return S(s.replace(/\{([^{}]*)\}/g,(m0,inner)=>{const[k,spec]=inner.split(':');const v=k===''?a[i++]:/^\d+$/.test(k)?a[+k]:kw[k];return formatSpec(v,spec||'')}))},
       count:a=>I(s.split(a[0].v).length-1),find:a=>I(s.indexOf(a[0].v)),isdigit:()=>B(/^\d+$/.test(s)),rstrip:()=>S(s.replace(/\s+$/,'')),lstrip:()=>S(s.replace(/^\s+/,'')),title:()=>S(s.replace(/\b\w/g,c=>c.toUpperCase())),ljust:a=>S(s.padEnd(intOf(a[0]))),rjust:a=>S(s.padStart(intOf(a[0]))),zfill:a=>S(s.padStart(intOf(a[0]),'0'))};if(M[name])return fn(name,M[name])}
@@ -4056,7 +4439,7 @@ function colors(){const cs=getComputedStyle(document.documentElement),g=n=>cs.ge
 function fitCanvas(cv,W,H){const r=window.devicePixelRatio||1;cv.width=Math.round(W*r);cv.height=Math.round(H*r);cv.style.width=W+'px';cv.style.height=H+'px';const c=cv.getContext('2d');c.setTransform(r,0,0,r,0,0);return c}
 const MONO='11px "JetBrains Mono",ui-monospace,monospace';
 const bodyFont=px=>`${px}px ${getComputedStyle(document.body).fontFamily}`;
-const DAYS=['1','2','3','4','5','6','7','8','9','10'];
+const DAYS=['1','2','3','4','5','6','7','8','9','10','11'];
 
 // ---------- 张量图示 ----------
 function cellText(v,dtype){if(dtype==='bool')return v?'T':'F';if(dtype==='int64')return String(v);if(!Number.isFinite(v))return String(v);return Number.isInteger(v)?String(v):(Math.abs(v)>=100?v.toFixed(0):v.toFixed(2))}
@@ -4166,7 +4549,7 @@ function setupCells(){$$('.cell').forEach((cell,i)=>{const ta=cell.querySelector
     else if(e.key==='Tab'&&!e.shiftKey){e.preventDefault();const s=ta.selectionStart;ta.setRangeText('    ',s,ta.selectionEnd,'end');autoSize(ta)}})})}
 function runAll(day){ENVS[day]=MT.newEnv();EXEC[day]=0;MT.resetFS();let errs=0;const main=$('#day'+day);
   $$('.cell',main).forEach(c=>{if(c.dataset.manual){const out=c.querySelector('.out');out.className='out';out.textContent='';const t=document.createElement('span');t.className='tip';t.textContent=`这一格要手动运行：${c.dataset.manual}。准备好了点这一格右上角的“运行”。`;out.appendChild(t);out.hidden=false;return}if(!runCellEl(c))errs++});RAN[day]=true;
-  const expected={'1':0,'2':5,'3':3,'4':0,'5':0,'6':0,'7':0,'8':0,'9':0,'10':0}[day]||0;
+  const expected={'1':0,'2':5,'3':3,'4':0,'5':0,'6':0,'7':0,'8':0,'9':0,'10':0,'11':2}[day]||0;
   $$('.runAllMsg',main).forEach(m=>m.textContent=errs>expected?`运行完了，有 ${errs} 个格子报错，往下找红字。`:expected?`全部运行完了。其中 ${expected} 个格子是故意报错的，用来练习读报错。`:'全部运行完了，没有报错。')}
 document.addEventListener('click',e=>{const b=e.target.closest('.runAll');if(b)runAll(b.dataset.day)});
 
@@ -4495,6 +4878,14 @@ function shRender(){const host=$('#shHost');if(!host.offsetParent)return;const C
   ctx.font=bodyFont(12);[[C.ink,[6,4],'不加权的直线'],[C.pos,[],'加权的直线']].forEach(([c,d,t],i)=>{ctx.strokeStyle=c;ctx.setLineDash(d);ctx.beginPath();ctx.moveTo(8,14+i*16);ctx.lineTo(28,14+i*16);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle=C.ink;ctx.fillText(t,34,18+i*16)});ctx.fillStyle=C.muted;ctx.fillText('蓝点和蓝色区域：源分布　橙色区域：目标分布',8,50);
   $('#shCalc').textContent=`源分布中心 −0.50，目标分布中心 ${mT.toFixed(2)}，两边标准差都是 0.6\nβ(x) = p_T(x) / p_S(x)，这里两个分布已知，直接算${clip<1e8?`，再截断到 ${clip}（被截断的样本 ${nclip} 个）`:''}\n\n                目标分布上的 MSE\n不加权          ${mp.toFixed(4)}\n加权            ${mw.toFixed(4)}\n\n有效样本量 ESS = (Σβ)² / Σβ² = ${ess.toFixed(1)}（一共 ${SH.n} 个样本）\n${ess<20?'ESS 很小：只有极少数样本的权重大，加权结果很不稳定。两个分布离得太远时，重要性加权也救不了。':ess<SH.n*0.5?'权重比较不均匀，加权估计的方差会变大。':'两个分布很接近，权重都差不多，加不加权区别不大。'}`}
 $('#shM').addEventListener('input',shRender);$('#shClip').onchange=shRender;
+// ---------- 第 11 天：DKT 的参数清单 ----------
+function pcRender(){const K=+$('#pcDs').value,d=+$('#pcD').value,g=$('#pcG').value==='1';$('#pcDv').textContent=d;
+  const rows=[['emb.weight',[2*K,d],'嵌入表：每个（知识点，答对或答错）组合一行，共 2K 行'],['lstm.weight_ih_l0',[4*d,d],'LSTM 输入到 4 个门的权重（第 14 天讲 4 个门）'],['lstm.weight_hh_l0',[4*d,d],'LSTM 上一步隐状态到 4 个门的权重'],['lstm.bias_ih_l0',[4*d],'LSTM 偏置'],['lstm.bias_hh_l0',[4*d],'LSTM 偏置（PyTorch 有两份，加在一起用）'],['out.weight',[K,d],'输出头：隐状态到每个知识点的答对概率（logit）'],['out.bias',[K],'输出头偏置']];
+  if(g)rows.push(['g.weight',[K,d],'策略头：给每个知识点的出题打分加一个修正，初始化为 0'],['g.bias',[K],'策略头偏置，初始化为 0']);
+  const cnt=s=>s.reduce((a,b)=>a*b,1),tot=rows.reduce((a,r)=>a+cnt(r[1]),0),fmt=n=>n.toLocaleString('en-US');
+  $('#pcTbl').innerHTML='<thead><tr><th>名字</th><th>形状</th><th class="num">个数</th><th>是什么</th></tr></thead><tbody>'+rows.map(([n,s,w])=>`<tr><td><code>${n}</code></td><td style="white-space:nowrap"><code>(${s.join(', ')})</code></td><td class="num">${fmt(cnt(s))}</td><td class="small">${w}</td></tr>`).join('')+`<tr><td><b>合计</b></td><td></td><td class="num"><b>${fmt(tot)}</b></td><td></td></tr></tbody>`;
+  const lstm=2*4*d*d+2*4*d;$('#pcCalc').textContent=`一共 ${fmt(tot)} 个参数。\nLSTM 占 ${fmt(lstm)} 个（${(100*lstm/tot).toFixed(0)}%），和 K 无关，只看 d：2 × 4d² + 2 × 4d。\n和 K 有关的部分：嵌入 2Kd，输出头 Kd + K${g?'，策略头 Kd + K':''}。\n${K===681?'Junyi 有 681 个知识点，所以和 K 有关的部分比 LSTM 还大。':''}${d!==64?`\n你论文用的是 d = 64（D_MODEL = 64）。`:''}\n\n对照：真 PyTorch 里 sum(p.numel() for p in DKT(145, policy_head=True).parameters()) = 70,690。`}
+['#pcDs','#pcG'].forEach(s=>$(s).onchange=pcRender);$('#pcD').addEventListener('input',pcRender);
 // ---------- 小结勾选、课程表、切换天数 ----------
 function checksSetup(){$$('.check-list').forEach(ul=>{const day=ul.dataset.day,key='checks'+day,st=store.get(key,{});$$('input',ul).forEach(c=>{c.checked=!!st[c.dataset.k];c.onchange=()=>{const s=store.get(key,{});s[c.dataset.k]=c.checked;store.set(key,s);checkMsg(ul)}});checkMsg(ul)})}
 function checkMsg(ul){const day=ul.dataset.day,all=$$('input',ul),n=all.filter(c=>c.checked).length,msg=ul.parentElement.querySelector('.check-msg');const done=n===all.length;
@@ -4507,7 +4898,7 @@ const ROAD=[['1','第 1 章 引言 + 2.1 数据操作'],['2','2.2 数据预处�
   ['18','11.4 至 11.6 + 11.10 小批量随机梯度下降、动量、Adam（论文用的优化器）','paper'],['19','论文专题：离线策略评估 IPS、SNIPS、DR（书里没有）','paper'],['20','论文专题：逐行读你的 experiment.py','paper'],
   ['选学','4.7 前向传播、反向传播和计算图；4.10 Kaggle 房价预测'],['选学','第 6 至 7 章 卷积神经网络（LeNet、ResNet 等）'],['选学','9.3 至 9.8 深度和双向循环网络、机器翻译、seq2seq'],['选学','第 11 章其余优化算法、第 12 章计算性能'],['选学','第 13 至 15 章 计算机视觉、自然语言处理']];
 function roadRender(){$('#roadList').innerHTML=ROAD.map(([d,t,f])=>{const live=DAYS.includes(d);return`<div><span class="d">${/^\d+$/.test(d)?`第 ${d} 天`:d}</span><span>${live?`<a href="#day${d}">${esc(t)}</a>`:esc(t)}${f==='paper'?' <span class="mark">论文</span>':''}</span><span class="st${live?' now':''}">${live?'已上线':'未上线'}</span></div>`}).join('')}
-const REDRAW={'1':()=>{kRender();imRender();ofRender()},'2':()=>{dotRender();normRender()},'3':()=>{secRender();gradRender()},'4':()=>{diceRender();bayesRender();bktRender()},'5':()=>{houseRender();if(!sgd.X)sgdData();sgdRender()},'6':()=>{smRender();calRender()},'7':()=>{pixRender()},'8':()=>{uaRender();actRender()},'9':()=>{spRender();rdRender();dpRender()},'10':()=>{sgRender();shRender()}};
+const REDRAW={'1':()=>{kRender();imRender();ofRender()},'2':()=>{dotRender();normRender()},'3':()=>{secRender();gradRender()},'4':()=>{diceRender();bayesRender();bktRender()},'5':()=>{houseRender();if(!sgd.X)sgdData();sgdRender()},'6':()=>{smRender();calRender()},'7':()=>{pixRender()},'8':()=>{uaRender();actRender()},'9':()=>{spRender();rdRender();dpRender()},'10':()=>{sgRender();shRender()},'11':()=>{pcRender()}};
 function showDay(day,scroll){if(!DAYS.includes(day))day='1';$$('main.day').forEach(m=>m.hidden=m.dataset.day!==day);$$('[data-nav]').forEach(a=>a.classList.toggle('on',a.dataset.nav===day));store.set('lastDay',day);
   if(!RAN[day]){if(day==='7'&&!FM_U8){fmReady.then(ok=>{if(ok&&!RAN['7']){runAll('7');REDRAW['7']()}});}else runAll(day)}$$('#day'+day+' textarea').forEach(autoSize);REDRAW[day]();if(scroll)window.scrollTo(0,0)}
 function route(){const h=location.hash.replace('#','');const m=h.match(/^day(\d+)$/);if(m){showDay(m[1],true);return}
@@ -4623,6 +5014,17 @@ const QUIZ={
  {t:'c',q:'你论文 OPE 里的权重 w = π(a | s)/μ(a | s)，μ 指什么？',o:['新训练的出题策略','收集日志时实际使用的出题策略','学生的真实掌握度','学习率'],a:1,why:'数据是在 μ 下收集的，想评估的是新策略 π。和 β = p_T/p_S 一样：想要的分布除以数据实际来自的分布。'},
  {t:'c',q:'nn.utils.clip_grad_norm_(params, 5.0) 做了什么？',o:['把每个梯度元素截断到 [−5, 5]','如果所有梯度合起来的 L2 范数超过 5，就整体按比例缩小到 5，方向不变','把学习率设成 5','每 5 步更新一次'],a:1,why:'按范数裁剪保持方向，只缩短长度。逐元素截断的是 clip_grad_value_。你论文 train_kt 每一步都这样做，防止 LSTM 梯度爆炸。'},
  {t:'code',q:'写代码：把张量 w = torch.tensor([0.5, 3.0, 40.0, 8.0]) 截断到最大 20，存成 wc；再算有效样本量 ess = (wc.sum())**2 / (wc**2).sum()。',start:'w = torch.tensor([0.5, 3.0, 40.0, 8.0])\nwc = \ness = \ness',check:env=>{const w=env.vars.wc,e=env.vars.ess;if(!w||!MT.isT(w)||w.data.length!==4)return'wc 应该是 4 个数的张量';if(Math.abs(w.data[2]-20)>1e-6||Math.abs(w.data[0]-0.5)>1e-6)return`wc 是 [${[...w.data].join(', ')}]，应该是 [0.5, 3, 20, 8]。用 w.clamp(max=20)。`;const ev=e&&(MT.isT(e)?e.data[0]:e.v);if(ev==null||Math.abs(ev-31.5**2/473.25)>1e-3)return`ess 应该约等于 ${(31.5**2/473.25).toFixed(4)}`;return true},why:'wc = w.clamp(max=20) 得到 [0.5, 3, 20, 8]，ESS = 31.5² / 473.25 ≈ 2.10。4 个样本只相当于 2 个，因为权重集中在一个样本上。'},
+],
+'11':[
+ {t:'c',q:'自己写一个 nn.Module 子类，__init__ 里第一件事应该做什么？',o:['定义 forward','调用 super().__init__()','初始化优化器','调用 backward()'],a:1,why:'父类的构造函数会准备好记录子块和参数的结构（比如 _modules）。不先调用，后面 self.hidden = nn.Linear(...) 就会报错。'},
+ {t:'c',q:'net = MLP()，写 net(X) 时实际发生了什么？',o:['直接调用 __init__','调用 __call__，它再调用 forward','调用 backward','什么也不做'],a:1,why:'nn.Module 的 __call__ 会调用你写的 forward（还会处理钩子等）。所以平时写 net(X)，不要直接写 net.forward(X)。'},
+ {t:'c',q:'你论文的 DKT 类没有写 forward，为什么还能训练？',o:['PyTorch 会自动生成 forward','训练代码直接调用 model.encode(...) 和 model.readout(...)，从没写 model(x)','DKT 不需要训练','forward 写在了父类 KTBase 里'],a:1,why:'只有写 model(x) 时才需要 forward。参数照样能被 model.parameters() 找到、被优化器更新。'},
+ {t:'c',q:'nn.Sequential(nn.Linear(4, 8), nn.ReLU(), nn.Linear(8, 1)) 的 state_dict 里有哪些键？',o:["'0.weight', '0.bias', '2.weight', '2.bias'","'0.weight', '0.bias', '1.weight', '1.bias'","'weight', 'bias'","'linear1', 'linear2'"],a:0,why:'名字是子块在 Sequential 里的下标。ReLU（下标 1）没有参数，所以没有 1.xxx。'},
+ {t:'c',q:'shared = nn.Linear(8, 8) 在一个 Sequential 里出现两次。训练时 shared.weight.grad 是什么？',o:['只有第一次出现的梯度','只有第二次出现的梯度','两处的梯度加在一起','报错'],a:2,why:'两处用的是同一个参数对象，反向传播时梯度会累加到同一个 .grad 上。'},
+ {t:'c',q:'DKT(K=145, d=64) 的 lstm.weight_ih_l0 形状是 (256, 64)。256 是怎么来的？',o:['2 × 128','4 × 64：LSTM 有 4 组门，每组 64 个','145 + 111','批量大小'],a:1,why:'LSTM 的输入门、遗忘门、候选记忆、输出门各需要一个 d × d 的矩阵，PyTorch 把 4 个拼在一起，变成 4d × d。第 14 天会详细讲。'},
+ {t:'c',q:'best = net.state_dict() 之后继续训练，best 里的值会怎样？',o:['不变','跟着参数一起变，因为 state_dict 返回的张量和参数共用内存','变成 0','报错'],a:1,why:'所以你论文写的是 {k: v.detach().clone() for k, v in model.state_dict().items()}，复制一份独立的内存。'},
+ {t:'c',q:'clone = MLP(); clone.load_state_dict(torch.load("mlp.params")) 为什么要先写 MLP()？',o:['文件里只有参数，没有网络结构，要先用同样的类建一个模型','为了随机初始化','load_state_dict 要求先训练','没必要，可以省略'],a:0,why:'state_dict 只是“名字 → 张量”的字典。网络怎么连接写在类的代码里，所以要先建同样结构的模型，再把参数填进去。'},
+ {t:'code',q:'写代码：写一个类 Scale(nn.Module)，它有一个可训练参数 self.s（初始值是 torch.ones(1)），forward 返回 X * self.s。建一个 m = Scale()，最后一行写 m(torch.tensor([1.0, 2.0]))。',start:'class Scale(nn.Module):\n    def __init__(self):\n        super().__init__()\n        self.s = \n    def forward(self, X):\n        return \n\nm = Scale()\nm(torch.tensor([1.0, 2.0]))',check:env=>{const m=env.vars.m;if(!m||m.t!=='obj')return'还没有名为 m 的模型';const s=m.attrs.s;if(!s||!MT.isT(s)||!s.isParam)return'self.s 应该是 nn.Parameter(torch.ones(1))，这样它才是可训练参数';const r=MT.runCell('[n for n, _ in m.named_parameters()], m(torch.tensor([1.0, 2.0]))',env);if(!r.ok)return'运行 m(...) 出错了：'+r.text.split('\n').pop();if(!/'s'/.test(r.text)||!/tensor\(\[1\., 2\.\]/.test(r.text))return'm(torch.tensor([1.0, 2.0])) 应该得到 tensor([1., 2.], grad_fn=...)，现在是：'+r.text;return true},why:'self.s = nn.Parameter(torch.ones(1))；forward 里 return X * self.s。输出带 grad_fn=<MulBackward0>，说明 s 会被训练。'},
 ],
 };
 function quizState(day){return store.get('quiz'+day,{})}

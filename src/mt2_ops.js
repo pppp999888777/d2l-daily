@@ -42,8 +42,8 @@ function pyFloatRepr(v){if(Number.isNaN(v))return'nan';if(!Number.isFinite(v))re
 function strRepr(s){const q=s.includes("'")&&!s.includes('"')?'"':"'";return q+s.replace(/\\/g,'\\\\').replace(/\n/g,'\\n').replace(/\t/g,'\\t')+q}
 function repr(v){if(isT(v))return(v.isParam?'Parameter containing:\n':'')+tensorRepr(v);
   switch(v.t){case'int':return String(v.v);case'float':return v.np?`np.float64(${pyFloatRepr(v.v)})`:pyFloatRepr(v.v);case'bool':return v.v?'True':'False';case'none':return'None';case'str':return strRepr(v.v);
-    case'tuple':return'('+v.items.map(repr).join(', ')+(v.items.length===1?',':'')+')';case'list':return'['+v.items.map(repr).join(', ')+']';
-    case'dict':return'{'+[...v.m.values()].map(([k,x])=>repr(k)+': '+repr(x)).join(', ')+'}';
+    case'tuple':return'('+v.items.map(repr).join(', ')+(v.items.length===1?',':'')+')';case'list':return(v.view?v.view+'(':'')+'['+v.items.map(repr).join(', ')+']'+(v.view?')':'');case'inckeys':return v.missing.length||v.unexpected.length?`_IncompatibleKeys(missing_keys=[${v.missing.map(strRepr).join(', ')}], unexpected_keys=[${v.unexpected.map(strRepr).join(', ')}])`:'<All keys matched successfully>';
+    case'dict':{const body='{'+[...v.m.values()].map(([k,x])=>repr(k)+': '+repr(x)).join(', ')+'}';return v.odict?(v.m.size?`OrderedDict(${body})`:'OrderedDict()'):body}
     case'range':return`range(${v.start}, ${v.stop}${v.step!==1?', '+v.step:''})`;
     case'size':return`torch.Size([${v.dims.join(', ')}])`;case'dtype':return`torch.${v.name}`;case'type':return`<class '${v.name}'>`;case'mod':return`<module '${v.name}'>`;
     case'fn':return`<built-in function ${v.name}>`;case'func':return`<function ${v.name} at 0x${(v.id||4400000000).toString(16)}>`;case'gradfn':return`<${v.g.name} object at 0x${v.g.id.toString(16)}>`;

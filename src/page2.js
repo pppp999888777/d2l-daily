@@ -6,7 +6,7 @@ function colors(){const cs=getComputedStyle(document.documentElement),g=n=>cs.ge
 function fitCanvas(cv,W,H){const r=window.devicePixelRatio||1;cv.width=Math.round(W*r);cv.height=Math.round(H*r);cv.style.width=W+'px';cv.style.height=H+'px';const c=cv.getContext('2d');c.setTransform(r,0,0,r,0,0);return c}
 const MONO='11px "JetBrains Mono",ui-monospace,monospace';
 const bodyFont=px=>`${px}px ${getComputedStyle(document.body).fontFamily}`;
-const DAYS=['1','2','3','4','5','6','7','8','9','10'];
+const DAYS=['1','2','3','4','5','6','7','8','9','10','11'];
 
 // ---------- 张量图示 ----------
 function cellText(v,dtype){if(dtype==='bool')return v?'T':'F';if(dtype==='int64')return String(v);if(!Number.isFinite(v))return String(v);return Number.isInteger(v)?String(v):(Math.abs(v)>=100?v.toFixed(0):v.toFixed(2))}
@@ -116,7 +116,7 @@ function setupCells(){$$('.cell').forEach((cell,i)=>{const ta=cell.querySelector
     else if(e.key==='Tab'&&!e.shiftKey){e.preventDefault();const s=ta.selectionStart;ta.setRangeText('    ',s,ta.selectionEnd,'end');autoSize(ta)}})})}
 function runAll(day){ENVS[day]=MT.newEnv();EXEC[day]=0;MT.resetFS();let errs=0;const main=$('#day'+day);
   $$('.cell',main).forEach(c=>{if(c.dataset.manual){const out=c.querySelector('.out');out.className='out';out.textContent='';const t=document.createElement('span');t.className='tip';t.textContent=`这一格要手动运行：${c.dataset.manual}。准备好了点这一格右上角的“运行”。`;out.appendChild(t);out.hidden=false;return}if(!runCellEl(c))errs++});RAN[day]=true;
-  const expected={'1':0,'2':5,'3':3,'4':0,'5':0,'6':0,'7':0,'8':0,'9':0,'10':0}[day]||0;
+  const expected={'1':0,'2':5,'3':3,'4':0,'5':0,'6':0,'7':0,'8':0,'9':0,'10':0,'11':2}[day]||0;
   $$('.runAllMsg',main).forEach(m=>m.textContent=errs>expected?`运行完了，有 ${errs} 个格子报错，往下找红字。`:expected?`全部运行完了。其中 ${expected} 个格子是故意报错的，用来练习读报错。`:'全部运行完了，没有报错。')}
 document.addEventListener('click',e=>{const b=e.target.closest('.runAll');if(b)runAll(b.dataset.day)});
 
@@ -445,6 +445,14 @@ function shRender(){const host=$('#shHost');if(!host.offsetParent)return;const C
   ctx.font=bodyFont(12);[[C.ink,[6,4],'不加权的直线'],[C.pos,[],'加权的直线']].forEach(([c,d,t],i)=>{ctx.strokeStyle=c;ctx.setLineDash(d);ctx.beginPath();ctx.moveTo(8,14+i*16);ctx.lineTo(28,14+i*16);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle=C.ink;ctx.fillText(t,34,18+i*16)});ctx.fillStyle=C.muted;ctx.fillText('蓝点和蓝色区域：源分布　橙色区域：目标分布',8,50);
   $('#shCalc').textContent=`源分布中心 −0.50，目标分布中心 ${mT.toFixed(2)}，两边标准差都是 0.6\nβ(x) = p_T(x) / p_S(x)，这里两个分布已知，直接算${clip<1e8?`，再截断到 ${clip}（被截断的样本 ${nclip} 个）`:''}\n\n                目标分布上的 MSE\n不加权          ${mp.toFixed(4)}\n加权            ${mw.toFixed(4)}\n\n有效样本量 ESS = (Σβ)² / Σβ² = ${ess.toFixed(1)}（一共 ${SH.n} 个样本）\n${ess<20?'ESS 很小：只有极少数样本的权重大，加权结果很不稳定。两个分布离得太远时，重要性加权也救不了。':ess<SH.n*0.5?'权重比较不均匀，加权估计的方差会变大。':'两个分布很接近，权重都差不多，加不加权区别不大。'}`}
 $('#shM').addEventListener('input',shRender);$('#shClip').onchange=shRender;
+// ---------- 第 11 天：DKT 的参数清单 ----------
+function pcRender(){const K=+$('#pcDs').value,d=+$('#pcD').value,g=$('#pcG').value==='1';$('#pcDv').textContent=d;
+  const rows=[['emb.weight',[2*K,d],'嵌入表：每个（知识点，答对或答错）组合一行，共 2K 行'],['lstm.weight_ih_l0',[4*d,d],'LSTM 输入到 4 个门的权重（第 14 天讲 4 个门）'],['lstm.weight_hh_l0',[4*d,d],'LSTM 上一步隐状态到 4 个门的权重'],['lstm.bias_ih_l0',[4*d],'LSTM 偏置'],['lstm.bias_hh_l0',[4*d],'LSTM 偏置（PyTorch 有两份，加在一起用）'],['out.weight',[K,d],'输出头：隐状态到每个知识点的答对概率（logit）'],['out.bias',[K],'输出头偏置']];
+  if(g)rows.push(['g.weight',[K,d],'策略头：给每个知识点的出题打分加一个修正，初始化为 0'],['g.bias',[K],'策略头偏置，初始化为 0']);
+  const cnt=s=>s.reduce((a,b)=>a*b,1),tot=rows.reduce((a,r)=>a+cnt(r[1]),0),fmt=n=>n.toLocaleString('en-US');
+  $('#pcTbl').innerHTML='<thead><tr><th>名字</th><th>形状</th><th class="num">个数</th><th>是什么</th></tr></thead><tbody>'+rows.map(([n,s,w])=>`<tr><td><code>${n}</code></td><td style="white-space:nowrap"><code>(${s.join(', ')})</code></td><td class="num">${fmt(cnt(s))}</td><td class="small">${w}</td></tr>`).join('')+`<tr><td><b>合计</b></td><td></td><td class="num"><b>${fmt(tot)}</b></td><td></td></tr></tbody>`;
+  const lstm=2*4*d*d+2*4*d;$('#pcCalc').textContent=`一共 ${fmt(tot)} 个参数。\nLSTM 占 ${fmt(lstm)} 个（${(100*lstm/tot).toFixed(0)}%），和 K 无关，只看 d：2 × 4d² + 2 × 4d。\n和 K 有关的部分：嵌入 2Kd，输出头 Kd + K${g?'，策略头 Kd + K':''}。\n${K===681?'Junyi 有 681 个知识点，所以和 K 有关的部分比 LSTM 还大。':''}${d!==64?`\n你论文用的是 d = 64（D_MODEL = 64）。`:''}\n\n对照：真 PyTorch 里 sum(p.numel() for p in DKT(145, policy_head=True).parameters()) = 70,690。`}
+['#pcDs','#pcG'].forEach(s=>$(s).onchange=pcRender);$('#pcD').addEventListener('input',pcRender);
 // ---------- 小结勾选、课程表、切换天数 ----------
 function checksSetup(){$$('.check-list').forEach(ul=>{const day=ul.dataset.day,key='checks'+day,st=store.get(key,{});$$('input',ul).forEach(c=>{c.checked=!!st[c.dataset.k];c.onchange=()=>{const s=store.get(key,{});s[c.dataset.k]=c.checked;store.set(key,s);checkMsg(ul)}});checkMsg(ul)})}
 function checkMsg(ul){const day=ul.dataset.day,all=$$('input',ul),n=all.filter(c=>c.checked).length,msg=ul.parentElement.querySelector('.check-msg');const done=n===all.length;
@@ -457,7 +465,7 @@ const ROAD=[['1','第 1 章 引言 + 2.1 数据操作'],['2','2.2 数据预处�
   ['18','11.4 至 11.6 + 11.10 小批量随机梯度下降、动量、Adam（论文用的优化器）','paper'],['19','论文专题：离线策略评估 IPS、SNIPS、DR（书里没有）','paper'],['20','论文专题：逐行读你的 experiment.py','paper'],
   ['选学','4.7 前向传播、反向传播和计算图；4.10 Kaggle 房价预测'],['选学','第 6 至 7 章 卷积神经网络（LeNet、ResNet 等）'],['选学','9.3 至 9.8 深度和双向循环网络、机器翻译、seq2seq'],['选学','第 11 章其余优化算法、第 12 章计算性能'],['选学','第 13 至 15 章 计算机视觉、自然语言处理']];
 function roadRender(){$('#roadList').innerHTML=ROAD.map(([d,t,f])=>{const live=DAYS.includes(d);return`<div><span class="d">${/^\d+$/.test(d)?`第 ${d} 天`:d}</span><span>${live?`<a href="#day${d}">${esc(t)}</a>`:esc(t)}${f==='paper'?' <span class="mark">论文</span>':''}</span><span class="st${live?' now':''}">${live?'已上线':'未上线'}</span></div>`}).join('')}
-const REDRAW={'1':()=>{kRender();imRender();ofRender()},'2':()=>{dotRender();normRender()},'3':()=>{secRender();gradRender()},'4':()=>{diceRender();bayesRender();bktRender()},'5':()=>{houseRender();if(!sgd.X)sgdData();sgdRender()},'6':()=>{smRender();calRender()},'7':()=>{pixRender()},'8':()=>{uaRender();actRender()},'9':()=>{spRender();rdRender();dpRender()},'10':()=>{sgRender();shRender()}};
+const REDRAW={'1':()=>{kRender();imRender();ofRender()},'2':()=>{dotRender();normRender()},'3':()=>{secRender();gradRender()},'4':()=>{diceRender();bayesRender();bktRender()},'5':()=>{houseRender();if(!sgd.X)sgdData();sgdRender()},'6':()=>{smRender();calRender()},'7':()=>{pixRender()},'8':()=>{uaRender();actRender()},'9':()=>{spRender();rdRender();dpRender()},'10':()=>{sgRender();shRender()},'11':()=>{pcRender()}};
 function showDay(day,scroll){if(!DAYS.includes(day))day='1';$$('main.day').forEach(m=>m.hidden=m.dataset.day!==day);$$('[data-nav]').forEach(a=>a.classList.toggle('on',a.dataset.nav===day));store.set('lastDay',day);
   if(!RAN[day]){if(day==='7'&&!FM_U8){fmReady.then(ok=>{if(ok&&!RAN['7']){runAll('7');REDRAW['7']()}});}else runAll(day)}$$('#day'+day+' textarea').forEach(autoSize);REDRAW[day]();if(scroll)window.scrollTo(0,0)}
 function route(){const h=location.hash.replace('#','');const m=h.match(/^day(\d+)$/);if(m){showDay(m[1],true);return}

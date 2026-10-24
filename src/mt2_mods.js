@@ -54,6 +54,14 @@ const torch=mod('torch',{
   Tensor:{t:'type',name:'torch.Tensor'},
 });
 torch.attrs.distributions.attrs.Multinomial=torch.attrs.distributions.attrs.multinomial.attrs.Multinomial;
+// torch.save / torch.load：存进网页里的模拟文件系统（深拷贝一份，之后改原对象不影响文件）
+function pyDeepCopy(v){if(isT(v)){const c=mkT(v.shape.slice(),v.data,v.dtype,v.np);if(v.isParam){c.isParam=true;c.requires_grad=v.requires_grad}else c.requires_grad=v.requires_grad&&!v.grad_fn;return c}
+  if(v.t==='list')return list(v.items.map(pyDeepCopy));if(v.t==='tuple')return tup(v.items.map(pyDeepCopy));
+  if(v.t==='dict'){const d=mkDict([...v.m.values()].map(([k,x])=>[k,pyDeepCopy(x)]));d.odict=v.odict;return d}
+  if(['int','float','bool','str','none'].includes(v.t))return v;err('TypeError',`本页的 torch.save 只支持张量、列表、元组、字典和数字，不支持 ${typeName(v)}。保存模型请用 torch.save(net.state_dict(), 路径)`)}
+torch.attrs.FloatTensor=fn('FloatTensor',a=>torch.attrs.tensor.call([a[0]],{dtype:torch.attrs.float32}));torch.attrs.LongTensor=fn('LongTensor',a=>torch.attrs.tensor.call([a[0]],{dtype:torch.attrs.int64}));
+torch.attrs.save=fn('save',a=>{const p=normPath(str(a[1]));const dir=p.includes('/')?p.slice(0,p.lastIndexOf('/')):'.';if(dir!=='.'&&!DIRS.has(dir))err('RuntimeError',`Parent directory ${dir} does not exist.`);FS.set(p,{pickled:pyDeepCopy(a[0])});return NONE});
+torch.attrs.load=fn('load',a=>{const p=normPath(str(a[0]));if(!FS.has(p))err('FileNotFoundError',`[Errno 2] No such file or directory: '${str(a[0])}'`);const v=FS.get(p);if(typeof v==='string')err('UnpicklingError','invalid load key, 不是用 torch.save 保存的文件');return pyDeepCopy(v.pickled)});
 function distAttr(d,name){if(name==='sample')return fn('sample',a=>multinomialSample(d.n,d.probs,a[0]?dimsArg([a[0]]):[]));if(name==='probs')return d.probs;err('AttributeError',`'Multinomial' object has no attribute '${name}'`)}
 const npArr=(T)=>{const R=mkT(T.shape.slice(),T.data,T.dtype,true);return R};
 const numpy=mod('numpy',{
