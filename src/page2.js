@@ -8,7 +8,7 @@ function colors(){const cs=getComputedStyle(document.documentElement),g=n=>cs.ge
 function fitCanvas(cv,W,H){const r=window.devicePixelRatio||1;cv.width=Math.round(W*r);cv.height=Math.round(H*r);cv.style.width=W+'px';cv.style.height=H+'px';const c=cv.getContext('2d');c.setTransform(r,0,0,r,0,0);return c}
 const MONO='11px "JetBrains Mono",ui-monospace,monospace';
 const bodyFont=px=>`${px}px ${getComputedStyle(document.body).fontFamily}`;
-const DAYS=['1','2','3','4','5','6','7','8','9','10','11','12','13','14'];
+const DAYS=['1','2','3','4','5','6','7','8','9','10','11','12','13','14','15'];
 
 // ---------- 张量图示 ----------
 function cellText(v,dtype){if(dtype==='bool')return v?'T':'F';if(dtype==='int64')return String(v);if(!Number.isFinite(v))return String(v);return Number.isInteger(v)?String(v):(Math.abs(v)>=100?v.toFixed(0):v.toFixed(2))}
@@ -127,7 +127,7 @@ function setupCells(){$$('.cell').forEach((cell,i)=>{const ta=cell.querySelector
     else if(e.key==='Tab'&&!e.shiftKey){e.preventDefault();const s=ta.selectionStart;ta.setRangeText('    ',s,ta.selectionEnd,'end');autoSize(ta)}})})}
 function runAll(day){ENVS[day]=MT.newEnv();EXEC[day]=0;MT.resetFS();let errs=0;const main=$('#day'+day);
   $$('.cell',main).forEach(c=>{if(c.dataset.manual){const out=c.querySelector('.out');out.className='out';out.textContent='';const t=document.createElement('span');t.className='tip';t.textContent=`这一格要手动运行：${c.dataset.manual}。准备好了点这一格右上角的“运行”。`;out.appendChild(t);out.hidden=false;return}if(!runCellEl(c))errs++});RAN[day]=true;
-  const expected={'1':0,'2':5,'3':3,'4':0,'5':0,'6':0,'7':0,'8':0,'9':0,'10':0,'11':2,'12':0,'13':0,'14':0}[day]||0;
+  const expected={'1':0,'2':5,'3':3,'4':0,'5':0,'6':0,'7':0,'8':0,'9':0,'10':0,'11':2,'12':0,'13':0,'14':0,'15':0}[day]||0;
   $$('.runAllMsg',main).forEach(m=>m.textContent=errs>expected?`运行完了，有 ${errs} 个格子报错，往下找红字。`:expected?`全部运行完了。其中 ${expected} 个格子是故意报错的，用来练习读报错。`:'全部运行完了，没有报错。')}
 document.addEventListener('click',e=>{const b=e.target.closest('.runAll');if(b)runAll(b.dataset.day)});
 
@@ -340,9 +340,12 @@ function fmtStyle(fmt,i){const m=fmt.match(/^([bgrcmyk])?(--|-\.|-|:|o)?$/)||[];
 const VIRIDIS=[[68,1,84],[59,82,139],[33,145,140],[94,201,98],[253,231,37]];
 function viridis(t){t=Math.max(0,Math.min(1,t))*4;const i=Math.min(3,Math.floor(t)),f=t-i,a=VIRIDIS[i],b=VIRIDIS[i+1];return[a[0]+(b[0]-a[0])*f,a[1]+(b[1]-a[1])*f,a[2]+(b[2]-a[2])*f]}
 function drawImage(cv,img,px){const{H,W}=img;cv.width=W;cv.height=H;cv.style.width=px+'px';cv.style.height=Math.round(px*H/W)+'px';const c=cv.getContext('2d'),d=c.createImageData(W,H);let lo=Infinity,hi=-Infinity;for(const v of img.px){if(v<lo)lo=v;if(v>hi)hi=v}const rg=hi-lo||1;
-  for(let k=0;k<W*H;k++){const[r,g,b]=viridis((img.px[k]-lo)/rg);d.data[k*4]=r;d.data[k*4+1]=g;d.data[k*4+2]=b;d.data[k*4+3]=255}c.putImageData(d,0,0)}
+  const reds=t=>[Math.round(255-t*(255-103)),Math.round(245-t*245),Math.round(240-t*(240-13))];for(let k=0;k<W*H;k++){const[r,g,b]=img.cmap==='Reds'?reds((img.px[k]-lo)/rg):viridis((img.px[k]-lo)/rg);d.data[k*4]=r;d.data[k*4+1]=g;d.data[k*4+2]=b;d.data[k*4+3]=255}c.putImageData(d,0,0)}
 function renderFig(wrap,fig){if(fig.axes.some(a=>a.image)){const grid=document.createElement('div');grid.className='imgrid';grid.style.gridTemplateColumns=`repeat(${fig.cols},minmax(0,1fr))`;
-    for(const ax of fig.axes){const cell=document.createElement('figure');if(ax.title){const t=document.createElement('figcaption');t.textContent=ax.title;cell.appendChild(t)}if(ax.image){const cv=document.createElement('canvas');cv.setAttribute('aria-label',ax.title||'图片');cell.appendChild(cv);drawImage(cv,ax.image,72)}grid.appendChild(cell)}wrap.appendChild(grid);return}
+    const hm=fig.axes.some(a=>a.image&&a.image.cmap),sz=hm?Math.max(110,Math.min(260,Math.floor(((wrap.parentElement&&wrap.parentElement.clientWidth)||320)/fig.cols)-16)):72;
+    for(const ax of fig.axes){const cell=document.createElement('figure');if(ax.title){const t=document.createElement('figcaption');t.textContent=ax.title;cell.appendChild(t)}if(ax.image){const cv=document.createElement('canvas');cv.setAttribute('aria-label',ax.title||(hm?'注意力权重热图':'图片'));cv.className=hm?'hm':'';cell.appendChild(cv);drawImage(cv,ax.image,sz)}
+      if(hm&&(ax.xlabel||ax.ylabel)){const c=document.createElement('figcaption');c.className='small muted';c.textContent=`横轴（列）：${ax.xlabel||''}　纵轴（行）：${ax.ylabel||''}`;cell.appendChild(c)}grid.appendChild(cell)}
+    if(hm){const n=document.createElement('p');n.className='small muted';n.textContent='颜色越深权重越大：最浅是这张图里的最小值，最深是最大值。';wrap.appendChild(grid);wrap.appendChild(n);return}wrap.appendChild(grid);return}
   for(const ax of fig.axes){if(!ax.lines.length)continue;const spec={series:ax.lines.map((l,i)=>({x:l.x,y:l.y,label:ax.legend[i]||'',...fmtStyle(l.fmt,i)})),hlines:[],xlabel:ax.xlabel,ylabel:ax.ylabel,legend:ax.legend.length>0,xlim:ax.xlim,ylim:ax.ylim,xscale:ax.xscale,yscale:ax.yscale};const cv=document.createElement('canvas');cv.setAttribute('aria-label','训练曲线');wrap.appendChild(cv);drawPlot(cv,spec)}}
 
 // ---------- 第 7 天：解压内嵌的 Fashion-MNIST，像素查看器 ----------
@@ -526,6 +529,31 @@ function gtRender(){const host=$('#gtHost');if(!host.offsetParent)return;const F
   drawPlot($('#gtCv'),{series:[{x:xs,y:keep.map(v=>Math.max(v,1e-12)),label:'第 1 步的信息还剩多少'},{x:xs,y:grad.map(v=>Math.max(v,1e-30)),label:'梯度 ∂(第 t 步)/∂(第 1 步)'}],hlines:[],xlabel:'时间步 t',ylabel:'',legend:true,yscale:'log',ylim:[1e-12,2]});
   $('#gtCalc').textContent=mode==='lstm'?`记忆元：Cₜ = F·C_{t−1} + I·C̃ₜ\n第 1 步写入的信息每一步乘 F，40 步后还剩 F³⁹ = ${(F**39).toExponential(2)}\n梯度 ∂C₄₀/∂C₁ = F³⁹，也是 ${(F**39).toExponential(2)}（所以图上两条线重合）\n\n${F>0.98?'遗忘门接近 1：信息和梯度都几乎原样穿过 40 步。':F<0.6?'遗忘门小：很快就忘了，梯度也消失。':'遗忘门适中：慢慢忘掉。'}\n输入门 I 只影响新写入的噪声有多少，不影响旧信息能留多久。\n真实 LSTM 里 F 每一步都是学出来的：需要记住时接近 1，需要清空时接近 0。`:`普通 RNN：hₜ = tanh(0.9·h_{t−1} + xₜ)\n每一步梯度乘 0.9 × tanh′，40 步后约 ${grad[T-1].toExponential(2)}\n第 1 步的不同（h₁ = 1 和 h₁ = 0 两条轨迹的差）也很快被噪声淹没。\n切回 LSTM，把遗忘门调到 0.99 对比一下。`}
 ['#gtF','#gtI'].forEach(s=>$(s).addEventListener('input',gtRender));$('#gtM').onchange=gtRender;
+// ---------- 第 15 天：Nadaraya-Watson 的查询和核宽度 ----------
+const NW=(()=>{const g=sgRng(21);const u=(()=>{let s=99;return()=>{s=s+0x6D2B79F5>>>0;let t=Math.imul(s^s>>>15,1|s);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}})();const f=x=>2*Math.sin(x)+x**0.8;const x=Array.from({length:50},()=>u()*5).sort((a,b)=>a-b);return{f,x,y:x.map(v=>f(v)+0.5*g())}})();
+function nwPred(q,w){const s=NW.x.map(xi=>-(((q-xi)*w)**2)/2),m=Math.max(...s),e=s.map(v=>Math.exp(v-m)),z=e.reduce((a,b)=>a+b,0),a=e.map(v=>v/z);return{a,y:a.reduce((t,v,i)=>t+v*NW.y[i],0)}}
+function nwRender(){const host=$('#nwHost');if(!host.offsetParent)return;const C=colors(),q=+$('#nwQ').value,w=+$('#nwW').value;$('#nwQv').textContent=q.toFixed(2);$('#nwWv').textContent=w.toFixed(2);
+  const W=Math.max(260,host.clientWidth),H=Math.round(Math.min(320,W*.75)),ctx=fitCanvas($('#nwCv'),W,H),pl=8,pr=8,top=10,bh=60,sx=x=>pl+x/5*(W-pl-pr),sy=y=>top+(5-y)/6*(H-top-bh-20);
+  ctx.strokeStyle=C.line;ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(pl,sy(0));ctx.lineTo(W-pr,sy(0));ctx.stroke();
+  ctx.strokeStyle=C.muted;ctx.lineWidth=2;ctx.beginPath();for(let k=0;k<=200;k++){const x=5*k/200;k?ctx.lineTo(sx(x),sy(NW.f(x))):ctx.moveTo(sx(x),sy(NW.f(x)))}ctx.stroke();
+  ctx.strokeStyle=C.pos;ctx.lineWidth=2.5;ctx.beginPath();for(let k=0;k<=200;k++){const x=5*k/200,y=nwPred(x,w).y;k?ctx.lineTo(sx(x),sy(y)):ctx.moveTo(sx(x),sy(y))}ctx.stroke();
+  const r=nwPred(q,w),mx=Math.max(...r.a);NW.x.forEach((x,i)=>{ctx.fillStyle=C.accent;ctx.globalAlpha=.25+.75*r.a[i]/mx;ctx.beginPath();ctx.arc(sx(x),sy(NW.y[i]),3,0,7);ctx.fill();ctx.globalAlpha=1;const h=r.a[i]/mx*(bh-8);ctx.fillStyle=C.accent;ctx.fillRect(sx(x)-2,H-6-h,4,h)});
+  ctx.strokeStyle=C.ink;ctx.setLineDash([4,4]);ctx.beginPath();ctx.moveTo(sx(q),0);ctx.lineTo(sx(q),H);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle=C.pos;ctx.beginPath();ctx.arc(sx(q),sy(r.y),5,0,7);ctx.fill();
+  ctx.font=bodyFont(11);ctx.fillStyle=C.muted;ctx.fillText('注意力权重',pl+2,H-bh+4);
+  const top3=r.a.map((a,i)=>[a,i]).sort((a,b)=>b[0]-a[0]).slice(0,3),ent=-r.a.reduce((s,a)=>s+(a>0?a*Math.log(a):0),0);
+  $('#nwCalc').textContent=`查询 x = ${q.toFixed(2)}，w = ${w.toFixed(2)}\n预测 ${r.y.toFixed(3)}，真实值 ${NW.f(q).toFixed(3)}\n\n权重最大的 3 个训练点：\n${top3.map(([a,i])=>`  x = ${NW.x[i].toFixed(2)}  y = ${NW.y[i].toFixed(2)}  权重 ${a.toFixed(3)}`).join('\n')}\n相当于在约 ${Math.exp(ent).toFixed(1)} 个点之间平均（50 个点全平均时是 50）\n\n${w<0.3?'w 很小：几乎所有点权重一样，接近平均汇聚，预测是一条平线。':w>6?'w 很大：只看最近的一两个点，预测曲线跟着噪声抖。':'w 适中：主要看附近的点，曲线比较平滑地跟着真实函数。'}`}
+['#nwQ','#nwW'].forEach(s=>$(s).addEventListener('input',nwRender));
+// ---------- 第 15 天：缩放点积 ----------
+const SD={seed:1};
+function sdRender(){const host=$('#sdHost');if(!host.offsetParent)return;const d=+$('#sdD').value;$('#sdDv').textContent=d;const g=sgRng(SD.seed*7919+d);
+  const q=Array.from({length:d},g),ks=Array.from({length:8},()=>Array.from({length:d},g)),sc=ks.map(k=>k.reduce((s,v,i)=>s+v*q[i],0)),sm=a=>{const m=Math.max(...a),e=a.map(v=>Math.exp(v-m)),z=e.reduce((x,y)=>x+y,0);return e.map(v=>v/z)};
+  const p0=sm(sc),p1=sm(sc.map(v=>v/Math.sqrt(d))),C=colors();
+  const W=Math.max(260,host.clientWidth),H=200,ctx=fitCanvas($('#sdCv'),W,H),pl=10,pr=10,bw=(W-pl-pr)/8;ctx.font=bodyFont(11);
+  for(let i=0;i<8;i++){const x=pl+i*bw;[[p0[i],C.neg,0],[p1[i],C.accent,1]].forEach(([p,col,j])=>{const h=p*(H-46);ctx.fillStyle=col;ctx.fillRect(x+bw*(0.12+0.38*j),H-24-h,bw*0.34,h)});ctx.fillStyle=C.muted;ctx.textAlign='center';ctx.fillText('键 '+(i+1),x+bw/2,H-8)}
+  ctx.textAlign='left';ctx.fillStyle=C.neg;ctx.fillRect(pl,6,12,10);ctx.fillStyle=C.ink;ctx.fillText('不缩放 qᵀk',pl+16,15);ctx.fillStyle=C.accent;ctx.fillRect(pl+110,6,12,10);ctx.fillStyle=C.ink;ctx.fillText('除以 √d',pl+126,15);
+  const sdv=a=>Math.sqrt(a.reduce((s,v)=>s+v*v,0)/a.length);
+  $('#sdCalc').textContent=`d = ${d}\n8 个分数的标准差：不缩放 ${sdv(sc).toFixed(2)}，除以 √d 后 ${sdv(sc.map(v=>v/Math.sqrt(d))).toFixed(2)}\n最大的权重：不缩放 ${Math.max(...p0).toFixed(3)}，除以 √d 后 ${Math.max(...p1).toFixed(3)}\n\n${d<4?'d 很小时两者差别不大。':Math.max(...p0)>0.95?'不缩放时几乎所有权重都压在一个键上，softmax 饱和了：其他键的梯度接近 0，学不动。':'d 越大，不缩放的分数越分散，权重越尖。'}`}
+$('#sdD').addEventListener('input',sdRender);$('#sdGo').onclick=()=>{SD.seed++;sdRender()};
 // ---------- 小结勾选、课程表、切换天数 ----------
 function checksSetup(){$$('.check-list').forEach(ul=>{const day=ul.dataset.day,key='checks'+day,st=store.get(key,{});$$('input',ul).forEach(c=>{c.checked=!!st[c.dataset.k];c.onchange=()=>{const s=store.get(key,{});s[c.dataset.k]=c.checked;store.set(key,s);checkMsg(ul)}});checkMsg(ul)})}
 function checkMsg(ul){const day=ul.dataset.day,all=$$('input',ul),n=all.filter(c=>c.checked).length,msg=ul.parentElement.querySelector('.check-msg');const done=n===all.length;
@@ -538,7 +566,7 @@ const ROAD=[['1','第 1 章 引言 + 2.1 数据操作'],['2','2.2 数据预处�
   ['18','11.4 至 11.6 + 11.10 小批量随机梯度下降、动量、Adam（论文用的优化器）','paper'],['19','论文专题：离线策略评估 IPS、SNIPS、DR（书里没有）','paper'],['20','论文专题：逐行读你的 experiment.py','paper'],
   ['选学','4.7 前向传播、反向传播和计算图；4.10 Kaggle 房价预测'],['选学','第 6 至 7 章 卷积神经网络（LeNet、ResNet 等）'],['选学','9.3 至 9.8 深度和双向循环网络、机器翻译、seq2seq'],['选学','第 11 章其余优化算法、第 12 章计算性能'],['选学','第 13 至 15 章 计算机视觉、自然语言处理']];
 function roadRender(){$('#roadList').innerHTML=ROAD.map(([d,t,f])=>{const live=DAYS.includes(d);return`<div><span class="d">${/^\d+$/.test(d)?`第 ${d} 天`:d}</span><span>${live?`<a href="#day${d}">${esc(t)}</a>`:esc(t)}${f==='paper'?' <span class="mark">论文</span>':''}</span><span class="st${live?' now':''}">${live?'已上线':'未上线'}</span></div>`}).join('')}
-const REDRAW={'1':()=>{kRender();imRender();ofRender()},'2':()=>{dotRender();normRender()},'3':()=>{secRender();gradRender()},'4':()=>{diceRender();bayesRender();bktRender()},'5':()=>{houseRender();if(!sgd.X)sgdData();sgdRender()},'6':()=>{smRender();calRender()},'7':()=>{pixRender()},'8':()=>{uaRender();actRender()},'9':()=>{spRender();rdRender();dpRender()},'10':()=>{sgRender();shRender()},'11':()=>{pcRender()},'12':()=>{tkRender();ptRender();rnRender()},'13':()=>{clRender();btRender()},'14':()=>{gtRender()}};
+const REDRAW={'1':()=>{kRender();imRender();ofRender()},'2':()=>{dotRender();normRender()},'3':()=>{secRender();gradRender()},'4':()=>{diceRender();bayesRender();bktRender()},'5':()=>{houseRender();if(!sgd.X)sgdData();sgdRender()},'6':()=>{smRender();calRender()},'7':()=>{pixRender()},'8':()=>{uaRender();actRender()},'9':()=>{spRender();rdRender();dpRender()},'10':()=>{sgRender();shRender()},'11':()=>{pcRender()},'12':()=>{tkRender();ptRender();rnRender()},'13':()=>{clRender();btRender()},'14':()=>{gtRender()},'15':()=>{nwRender();sdRender()}};
 function showDay(day,scroll){if(!DAYS.includes(day))day='1';$$('main.day').forEach(m=>m.hidden=m.dataset.day!==day);$$('[data-nav]').forEach(a=>a.classList.toggle('on',a.dataset.nav===day));store.set('lastDay',day);
   if(!RAN[day]){if(day==='7'&&!FM_U8){fmReady.then(ok=>{if(ok&&!RAN['7']){runAll('7');REDRAW['7']()}});}else runAll(day)}$$('#day'+day+' textarea').forEach(autoSize);REDRAW[day]();if(scroll)window.scrollTo(0,0)}
 function route(){const h=location.hash.replace('#','');const m=h.match(/^day(\d+)$/);if(m){showDay(m[1],true);return}

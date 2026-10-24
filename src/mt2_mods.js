@@ -64,6 +64,11 @@ torch.attrs.randint=fn('randint',(a,kw)=>{let lo=0,hi,sz;const nums=a.filter(x=>
 torch.attrs.randperm=fn('randperm',(a,kw)=>{const n=intOf(a[0]),p=Array.from({length:n},(_,i)=>i);for(let i=n-1;i>0;i--){const j=Math.floor(rand()*(i+1));[p[i],p[j]]=[p[j],p[i]]}return mkT([n],p,dtypeKw(kw,'int64'))});
 torch.attrs.gather=fn('gather',(a,kw)=>gatherT(asTensor(a[0]),intOf(kwOr(kw,a,'dim',1)),asTensor(kwOr(kw,a,'index',2))));
 torch.attrs.index_select=fn('index_select',(a,kw)=>indexSelectT(asTensor(a[0]),intOf(kwOr(kw,a,'dim',1)),asTensor(kwOr(kw,a,'index',2))));
+torch.attrs.eye=fn('eye',(a,kw)=>{const n=intOf(a[0]),m=a[1]&&a[1].t!=='none'?intOf(a[1]):n;const d=new Float64Array(n*m);for(let i=0;i<Math.min(n,m);i++)d[i*m+i]=1;return withGrad(mkT([n,m],d,dtypeKw(kw,'float32')),kw)});
+torch.attrs.bmm=fn('bmm',a=>bmmT(asTensor(a[0]),asTensor(a[1])));
+torch.attrs.sort=fn('sort',(a,kw)=>sortT(asTensor(a[0]),intOf(kwOr(kw,a,'dim',1,I(-1))),kw.descending?truthy(kw.descending):false));
+torch.attrs.repeat_interleave=fn('repeat_interleave',(a,kw)=>{const d=kwOr(kw,a,'dim',2,NONE);return repeatInterleaveT(asTensor(a[0]),kwOr(kw,a,'repeats',1),d.t==='none'?null:intOf(d))});
+torch.attrs.transpose=fn('transpose',a=>transposeT(asTensor(a[0]),intOf(a[1]),intOf(a[2])));torch.attrs.permute=fn('permute',a=>permuteT(asTensor(a[0]),dimsArg([a[1]])));
 torch.attrs.linspace=fn('linspace',(a,kw)=>{const s0=numOf(kwOr(kw,a,'start',0)),e=numOf(kwOr(kw,a,'end',1)),n=intOf(kwOr(kw,a,'steps',2));const st=n>1?(e-s0)/(n-1):0;
   return withGrad(mkT([n],Array.from({length:n},(_,i)=>n===1?s0:i<n/2?s0+i*st:e-(n-1-i)*st),dtypeKw(kw,'float32')),kw)});
 torch.attrs.device=fn('device',a=>({t:'device',name:str(a[0]).split(':')[0]}));
@@ -115,10 +120,10 @@ function d2lPlot(a,kw,ctx){let X=a[0],Y=kwOr(kw,a,'Y',1,null);const xl=kwOr(kw,a
   let Xs=isList(X)?X.items:[X],Ys;if(!Y||Y.t==='none'){Ys=Xs;Xs=Ys.map(y=>null)}else Ys=isList(Y)?Y.items:[Y];if(Xs.length===1&&Ys.length>1)Xs=Ys.map(()=>Xs[0]);
   const labels=lg&&lg.t!=='none'?lg.items.map(str):[];const lim=v=>v&&v.t!=='none'?iterate(v).map(numOf):null,xlim=lim(kwOr(kw,a,'xlim',5,NONE)),ylim=lim(kwOr(kw,a,'ylim',6,NONE)),xs=kwOr(kw,a,'xscale',7,NONE),ys=kwOr(kw,a,'yscale',8,NONE);
   const fig={series:Ys.map((y,i)=>{const yv=toXY(y),xv=Xs[i]?toXY(Xs[i]):yv.map((_,k)=>k);return{x:xv,y:yv,label:labels[i]||''}}),hlines:[],xlabel:xl.t==='str'?xl.v:'',ylabel:yl.t==='str'?yl.v:'',legend:labels.length>0,xlim,ylim,xscale:xs.t==='str'?xs.v:'linear',yscale:ys.t==='str'?ys.v:'linear'};
-  ctx.plots.push(fig);return NONE}
+  ctx.plots.push(fig);ctx.fig=fig;return NONE}
 const pltAxes={t:'mod',name:'Axes',attrs:{}};
 function pltMod(ctx){return{t:'mod',name:'matplotlib.pyplot',attrs:new Proxy({},{get:(o,name)=>{
-  const P={plot:(a,kw)=>{const f=plotFig(ctx);let x,y;if(a.length>=2&&a[1].t!=='str'){x=toXY(a[0]);y=toXY(a[1])}else{y=toXY(a[0]);x=y.map((_,i)=>i)}const lab=kw.label?str(kw.label):'';if(lab)f.legend=true;f.series.push({x,y,label:lab});return NONE},
+  const P={plot:(a,kw)=>{const f=plotFig(ctx);let x,y;if(a.length>=2&&a[1].t!=='str'){x=toXY(a[0]);y=toXY(a[1])}else{y=toXY(a[0]);x=y.map((_,i)=>i)}const fmt=a.find(v=>v.t==='str'),lab=kw.label?str(kw.label):'';if(lab)f.legend=true;f.series.push({x,y,label:lab,scatter:!!(fmt&&/^[ox.*]$/.test(fmt.v))});return NONE},
     scatter:(a,kw)=>{const f=plotFig(ctx);f.series.push({x:toXY(a[0]),y:toXY(a[1]),label:kw.label?str(kw.label):'',scatter:true});return NONE},
     axhline:(a,kw)=>{plotFig(ctx).hlines.push(numOf(kw.y||a[0]||F(0)));return NONE},xlabel:a=>{plotFig(ctx).xlabel=str(a[0]);return NONE},ylabel:a=>{plotFig(ctx).ylabel=str(a[0]);return NONE},legend:()=>{plotFig(ctx).legend=true;return NONE},
     gca:()=>({t:'mod',name:'Axes',attrs:{set_xlabel:fn('set_xlabel',a=>{plotFig(ctx).xlabel=str(a[0]);return NONE}),set_ylabel:fn('set_ylabel',a=>{plotFig(ctx).ylabel=str(a[0]);return NONE}),set_title:fn('set_title',()=>NONE)}}),
@@ -127,7 +132,7 @@ function pltMod(ctx){return{t:'mod',name:'matplotlib.pyplot',attrs:new Proxy({},
 function makeTimer(){const o={times:[],tik:0};const now=()=>(typeof performance!=='undefined'?performance.now():Date.now())/1000;o.tik=now();
   return{t:'mod',name:'Timer',attrs:{times:{get t(){return'list'},get items(){return o.times.map(F)}},start:fn('start',()=>{o.tik=now();return NONE}),stop:fn('stop',()=>{o.times.push(now()-o.tik);return F(o.times[o.times.length-1])}),
     avg:fn('avg',()=>F(o.times.reduce((a,b)=>a+b,0)/o.times.length)),sum:fn('sum',()=>F(o.times.reduce((a,b)=>a+b,0))),cumsum:fn('cumsum',()=>{let s=0;return list(o.times.map(v=>F(s+=v)))})}}}
-const D2L_ALIAS={ones:'ones',zeros:'zeros',tensor:'tensor',normal:'normal',matmul:'matmul',arange:'arange',exp:'exp',sin:'sin',cos:'cos',tanh:'tanh',abs:'abs',float32:'float32',int64:'int64',concat:'cat',stack:'stack',randn:'randn',rand:'rand',zeros_like:'zeros_like',ones_like:'ones_like',sigmoid:'sigmoid',log:'log',sqrt:'sqrt'};
+const D2L_ALIAS={eye:'eye',bmm:'bmm',ones:'ones',zeros:'zeros',tensor:'tensor',normal:'normal',matmul:'matmul',arange:'arange',exp:'exp',sin:'sin',cos:'cos',tanh:'tanh',abs:'abs',float32:'float32',int64:'int64',concat:'cat',stack:'stack',randn:'randn',rand:'rand',zeros_like:'zeros_like',ones_like:'ones_like',sigmoid:'sigmoid',log:'log',sqrt:'sqrt'};
 function d2lMod(ctx){return mod('d2l',{
   ...Object.fromEntries(Object.entries(D2L_ALIAS).map(([k,v])=>[k,torch.attrs[v]])),
   reshape:fn('reshape',a=>reshapeT(asTensor(a[0]),dimsArg([a[1]]))),numpy:fn('numpy',a=>{const T=asTensor(a[0]);const R=mkT(T.shape.slice(),[],T.dtype,true);R.data=T.data;return R}),

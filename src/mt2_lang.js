@@ -1,7 +1,7 @@
 
 // ---------- 张量的属性和方法 ----------
 function tensorAttr(T,name){
-  switch(name){case'shape':return T.np?tup(T.shape.map(I)):{t:'size',dims:T.shape.slice()};case'dtype':return DT(T.dtype);case'T':return transpose2(T);case'ndim':return I(T.shape.length);
+  switch(name){case'shape':return T.np?tup(T.shape.map(I)):{t:'size',dims:T.shape.slice()};case'dtype':return DT(T.dtype);case'T':return transpose2(T);case'ndim':return I(T.shape.length);case'device':return{t:'device',name:'cpu'};
     case'requires_grad':return B(T.requires_grad);case'grad':return T.grad||NONE;case'grad_fn':return T.grad_fn?{t:'gradfn',g:T.grad_fn}:NONE;case'is_leaf':return B(!T.grad_fn);case'data':{const d=mkT(T.shape.slice(),[],T.dtype);d.data=T.data;return d}}
   const m=tensorMethod(T,name);if(m)return fn(name,m);err('AttributeError',`'${T.np?'numpy.ndarray':'Tensor'}' object has no attribute '${name}'`)}
 function tensorMethod(T,name){
@@ -26,7 +26,9 @@ function tensorMethod(T,name){
     fill_:a=>{T.data.fill(castVal(numOf(a[0]),T.dtype));return T},
     sub_:a=>{checkInplace(T);const r=binop('-',T,a[0]);T.data.set(r.data);return T},add_:a=>{checkInplace(T);const r=binop('+',T,a[0]);T.data.set(r.data);return T},
     argmax:(a,kw)=>argmaxT(T,dimArg(a,kw),keepArg(kw),1),argmin:(a,kw)=>argmaxT(T,dimArg(a,kw),keepArg(kw),-1),
-    unsqueeze:a=>{const s=T.shape.slice();let d=intOf(a[0]);if(d<0)d+=s.length+1;s.splice(d,0,1);return reshapeT(T,s)},squeeze:(a,kw)=>{const dv=kw.dim||a[0];if(!dv||dv.t==='none')return reshapeT(T,T.shape.filter(d=>d!==1));let d=intOf(dv);if(d<0)d+=T.shape.length;return T.shape[d]===1?reshapeT(T,T.shape.filter((_,i)=>i!==d)):T},
+    unsqueeze:a=>{const s=T.shape.slice();let d=intOf(a[0]);if(d<0)d+=s.length+1;s.splice(d,0,1);return reshapeT(T,s)},transpose:a=>transposeT(T,intOf(a[0]),intOf(a[1])),permute:a=>permuteT(T,dimsArg(a)),bmm:a=>bmmT(T,asTensor(a[0])),dim:()=>I(T.shape.length),ndimension:()=>I(T.shape.length),
+    repeat:a=>repeatT(T,dimsArg(a)),repeat_interleave:(a,kw)=>{const d=kwOr(kw,a,'dim',1,NONE);return repeatInterleaveT(T,kwOr(kw,a,'repeats',0),d.t==='none'?null:intOf(d))},sort:(a,kw)=>sortT(T,intOf(kwOr(kw,a,'dim',0,I(-1))),kw.descending?truthy(kw.descending):false),
+    squeeze:(a,kw)=>{const dv=kw.dim||a[0];if(!dv||dv.t==='none')return reshapeT(T,T.shape.filter(d=>d!==1));let d=intOf(dv);if(d<0)d+=T.shape.length;return T.shape[d]===1?reshapeT(T,T.shape.filter((_,i)=>i!==d)):T},
     gather:(a,kw)=>gatherT(T,intOf(kwOr(kw,a,'dim',0)),asTensor(kwOr(kw,a,'index',1))),index_select:(a,kw)=>indexSelectT(T,intOf(kwOr(kw,a,'dim',0)),asTensor(kwOr(kw,a,'index',1))),
     flatten:()=>reshapeT(T,[-1]),pow:a=>binop('**',T,a[0]),softmax:(a,kw)=>softmaxT(T,intOf(kwOr(kw,a,'dim',0))),log_softmax:(a,kw)=>softmaxT(T,intOf(kwOr(kw,a,'dim',0)),true),all:()=>mkT([],[T.data.every(Boolean)?1:0],'bool',T.np),any:()=>mkT([],[T.data.some(Boolean)?1:0],'bool',T.np),round:()=>mkT(T.shape.slice(),Array.from(T.data,v=>Math.round(v)),T.dtype,T.np),__len__:()=>I(T.shape[0])};
   return M[name]}

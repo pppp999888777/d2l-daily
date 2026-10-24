@@ -92,6 +92,7 @@ input[type=text]{font:inherit;font-family:var(--f-mono);font-size:14px;color:var
 .dpgrid>div{display:flex;flex-direction:column;gap:2px;padding:6px 8px;border-radius:8px;border:1px solid var(--line);font-family:var(--f-mono)}
 .dpgrid .on{background:color-mix(in srgb,var(--accent) 14%,var(--surface))}.dpgrid .off{background:var(--sunk);opacity:.6}
 .calc.pw{white-space:pre-wrap}
+canvas.hm{image-rendering:pixelated;border:1px solid var(--line)}
 .math{font-family:var(--f-mono);font-size:14px;padding:6px 10px;background:var(--sunk);border-radius:8px;overflow-x:auto;margin:0}
 .tkrow{display:grid;grid-template-columns:repeat(auto-fill,minmax(70px,1fr));gap:6px}
 .tk{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:6px 8px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:inherit;font-size:13px;cursor:pointer;text-align:left;min-width:0}
@@ -213,7 +214,7 @@ code.big{font-size:.8em;background:var(--sunk);padding:0 .25em;border-radius:6px
 </style><header class="top"><div class="wrap">
   <span class="brand">动手学深度学习每日课</span>
   <nav class="days" id="dayNav" aria-label="课程天数">
-    <a href="#day1" data-nav="1">第 1 天</a><a href="#day2" data-nav="2">第 2 天</a><a href="#day3" data-nav="3">第 3 天</a><a href="#day4" data-nav="4">第 4 天</a><a href="#day5" data-nav="5">第 5 天</a><a href="#day6" data-nav="6">第 6 天</a><a href="#day7" data-nav="7">第 7 天</a><a href="#day8" data-nav="8">第 8 天</a><a href="#day9" data-nav="9">第 9 天</a><a href="#day10" data-nav="10">第 10 天</a><a href="#day11" data-nav="11">第 11 天</a><a href="#day12" data-nav="12">第 12 天</a><a href="#day13" data-nav="13">第 13 天</a><a href="#day14" data-nav="14">第 14 天</a>
+    <a href="#day1" data-nav="1">第 1 天</a><a href="#day2" data-nav="2">第 2 天</a><a href="#day3" data-nav="3">第 3 天</a><a href="#day4" data-nav="4">第 4 天</a><a href="#day5" data-nav="5">第 5 天</a><a href="#day6" data-nav="6">第 6 天</a><a href="#day7" data-nav="7">第 7 天</a><a href="#day8" data-nav="8">第 8 天</a><a href="#day9" data-nav="9">第 9 天</a><a href="#day10" data-nav="10">第 10 天</a><a href="#day11" data-nav="11">第 11 天</a><a href="#day12" data-nav="12">第 12 天</a><a href="#day13" data-nav="13">第 13 天</a><a href="#day14" data-nav="14">第 14 天</a><a href="#day15" data-nav="15">第 15 天</a>
     <a href="#road" class="road-link">课程表</a>
     <a class="soon" href="#road">第 9 天</a><a class="soon" href="#road">第 10 天</a>
   </nav>
@@ -4305,6 +4306,314 @@ print('对错：  ', rs[s].long().tolist())</textarea></div>
 </section>
 </main>
 
+<main class="wrap day" id="day15" data-day="15" hidden>
+<section class="hero">
+  <div class="eyebrow">第 15 天 · 原书第 10.1 节 + 第 10.2 节 + 第 10.3 节 · 论文路线第 8 课</div>
+  <h1>注意力：按相关程度加权求和</h1>
+  <p class="lead">注意力机制的核心只有一句话：<b>用一个查询去和一组键比较，算出权重，再用这些权重对值做加权平均</b>。今天从最古老的形式（1964 年的 Nadaraya-Watson 核回归）讲起，再看两种常用的“打分函数”：加性注意力和缩放点积注意力。你论文的 DKVMN 读记忆时用的就是点积注意力，SAKT、AKT、simpleKT 的核心也是它（明天和后天细讲）。</p>
+  <div class="plan">
+    <div><b class="k">今天的时间</b>大约 70 分钟。代码格都很快，自动运行。</div>
+    <div><b class="k">学完你能</b><ul><li>说出查询、键、值分别是什么</li><li>把核回归看成注意力汇聚</li><li>写出加性注意力和缩放点积注意力</li><li>用掩码让模型看不到某些位置</li></ul></div>
+    <div><b class="k">和你的论文</b><ul><li>DKVMN 的 <code>softmax(qemb @ Mk.t())</code></li><li>读记忆：权重 × 记忆槽再求和</li><li>为什么要除以 √d</li></ul></div>
+  </div>
+</section>
+
+<section class="part" id="attcue">
+  <div class="part-h"><div class="eyebrow">第一部分</div><h2>10.1 注意力提示</h2><span class="src">对应原书第 10.1 节，代码来自原书 PyTorch 版</span></div>
+  <div class="prose"><div class="row"><button class="btn primary runAll" data-day="15">从头全部运行</button><span class="small muted runAllMsg"></span></div></div>
+  <div class="blk">
+    <div class="prose">
+      <p>原书用人的视觉打比方：桌上有报纸、论文、笔记本、书和一杯红色的咖啡。你不刻意找的时候，眼睛会被最显眼的红色咖啡杯吸引（<b>非自主性提示</b>）；喝完咖啡想读书，你会主动去找书（<b>自主性提示</b>）。</p>
+      <p>放到模型里：自主性提示叫<b>查询</b>（query，我现在想找什么）；每个可选的东西都有一个<b>键</b>（key，它长什么样）和一个<b>值</b>（value，选中它能拿到什么）。查询和每个键比较，得到注意力权重；输出是值的加权平均。这个过程叫<b>注意力汇聚</b>。</p>
+    </div>
+    <div class="cell"><textarea>from d2l import torch as d2l
+import torch</textarea></div>
+    <div class="prose"><p>注意力权重是一个（查询数 × 键数）的矩阵，常用热图来看。先画一个最简单的：单位矩阵，表示每个查询只关注和它同编号的键。</p></div>
+    <div class="cell"><textarea>#@save
+def show_heatmaps(matrices, xlabel, ylabel, titles=None, figsize=(2.5, 2.5),
+                  cmap='Reds'):
+    """显示矩阵热图"""
+    d2l.use_svg_display()
+    num_rows, num_cols = matrices.shape[0], matrices.shape[1]
+    fig, axes = d2l.plt.subplots(num_rows, num_cols, figsize=figsize,
+                                 sharex=True, sharey=True, squeeze=False)
+    for i, (row_axes, row_matrices) in enumerate(zip(axes, matrices)):
+        for j, (ax, matrix) in enumerate(zip(row_axes, row_matrices)):
+            pcm = ax.imshow(d2l.numpy(matrix), cmap=cmap)
+            if i == num_rows - 1:
+                ax.set_xlabel(xlabel)
+            if j == 0:
+                ax.set_ylabel(ylabel)
+            if titles:
+                ax.set_title(titles[j])
+    fig.colorbar(pcm, ax=axes, shrink=0.6);</textarea></div>
+    <div class="cell"><textarea>attention_weights = d2l.reshape(d2l.eye(10), (1, 1, 10, 10))
+show_heatmaps(attention_weights, xlabel='Keys', ylabel='Queries')</textarea></div>
+  </div>
+</section>
+
+<section class="part" id="nw">
+  <div class="part-h"><div class="eyebrow">第二部分</div><h2>10.2 注意力汇聚：Nadaraya-Watson 核回归</h2><span class="src">对应原书第 10.2 节，代码来自原书 PyTorch 版</span></div>
+  <div class="blk"><div class="blk-h"><span class="n">10.2.1</span><h3>生成数据集</h3></div>
+    <div class="prose"><p>真实函数 f(x) = 2 sin(x) + x^0.8，取 50 个带噪声的训练点。任务：给一个新的 x（查询），预测 y。</p></div>
+    <div class="cell"><textarea>from d2l import torch as d2l
+import torch
+from torch import nn
+
+n_train = 50  # 训练样本数
+x_train, _ = torch.sort(d2l.rand(n_train) * 5)   # 排序后的训练样本</textarea></div>
+    <div class="cell"><textarea>def f(x):
+    return 2 * d2l.sin(x) + x**0.8
+
+y_train = f(x_train) + d2l.normal(0.0, 0.5, (n_train,))  # 训练样本的输出
+x_test = d2l.arange(0, 5, 0.1)  # 测试样本
+y_truth = f(x_test)  # 测试样本的真实输出
+n_test = len(x_test)  # 测试样本数
+n_test</textarea></div>
+    <div class="cell"><textarea>def plot_kernel_reg(y_hat):
+    d2l.plot(x_test, [y_truth, y_hat], 'x', 'y', legend=['Truth', 'Pred'],
+             xlim=[0, 5], ylim=[-1, 5])
+    d2l.plt.plot(x_train, y_train, 'o', alpha=0.5);</textarea></div>
+  </div>
+  <div class="blk"><div class="blk-h"><span class="n">10.2.2</span><h3>平均汇聚</h3></div>
+    <div class="prose"><p>最笨的办法：不管查询是多少，都预测所有训练 y 的平均值。相当于给每个训练点同样的权重 1/n。</p></div>
+    <div class="cell"><textarea>y_hat = torch.repeat_interleave(y_train.mean(), n_test)
+plot_kernel_reg(y_hat)</textarea></div>
+  </div>
+  <div class="blk"><div class="blk-h"><span class="n">10.2.3</span><h3>非参数注意力汇聚</h3></div>
+    <div class="prose">
+      <p>更合理的做法：离查询 x 越近的训练点，权重越大。Nadaraya 和 Watson 在 1964 年提出：</p>
+      <p class="math">f(x) = Σᵢ α(x, xᵢ) yᵢ，α(x, xᵢ) = softmax(−(x − xᵢ)² / 2)</p>
+      <p>用注意力的话说：x 是<b>查询</b>，训练点 xᵢ 是<b>键</b>，yᵢ 是<b>值</b>，α 是注意力权重。它不需要训练（没有参数），所以叫非参数注意力汇聚。</p>
+    </div>
+    <div class="cell"><textarea># X_repeat的形状:(n_test,n_train),
+# 每一行都包含着相同的测试输入（例如：同样的查询）
+X_repeat = d2l.reshape(x_test.repeat_interleave(n_train), (-1, n_train))
+# x_train包含着键。attention_weights的形状：(n_test,n_train),
+# 每一行都包含着要在给定的每个查询的值（y_train）之间分配的注意力权重
+attention_weights = nn.functional.softmax(-(X_repeat - x_train)**2 / 2, dim=1)
+# y_hat的每个元素都是值的加权平均值，其中的权重是注意力权重
+y_hat = d2l.matmul(attention_weights, y_train)
+plot_kernel_reg(y_hat)</textarea></div>
+    <div class="prose"><p>注意力权重热图：每一行是一个测试点（查询），每一列是一个训练点（键）。因为两边都排过序，权重集中在对角线附近：每个查询主要关注和它挨得近的训练点。</p></div>
+    <div class="cell"><textarea>d2l.show_heatmaps(attention_weights.unsqueeze(0).unsqueeze(0),
+                  xlabel='Sorted training inputs',
+                  ylabel='Sorted testing inputs')</textarea></div>
+    <div class="panel stack" id="nwLab">
+      <h4>拖动查询和核宽度</h4>
+      <p class="small muted">灰色曲线是真实函数，点是训练数据（这里另外生成了一份）。竖线是查询 x。每个训练点下面的柱子是它得到的注意力权重，橙色线是 Nadaraya-Watson 的预测。w 越大，权重越集中在查询附近：太小像平均汇聚（欠拟合），太大会贴着噪声走（过拟合）。</p>
+      <div class="row"><label class="ctrl" for="nwQ">查询 x <output id="nwQv">2.50</output><input type="range" id="nwQ" min="0" max="5" step="0.05" value="2.5"></label><label class="ctrl" for="nwW">核宽度参数 w <output id="nwWv">1.00</output><input type="range" id="nwW" min="0.1" max="12" step="0.1" value="1"></label></div>
+      <div class="cv" id="nwHost"><canvas id="nwCv" aria-label="核回归和注意力权重"></canvas></div>
+      <div class="calc pw" id="nwCalc"></div>
+    </div>
+  </div>
+  <div class="blk"><div class="blk-h"><span class="n">10.2.4</span><h3>带参数的注意力汇聚</h3></div>
+    <div class="prose"><p>加一个可学习的参数 w 控制核的宽度：α(x, xᵢ) = softmax(−((x − xᵢ)·w)² / 2)。先认识批量矩阵乘法 <code>torch.bmm</code>：两个形状 (n, a, b) 和 (n, b, c) 的张量，第 i 个矩阵和第 i 个矩阵相乘，得到 (n, a, c)。</p></div>
+    <div class="cell"><textarea>X = d2l.ones((2, 1, 4))
+Y = d2l.ones((2, 4, 6))
+torch.bmm(X, Y).shape</textarea></div>
+    <div class="prose"><p>用 bmm 做加权平均：权重变成 (批量, 1, n)，值变成 (批量, n, 1)，乘出来是 (批量, 1, 1)。</p></div>
+    <div class="cell"><textarea>weights = d2l.ones((2, 10)) * 0.1
+values = d2l.reshape(d2l.arange(20.0), (2, 10))
+torch.bmm(weights.unsqueeze(1), values.unsqueeze(-1))</textarea></div>
+    <div class="cell"><textarea>class NWKernelRegression(nn.Module):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.w = nn.Parameter(torch.rand((1,), requires_grad=True))
+
+    def forward(self, queries, keys, values):
+        # queries和attention_weights的形状为(查询个数，“键－值”对个数)
+        queries = d2l.reshape(
+            queries.repeat_interleave(keys.shape[1]), (-1, keys.shape[1]))
+        self.attention_weights = nn.functional.softmax(
+            -((queries - keys) * self.w)**2 / 2, dim=1)
+        # values的形状为(查询个数，“键－值”对个数)
+        return torch.bmm(self.attention_weights.unsqueeze(1),
+                         values.unsqueeze(-1)).reshape(-1)</textarea></div>
+    <div class="prose"><p>训练时，每个训练点都当一次查询，键和值是<b>除了它自己以外</b>的其他训练点（不然它只会盯着自己）。<code>1 - eye</code> 是对角线为 0 的掩码，用来去掉自己。</p></div>
+    <div class="cell"><textarea># X_tile的形状:(n_train，n_train)，每一行都包含着相同的训练输入
+X_tile = x_train.repeat((n_train, 1))
+# Y_tile的形状:(n_train，n_train)，每一行都包含着相同的训练输出
+Y_tile = y_train.repeat((n_train, 1))
+# keys的形状:('n_train'，'n_train'-1)
+keys = d2l.reshape(X_tile[(1 - d2l.eye(n_train)).type(torch.bool)],
+                   (n_train, -1))
+# values的形状:('n_train'，'n_train'-1)
+values = d2l.reshape(Y_tile[(1 - d2l.eye(n_train)).type(torch.bool)],
+                     (n_train, -1))</textarea></div>
+    <div class="prose"><p><b>和原书的不同</b>：加了一行 <code>torch.manual_seed(1)</code>。w 是随机初始化的，本页的随机数每次打开都一样，不加这一行时 w 恰好落在 0.1 左右，那一带损失几乎是平的，w 会被推向 0，曲线学成一条平线（我在真 PyTorch 上用同样的数据和初始值验证过，是同样的结果，不是网页的问题）。</p></div>
+    <div class="cell"><textarea>torch.manual_seed(1)   # 本页加的，原因见上
+net = NWKernelRegression()
+loss = nn.MSELoss(reduction='none')
+trainer = torch.optim.SGD(net.parameters(), lr=0.5)
+animator = d2l.Animator(xlabel='epoch', ylabel='loss', xlim=[1, 5])
+
+for epoch in range(5):
+    trainer.zero_grad()
+    l = loss(net(x_train, keys, values), y_train)
+    l.sum().backward()
+    trainer.step()
+    print(f'epoch {epoch + 1}, loss {float(l.sum()):.6f}')
+    animator.add(epoch + 1, float(l.sum()))</textarea></div>
+    <div class="cell"><textarea>print('学到的 w：', net.w.item())
+# keys的形状:(n_test，n_train)，每一行包含着相同的训练输入（例如，相同的键）
+keys = x_train.repeat((n_test, 1))
+# value的形状:(n_test，n_train)
+values = y_train.repeat((n_test, 1))
+y_hat = net(x_test, keys, values).unsqueeze(1).detach()
+plot_kernel_reg(y_hat)</textarea></div>
+    <div class="prose"><p>学到的 w 比 1 大，权重更集中，曲线也更“抖”（开始跟着噪声走了）：</p></div>
+    <div class="cell"><textarea>d2l.show_heatmaps(net.attention_weights.unsqueeze(0).unsqueeze(0),
+                  xlabel='Sorted training inputs',
+                  ylabel='Sorted testing inputs')</textarea></div>
+  </div>
+</section>
+
+<section class="part" id="score">
+  <div class="part-h"><div class="eyebrow">第三部分</div><h2>10.3 注意力评分函数</h2><span class="src">对应原书第 10.3 节，代码来自原书 PyTorch 版</span></div>
+  <div class="blk">
+    <div class="prose">
+      <p>上面用的 −(x − xᵢ)²/2 叫<b>注意力评分函数</b> a(q, k)：给查询和键打分。分数经过 softmax 变成权重，再对值加权求和：</p>
+      <p class="math">f(q) = Σᵢ softmax(a(q, kᵢ)) · vᵢ</p>
+      <p>不同的评分函数就是不同的注意力。</p>
+    </div>
+    <div class="cell"><textarea>from d2l import torch as d2l
+import math
+import torch
+from torch import nn</textarea></div>
+  </div>
+  <div class="blk"><div class="blk-h"><span class="n">10.3.1</span><h3>掩蔽 softmax</h3></div>
+    <div class="prose"><p>有时有些键不该被看到：比如批量里的序列长短不一，补齐的位置是假的。做法是把这些位置的分数换成一个很大的负数（−10⁶），softmax 以后权重就是 0。<code>valid_lens</code> 给出每个序列（或每个查询）有效的长度。</p></div>
+    <div class="cell"><textarea>#@save
+def masked_softmax(X, valid_lens):
+    """通过在最后一个轴上掩蔽元素来执行softmax操作"""
+    # X:3D张量，valid_lens:1D或2D张量
+    if valid_lens is None:
+        return nn.functional.softmax(X, dim=-1)
+    else:
+        shape = X.shape
+        if valid_lens.dim() == 1:
+            valid_lens = torch.repeat_interleave(valid_lens, shape[1])
+        else:
+            valid_lens = valid_lens.reshape(-1)
+        # 最后一轴上被掩蔽的元素使用一个非常大的负值替换，从而其softmax输出为0
+        X = d2l.sequence_mask(X.reshape(-1, shape[-1]), valid_lens,
+                              value=-1e6)
+        return nn.functional.softmax(X.reshape(shape), dim=-1)</textarea></div>
+    <div class="cell"><textarea>masked_softmax(torch.rand(2, 2, 4), torch.tensor([2, 3]))</textarea></div>
+    <div class="cell"><textarea>masked_softmax(torch.rand(2, 2, 4), d2l.tensor([[1, 3], [2, 4]]))</textarea></div>
+    <div class="callout"><h4>对照你的论文：掩码</h4><p>KT 里的掩码更重要：第 t 步只能看到第 t 步以前的记录，不能偷看未来的答案。SAKT、AKT、simpleKT 都用一个“下三角”的掩码（后天学 Transformer 时会看到）。你论文 <code>batch_loss</code> 里的 <code>m</code> 是另一种掩码：窗口不满 100 步时，补出来的位置不计入损失。</p></div>
+  </div>
+  <div class="blk"><div class="blk-h"><span class="n">10.3.2</span><h3>加性注意力</h3></div>
+    <div class="prose"><p>查询和键的长度可以不同。先各自用一个线性层变到同样长度 h，相加后过 tanh，再用一个向量 w_v 打分：</p>
+      <p class="math">a(q, k) = w_vᵀ tanh(W_q q + W_k k)</p></div>
+    <div class="cell"><textarea>#@save
+class AdditiveAttention(nn.Module):
+    """加性注意力"""
+    def __init__(self, key_size, query_size, num_hiddens, dropout, **kwargs):
+        super(AdditiveAttention, self).__init__(**kwargs)
+        self.W_k = nn.Linear(key_size, num_hiddens, bias=False)
+        self.W_q = nn.Linear(query_size, num_hiddens, bias=False)
+        self.w_v = nn.Linear(num_hiddens, 1, bias=False)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, queries, keys, values, valid_lens):
+        queries, keys = self.W_q(queries), self.W_k(keys)
+        # 在维度扩展后，
+        # queries的形状：(batch_size，查询的个数，1，num_hidden)
+        # key的形状：(batch_size，1，“键－值”对的个数，num_hiddens)
+        # 使用广播方式进行求和
+        features = queries.unsqueeze(2) + keys.unsqueeze(1)
+        features = torch.tanh(features)
+        # self.w_v仅有一个输出，因此从形状中移除最后那个维度。
+        # scores的形状：(batch_size，查询的个数，“键-值”对的个数)
+        scores = self.w_v(features).squeeze(-1)
+        self.attention_weights = masked_softmax(scores, valid_lens)
+        # values的形状：(batch_size，“键－值”对的个数，值的维度)
+        return torch.bmm(self.dropout(self.attention_weights), values)</textarea></div>
+    <div class="prose"><p>2 个批量，每批 1 个查询、10 个键值对。所有键都一样，所以权重在有效范围内是均匀的：第一批只看前 2 个，第二批看前 6 个。</p></div>
+    <div class="cell"><textarea>queries, keys = d2l.normal(0, 1, (2, 1, 20)), d2l.ones((2, 10, 2))
+# values的小批量，两个值矩阵是相同的
+values = torch.arange(40, dtype=torch.float32).reshape(1, 10, 4).repeat(
+    2, 1, 1)
+valid_lens = d2l.tensor([2, 6])
+
+attention = AdditiveAttention(key_size=2, query_size=20, num_hiddens=8,
+                              dropout=0.1)
+attention.eval()
+attention(queries, keys, values, valid_lens)</textarea></div>
+    <div class="cell"><textarea>d2l.show_heatmaps(d2l.reshape(attention.attention_weights, (1, 1, 2, 10)),
+                  xlabel='Keys', ylabel='Queries')</textarea></div>
+  </div>
+  <div class="blk"><div class="blk-h"><span class="n">10.3.3</span><h3>缩放点积注意力</h3></div>
+    <div class="prose"><p>查询和键长度相同（都是 d）时，直接用点积打分，更快：</p>
+      <p class="math">a(q, k) = qᵀk / √d</p>
+      <p>为什么除以 √d？如果 q 和 k 的每个分量都是均值 0、方差 1 的独立随机数，点积 qᵀk 是 d 项之和，方差是 d。d 越大，分数越大，softmax 就越接近“只选一个”，梯度几乎为 0。除以 √d 把方差拉回 1。下面的交互可以看到这个效果。</p></div>
+    <div class="cell"><textarea>#@save
+class DotProductAttention(nn.Module):
+    """缩放点积注意力"""
+    def __init__(self, dropout, **kwargs):
+        super(DotProductAttention, self).__init__(**kwargs)
+        self.dropout = nn.Dropout(dropout)
+
+    # queries的形状：(batch_size，查询的个数，d)
+    # keys的形状：(batch_size，“键－值”对的个数，d)
+    # values的形状：(batch_size，“键－值”对的个数，值的维度)
+    # valid_lens的形状:(batch_size，)或者(batch_size，查询的个数)
+    def forward(self, queries, keys, values, valid_lens=None):
+        d = queries.shape[-1]
+        # 设置transpose_b=True为了交换keys的最后两个维度
+        scores = torch.bmm(queries, keys.transpose(1,2)) / math.sqrt(d)
+        self.attention_weights = masked_softmax(scores, valid_lens)
+        return torch.bmm(self.dropout(self.attention_weights), values)</textarea></div>
+    <div class="cell"><textarea>queries = d2l.normal(0, 1, (2, 1, 2))
+attention = DotProductAttention(dropout=0.5)
+attention.eval()
+attention(queries, keys, values, valid_lens)</textarea></div>
+    <div class="cell"><textarea>d2l.show_heatmaps(d2l.reshape(attention.attention_weights, (1, 1, 2, 10)),
+                  xlabel='Keys', ylabel='Queries')</textarea></div>
+    <div class="panel stack" id="spLab2">
+      <h4>为什么要除以 √d</h4>
+      <p class="small muted">随机生成 1 个查询和 8 个键，每个分量都服从标准正态分布。比较“不缩放”和“除以 √d”时 softmax 出来的 8 个权重。d 越大，不缩放的权重越接近“只有一个是 1，其余是 0”。</p>
+      <div class="row"><label class="ctrl" for="sdD">维度 d <output id="sdDv">64</output><input type="range" id="sdD" min="1" max="512" step="1" value="64"></label><button class="btn sm" id="sdGo">重新抽一组</button></div>
+      <div class="cv" id="sdHost"><canvas id="sdCv" aria-label="缩放和不缩放的注意力权重"></canvas></div>
+      <div class="calc pw" id="sdCalc"></div>
+    </div>
+    <div class="callout"><h4>对照你的论文：DKVMN 读记忆就是点积注意力</h4><p>DKVMN（第 1112 行）有 N = 20 个记忆槽。键矩阵 <code>Mk</code> 是 (20, d)，每一行是一个记忆槽的“键”；值矩阵 M 是每个学生自己的 (20, d) 记忆，随着做题不断改写。读的时候（第 1131 到 1137 行）：</p>
+<pre class="code">qe = self.qemb(q)                          <span class="c"># 查询：下一题知识点的嵌入，d 维</span>
+w = torch.softmax(qe @ self.Mk.t(), -1)    <span class="c"># 和 20 个键做点积，softmax 成 20 个权重</span>
+r = torch.einsum("btmn,btnd->btmd", w, M)  <span class="c"># 用权重对 20 个记忆槽（值）加权求和</span></pre>
+      <p>和今天的公式一模一样：查询是题目的嵌入，键是 <code>Mk</code>，值是记忆 M。唯一的区别是没有除以 √d（d = 64，Mk 初始化时乘了 0.1，分数本来就不大）。写记忆时（第 1121 到 1127 行）用的是同一组权重 w：权重大的槽改得多。</p></div>
+  </div>
+</section>
+
+<section class="part quiz-sec">
+  <div class="part-h"><div class="eyebrow">课后题</div><h2>做几道题检查一下</h2><span class="src">选择题点选项马上出结果；写形状和写代码的题，网页会现场运行代码判断对错。答题记录只存在你这台设备的浏览器里。</span></div>
+  <div class="quiz dayquiz" data-day="15"></div>
+  <div class="row small muted quizscore" data-day="15"></div>
+</section>
+
+<section class="part">
+  <div class="part-h"><div class="eyebrow">今日小结</div><h2>今天学会了吗？</h2></div>
+  <div class="two">
+    <div class="panel stack">
+      <ul class="check-list" data-day="15">
+        <li><label><input type="checkbox" data-k="c1">查询和键打分 → softmax 成权重 → 对值加权平均</label></li>
+        <li><label><input type="checkbox" data-k="c2">Nadaraya-Watson 核回归就是一种注意力汇聚</label></li>
+        <li><label><input type="checkbox" data-k="c3"><code>torch.bmm</code> 做一批矩阵乘法；掩码把不该看的位置设成 −10⁶</label></li>
+        <li><label><input type="checkbox" data-k="c4">加性注意力 w_vᵀ tanh(W_q q + W_k k)；缩放点积 qᵀk/√d</label></li>
+        <li><label><input type="checkbox" data-k="c5">DKVMN 读记忆：题目嵌入当查询，Mk 当键，记忆 M 当值</label></li>
+      </ul>
+      <span class="small check-msg"></span>
+    </div>
+    <div class="panel stack">
+      <h3>明天（第 16 天）学什么</h3>
+      <p>原书 10.5 多头注意力、10.6 自注意力和位置编码。一个序列自己当查询、键和值，每个位置都去关注其他位置：SAKT 就是这样读学生的做题历史的。还有位置编码：注意力本身不知道顺序，要额外告诉它“这是第几步”。</p>
+    </div>
+  </div>
+</section>
+</main>
+
 <div class="wrap"><section class="part road-sec" id="road">
   <div class="part-h"><div class="eyebrow">课程表</div><h2>按你的论文排的学习路线</h2><span class="src">第 1 到 7 天是基础，按原书顺序。从第 8 天起只挑你论文用到的章节：多层感知机、正则化、自定义模型、循环网络和 LSTM（DKT）、注意力和 Transformer（SAKT、AKT、simpleKT）、Adam，最后是两个书里没有的论文专题。卷积、计算机视觉、NLP 应用等和论文关系不大的章节放到最后选学。</span></div>
   <div class="road" id="roadList"></div>
@@ -7626,7 +7935,7 @@ function pyFloatRepr(v){if(Number.isNaN(v))return'nan';if(!Number.isFinite(v))re
 function strRepr(s){const q=s.includes("'")&&!s.includes('"')?'"':"'";return q+s.replace(/\\/g,'\\\\').replace(/\n/g,'\\n').replace(/\t/g,'\\t')+q}
 function repr(v){if(isT(v))return(v.isParam?'Parameter containing:\n':'')+tensorRepr(v);
   switch(v.t){case'int':return String(v.v);case'float':return v.np?`np.float64(${pyFloatRepr(v.v)})`:pyFloatRepr(v.v);case'bool':return v.v?'True':'False';case'none':return'None';case'str':return strRepr(v.v);
-    case'tuple':return'('+v.items.map(repr).join(', ')+(v.items.length===1?',':'')+')';case'list':if(v.isSet)return v.items.length?'{'+v.items.map(repr).join(', ')+'}':'set()';return(v.view?v.view+'(':'')+'['+v.items.map(repr).join(', ')+']'+(v.view?')':'');case'inckeys':return v.missing.length||v.unexpected.length?`_IncompatibleKeys(missing_keys=[${v.missing.map(strRepr).join(', ')}], unexpected_keys=[${v.unexpected.map(strRepr).join(', ')}])`:'<All keys matched successfully>';
+    case'tuple':if(v.rtype)return`torch.return_types.${v.rtype}(\n`+v.fields.map((f,i)=>f+'='+repr(v.items[i])).join(',\n')+')';return'('+v.items.map(repr).join(', ')+(v.items.length===1?',':'')+')';case'list':if(v.isSet)return v.items.length?'{'+v.items.map(repr).join(', ')+'}':'set()';return(v.view?v.view+'(':'')+'['+v.items.map(repr).join(', ')+']'+(v.view?')':'');case'inckeys':return v.missing.length||v.unexpected.length?`_IncompatibleKeys(missing_keys=[${v.missing.map(strRepr).join(', ')}], unexpected_keys=[${v.unexpected.map(strRepr).join(', ')}])`:'<All keys matched successfully>';
     case'dict':{const body='{'+[...v.m.values()].map(([k,x])=>repr(k)+': '+repr(x)).join(', ')+'}';if(v.counter){const r=[...v.m.values()].sort((x,y)=>y[1].v-x[1].v);return r.length?'Counter({'+r.map(([k,x])=>repr(k)+': '+repr(x)).join(', ')+'})':'Counter()'}if(v.dflt)return`defaultdict(${repr(v.dflt).replace(/^<built-in function (\w+)>$/,"<class '$1'>")}, ${body})`;return v.odict?(v.m.size?`OrderedDict(${body})`:'OrderedDict()'):body}
     case'range':return`range(${v.start}, ${v.stop}${v.step!==1?', '+v.step:''})`;
     case'device':return`device(type='${v.name}')`;case'size':return`torch.Size([${v.dims.join(', ')}])`;case'dtype':return`torch.${v.name}`;case'type':return`<class '${v.name}'>`;case'mod':return`<module '${v.name}'>`;
@@ -7711,6 +8020,25 @@ function indexSelectT(T,dim,Ix){const nd=T.shape.length;if(dim<0)dim+=nd;if(Ix.s
   for(let o=0;o<outer;o++)for(let k=0;k<m;k++){const so=(o*D+idx[k])*inner,dO=(o*m+k)*inner;for(let i=0;i<inner;i++)out[dO+i]=T.data[so+i]}
   const shape=T.shape.slice();shape[dim]=m;
   return track(mkT(shape,out,T.dtype,T.np),[T],'IndexSelectBackward0',g=>{const r=new Float64Array(T.data.length);for(let o=0;o<outer;o++)for(let k=0;k<m;k++){const so=(o*D+idx[k])*inner,dO=(o*m+k)*inner;for(let i=0;i<inner;i++)r[so+i]+=g[dO+i]}return[r]})}
+// 维度重排（transpose / permute）、批量矩阵乘法、repeat、repeat_interleave、sort
+function permuteT(T,perm,name){const nd=T.shape.length;perm=perm.map(p=>p<0?p+nd:p);const shape=perm.map(p=>T.shape[p]),st=strides(T.shape),n=T.data.length,out=new Float64Array(n),src=new Int32Array(n),os=strides(shape);
+  for(let q=0;q<n;q++){let r=q,off=0;for(let d=0;d<nd;d++){const c=Math.floor(r/os[d]);r-=c*os[d];off+=c*st[perm[d]]}src[q]=off;out[q]=T.data[off]}
+  return track(mkT(shape,out,T.dtype,T.np),[T],name||'PermuteBackward0',g=>{const r=new Float64Array(n);for(let q=0;q<n;q++)r[src[q]]=g[q];return[r]})}
+function transposeT(T,a,b){const nd=T.shape.length;if(a<0)a+=nd;if(b<0)b+=nd;const p=[...Array(nd).keys()];[p[a],p[b]]=[p[b],p[a]];return permuteT(T,p,'TransposeBackward0')}
+function bmmT(A,B){if(A.shape.length!==3||B.shape.length!==3)err('RuntimeError',`batch1 must be a 3D tensor`);const[b,n,m]=A.shape,[b2,m2,p]=B.shape;if(b!==b2||m!==m2)err('RuntimeError',`Expected size for first two dimensions of batch2 tensor to be: [${b}, ${m}] but got: [${b2}, ${m2}].`);
+  const out=new Float64Array(b*n*p),Ad=A.data,Bd=B.data,f32=resultDtype(A,B)==='float32';for(let k=0;k<b;k++)for(let i=0;i<n;i++)for(let j=0;j<m;j++){const a=Ad[(k*n+i)*m+j];if(!a)continue;const bo=(k*m+j)*p,oo=(k*n+i)*p;if(f32)for(let q=0;q<p;q++)out[oo+q]=Math.fround(out[oo+q]+a*Bd[bo+q]);else for(let q=0;q<p;q++)out[oo+q]+=a*Bd[bo+q]}
+  return track(mkT([b,n,p],out,resultDtype(A,B)),[A,B],'BmmBackward0',g=>{const ga=A.requires_grad?new Float64Array(A.data.length):null,gb=B.requires_grad?new Float64Array(B.data.length):null;
+    for(let k=0;k<b;k++)for(let i=0;i<n;i++)for(let j=0;j<m;j++){const bo=(k*m+j)*p,oo=(k*n+i)*p;let s=0;const a=Ad[(k*n+i)*m+j];for(let q=0;q<p;q++){s+=g[oo+q]*Bd[bo+q];if(gb)gb[bo+q]+=a*g[oo+q]}if(ga)ga[(k*n+i)*m+j]=s}return[ga,gb]})}
+function repeatT(T,reps){const nd=Math.max(reps.length,T.shape.length);if(reps.length<T.shape.length)err('RuntimeError','Number of dimensions of repeat dims can not be smaller than number of dimensions of tensor');
+  const sh=[...Array(nd-T.shape.length).fill(1),...T.shape],shape=sh.map((d,i)=>d*reps[i]),os=strides(shape),is=strides(sh),n=prod(shape),out=new Float64Array(n),src=new Int32Array(n);
+  for(let q=0;q<n;q++){let r=q,off=0;for(let d=0;d<nd;d++){const c=Math.floor(r/os[d]);r-=c*os[d];off+=(c%sh[d])*is[d]}src[q]=off;out[q]=T.data[off]}
+  return track(mkT(shape,out,T.dtype,T.np),[T],'RepeatBackward0',g=>{const r=new Float64Array(T.data.length);for(let q=0;q<n;q++)r[src[q]]+=g[q];return[r]})}
+function repeatInterleaveT(T,rep,dim){let X=T,d=dim;if(d==null){X=reshapeT(T,[-1]);d=0}if(d<0)d+=X.shape.length;const D=X.shape[d],rs=isT(rep)?(rep.data.length===1?Array(D).fill(rep.data[0]):[...rep.data]):Array(D).fill(intOf(rep));
+  if(rs.length!==D)err('RuntimeError','repeats must have the same size as input along dim');const idx=[];rs.forEach((k,i)=>{for(let j=0;j<k;j++)idx.push(i)});return rename(indexSelectT(X,d,mkT([idx.length],idx,'int64')),'RepeatInterleaveBackward0')}
+function sortT(T,dim,desc){const nd=T.shape.length;if(dim<0)dim+=nd;const outer=prod(T.shape.slice(0,dim)),inner=prod(T.shape.slice(dim+1)),D=T.shape[dim],vals=new Float64Array(T.data.length),ids=new Float64Array(T.data.length);
+  for(let o=0;o<outer;o++)for(let i=0;i<inner;i++){const k=[...Array(D).keys()],v=j=>T.data[(o*D+j)*inner+i];k.sort((a,b)=>{const x=v(a),y=v(b);if(Number.isNaN(x)!==Number.isNaN(y))return Number.isNaN(x)?(desc?-1:1):(desc?1:-1);return desc?(y-x)||(a-b):(x-y)||(a-b)});k.forEach((j,r)=>{vals[(o*D+r)*inner+i]=v(j);ids[(o*D+r)*inner+i]=j})}
+  const Ix=mkT(T.shape.slice(),ids,'int64');const V=track(mkT(T.shape.slice(),vals,T.dtype,T.np),[T],'SortBackward0',g=>{const r=new Float64Array(T.data.length);for(let o=0;o<outer;o++)for(let i=0;i<inner;i++)for(let rr=0;rr<D;rr++){const q=(o*D+rr)*inner+i;r[(o*D+ids[q])*inner+i]+=g[q]}return[r]});
+  const t=tup([V,Ix]);t.rtype='sort';t.fields=['values','indices'];return t}
 function clampT(T,lo,hi){const L=lo&&lo.t!=='none'?numOf(lo):-Infinity,H=hi&&hi.t!=='none'?numOf(hi):Infinity;if(L===-Infinity&&H===Infinity)err('RuntimeError',"torch.clamp: At least one of 'min' or 'max' must not be None");
   const dt=T.dtype==='bool'?'int64':T.dtype,out=Float64Array.from(T.data,v=>Number.isNaN(v)?v:Math.min(H,Math.max(L,v)));
   return track(mkT(T.shape.slice(),out,dt,T.np),[T],'ClampBackward1',g=>[Float64Array.from(g,(gv,k)=>T.data[k]>=L&&T.data[k]<=H?gv:0)])}
@@ -7956,6 +8284,11 @@ torch.attrs.randint=fn('randint',(a,kw)=>{let lo=0,hi,sz;const nums=a.filter(x=>
 torch.attrs.randperm=fn('randperm',(a,kw)=>{const n=intOf(a[0]),p=Array.from({length:n},(_,i)=>i);for(let i=n-1;i>0;i--){const j=Math.floor(rand()*(i+1));[p[i],p[j]]=[p[j],p[i]]}return mkT([n],p,dtypeKw(kw,'int64'))});
 torch.attrs.gather=fn('gather',(a,kw)=>gatherT(asTensor(a[0]),intOf(kwOr(kw,a,'dim',1)),asTensor(kwOr(kw,a,'index',2))));
 torch.attrs.index_select=fn('index_select',(a,kw)=>indexSelectT(asTensor(a[0]),intOf(kwOr(kw,a,'dim',1)),asTensor(kwOr(kw,a,'index',2))));
+torch.attrs.eye=fn('eye',(a,kw)=>{const n=intOf(a[0]),m=a[1]&&a[1].t!=='none'?intOf(a[1]):n;const d=new Float64Array(n*m);for(let i=0;i<Math.min(n,m);i++)d[i*m+i]=1;return withGrad(mkT([n,m],d,dtypeKw(kw,'float32')),kw)});
+torch.attrs.bmm=fn('bmm',a=>bmmT(asTensor(a[0]),asTensor(a[1])));
+torch.attrs.sort=fn('sort',(a,kw)=>sortT(asTensor(a[0]),intOf(kwOr(kw,a,'dim',1,I(-1))),kw.descending?truthy(kw.descending):false));
+torch.attrs.repeat_interleave=fn('repeat_interleave',(a,kw)=>{const d=kwOr(kw,a,'dim',2,NONE);return repeatInterleaveT(asTensor(a[0]),kwOr(kw,a,'repeats',1),d.t==='none'?null:intOf(d))});
+torch.attrs.transpose=fn('transpose',a=>transposeT(asTensor(a[0]),intOf(a[1]),intOf(a[2])));torch.attrs.permute=fn('permute',a=>permuteT(asTensor(a[0]),dimsArg([a[1]])));
 torch.attrs.linspace=fn('linspace',(a,kw)=>{const s0=numOf(kwOr(kw,a,'start',0)),e=numOf(kwOr(kw,a,'end',1)),n=intOf(kwOr(kw,a,'steps',2));const st=n>1?(e-s0)/(n-1):0;
   return withGrad(mkT([n],Array.from({length:n},(_,i)=>n===1?s0:i<n/2?s0+i*st:e-(n-1-i)*st),dtypeKw(kw,'float32')),kw)});
 torch.attrs.device=fn('device',a=>({t:'device',name:str(a[0]).split(':')[0]}));
@@ -8007,10 +8340,10 @@ function d2lPlot(a,kw,ctx){let X=a[0],Y=kwOr(kw,a,'Y',1,null);const xl=kwOr(kw,a
   let Xs=isList(X)?X.items:[X],Ys;if(!Y||Y.t==='none'){Ys=Xs;Xs=Ys.map(y=>null)}else Ys=isList(Y)?Y.items:[Y];if(Xs.length===1&&Ys.length>1)Xs=Ys.map(()=>Xs[0]);
   const labels=lg&&lg.t!=='none'?lg.items.map(str):[];const lim=v=>v&&v.t!=='none'?iterate(v).map(numOf):null,xlim=lim(kwOr(kw,a,'xlim',5,NONE)),ylim=lim(kwOr(kw,a,'ylim',6,NONE)),xs=kwOr(kw,a,'xscale',7,NONE),ys=kwOr(kw,a,'yscale',8,NONE);
   const fig={series:Ys.map((y,i)=>{const yv=toXY(y),xv=Xs[i]?toXY(Xs[i]):yv.map((_,k)=>k);return{x:xv,y:yv,label:labels[i]||''}}),hlines:[],xlabel:xl.t==='str'?xl.v:'',ylabel:yl.t==='str'?yl.v:'',legend:labels.length>0,xlim,ylim,xscale:xs.t==='str'?xs.v:'linear',yscale:ys.t==='str'?ys.v:'linear'};
-  ctx.plots.push(fig);return NONE}
+  ctx.plots.push(fig);ctx.fig=fig;return NONE}
 const pltAxes={t:'mod',name:'Axes',attrs:{}};
 function pltMod(ctx){return{t:'mod',name:'matplotlib.pyplot',attrs:new Proxy({},{get:(o,name)=>{
-  const P={plot:(a,kw)=>{const f=plotFig(ctx);let x,y;if(a.length>=2&&a[1].t!=='str'){x=toXY(a[0]);y=toXY(a[1])}else{y=toXY(a[0]);x=y.map((_,i)=>i)}const lab=kw.label?str(kw.label):'';if(lab)f.legend=true;f.series.push({x,y,label:lab});return NONE},
+  const P={plot:(a,kw)=>{const f=plotFig(ctx);let x,y;if(a.length>=2&&a[1].t!=='str'){x=toXY(a[0]);y=toXY(a[1])}else{y=toXY(a[0]);x=y.map((_,i)=>i)}const fmt=a.find(v=>v.t==='str'),lab=kw.label?str(kw.label):'';if(lab)f.legend=true;f.series.push({x,y,label:lab,scatter:!!(fmt&&/^[ox.*]$/.test(fmt.v))});return NONE},
     scatter:(a,kw)=>{const f=plotFig(ctx);f.series.push({x:toXY(a[0]),y:toXY(a[1]),label:kw.label?str(kw.label):'',scatter:true});return NONE},
     axhline:(a,kw)=>{plotFig(ctx).hlines.push(numOf(kw.y||a[0]||F(0)));return NONE},xlabel:a=>{plotFig(ctx).xlabel=str(a[0]);return NONE},ylabel:a=>{plotFig(ctx).ylabel=str(a[0]);return NONE},legend:()=>{plotFig(ctx).legend=true;return NONE},
     gca:()=>({t:'mod',name:'Axes',attrs:{set_xlabel:fn('set_xlabel',a=>{plotFig(ctx).xlabel=str(a[0]);return NONE}),set_ylabel:fn('set_ylabel',a=>{plotFig(ctx).ylabel=str(a[0]);return NONE}),set_title:fn('set_title',()=>NONE)}}),
@@ -8019,7 +8352,7 @@ function pltMod(ctx){return{t:'mod',name:'matplotlib.pyplot',attrs:new Proxy({},
 function makeTimer(){const o={times:[],tik:0};const now=()=>(typeof performance!=='undefined'?performance.now():Date.now())/1000;o.tik=now();
   return{t:'mod',name:'Timer',attrs:{times:{get t(){return'list'},get items(){return o.times.map(F)}},start:fn('start',()=>{o.tik=now();return NONE}),stop:fn('stop',()=>{o.times.push(now()-o.tik);return F(o.times[o.times.length-1])}),
     avg:fn('avg',()=>F(o.times.reduce((a,b)=>a+b,0)/o.times.length)),sum:fn('sum',()=>F(o.times.reduce((a,b)=>a+b,0))),cumsum:fn('cumsum',()=>{let s=0;return list(o.times.map(v=>F(s+=v)))})}}}
-const D2L_ALIAS={ones:'ones',zeros:'zeros',tensor:'tensor',normal:'normal',matmul:'matmul',arange:'arange',exp:'exp',sin:'sin',cos:'cos',tanh:'tanh',abs:'abs',float32:'float32',int64:'int64',concat:'cat',stack:'stack',randn:'randn',rand:'rand',zeros_like:'zeros_like',ones_like:'ones_like',sigmoid:'sigmoid',log:'log',sqrt:'sqrt'};
+const D2L_ALIAS={eye:'eye',bmm:'bmm',ones:'ones',zeros:'zeros',tensor:'tensor',normal:'normal',matmul:'matmul',arange:'arange',exp:'exp',sin:'sin',cos:'cos',tanh:'tanh',abs:'abs',float32:'float32',int64:'int64',concat:'cat',stack:'stack',randn:'randn',rand:'rand',zeros_like:'zeros_like',ones_like:'ones_like',sigmoid:'sigmoid',log:'log',sqrt:'sqrt'};
 function d2lMod(ctx){return mod('d2l',{
   ...Object.fromEntries(Object.entries(D2L_ALIAS).map(([k,v])=>[k,torch.attrs[v]])),
   reshape:fn('reshape',a=>reshapeT(asTensor(a[0]),dimsArg([a[1]]))),numpy:fn('numpy',a=>{const T=asTensor(a[0]);const R=mkT(T.shape.slice(),[],T.dtype,true);R.data=T.data;return R}),
@@ -8032,7 +8365,7 @@ function d2lMod(ctx){return mod('d2l',{
 
 // ---------- 张量的属性和方法 ----------
 function tensorAttr(T,name){
-  switch(name){case'shape':return T.np?tup(T.shape.map(I)):{t:'size',dims:T.shape.slice()};case'dtype':return DT(T.dtype);case'T':return transpose2(T);case'ndim':return I(T.shape.length);
+  switch(name){case'shape':return T.np?tup(T.shape.map(I)):{t:'size',dims:T.shape.slice()};case'dtype':return DT(T.dtype);case'T':return transpose2(T);case'ndim':return I(T.shape.length);case'device':return{t:'device',name:'cpu'};
     case'requires_grad':return B(T.requires_grad);case'grad':return T.grad||NONE;case'grad_fn':return T.grad_fn?{t:'gradfn',g:T.grad_fn}:NONE;case'is_leaf':return B(!T.grad_fn);case'data':{const d=mkT(T.shape.slice(),[],T.dtype);d.data=T.data;return d}}
   const m=tensorMethod(T,name);if(m)return fn(name,m);err('AttributeError',`'${T.np?'numpy.ndarray':'Tensor'}' object has no attribute '${name}'`)}
 function tensorMethod(T,name){
@@ -8057,7 +8390,9 @@ function tensorMethod(T,name){
     fill_:a=>{T.data.fill(castVal(numOf(a[0]),T.dtype));return T},
     sub_:a=>{checkInplace(T);const r=binop('-',T,a[0]);T.data.set(r.data);return T},add_:a=>{checkInplace(T);const r=binop('+',T,a[0]);T.data.set(r.data);return T},
     argmax:(a,kw)=>argmaxT(T,dimArg(a,kw),keepArg(kw),1),argmin:(a,kw)=>argmaxT(T,dimArg(a,kw),keepArg(kw),-1),
-    unsqueeze:a=>{const s=T.shape.slice();let d=intOf(a[0]);if(d<0)d+=s.length+1;s.splice(d,0,1);return reshapeT(T,s)},squeeze:(a,kw)=>{const dv=kw.dim||a[0];if(!dv||dv.t==='none')return reshapeT(T,T.shape.filter(d=>d!==1));let d=intOf(dv);if(d<0)d+=T.shape.length;return T.shape[d]===1?reshapeT(T,T.shape.filter((_,i)=>i!==d)):T},
+    unsqueeze:a=>{const s=T.shape.slice();let d=intOf(a[0]);if(d<0)d+=s.length+1;s.splice(d,0,1);return reshapeT(T,s)},transpose:a=>transposeT(T,intOf(a[0]),intOf(a[1])),permute:a=>permuteT(T,dimsArg(a)),bmm:a=>bmmT(T,asTensor(a[0])),dim:()=>I(T.shape.length),ndimension:()=>I(T.shape.length),
+    repeat:a=>repeatT(T,dimsArg(a)),repeat_interleave:(a,kw)=>{const d=kwOr(kw,a,'dim',1,NONE);return repeatInterleaveT(T,kwOr(kw,a,'repeats',0),d.t==='none'?null:intOf(d))},sort:(a,kw)=>sortT(T,intOf(kwOr(kw,a,'dim',0,I(-1))),kw.descending?truthy(kw.descending):false),
+    squeeze:(a,kw)=>{const dv=kw.dim||a[0];if(!dv||dv.t==='none')return reshapeT(T,T.shape.filter(d=>d!==1));let d=intOf(dv);if(d<0)d+=T.shape.length;return T.shape[d]===1?reshapeT(T,T.shape.filter((_,i)=>i!==d)):T},
     gather:(a,kw)=>gatherT(T,intOf(kwOr(kw,a,'dim',0)),asTensor(kwOr(kw,a,'index',1))),index_select:(a,kw)=>indexSelectT(T,intOf(kwOr(kw,a,'dim',0)),asTensor(kwOr(kw,a,'index',1))),
     flatten:()=>reshapeT(T,[-1]),pow:a=>binop('**',T,a[0]),softmax:(a,kw)=>softmaxT(T,intOf(kwOr(kw,a,'dim',0))),log_softmax:(a,kw)=>softmaxT(T,intOf(kwOr(kw,a,'dim',0)),true),all:()=>mkT([],[T.data.every(Boolean)?1:0],'bool',T.np),any:()=>mkT([],[T.data.some(Boolean)?1:0],'bool',T.np),round:()=>mkT(T.shape.slice(),Array.from(T.data,v=>Math.round(v)),T.dtype,T.np),__len__:()=>I(T.shape[0])};
   return M[name]}
@@ -8398,10 +8733,11 @@ function axAttr(ax,name){const toArr=v=>isT(v)?[...v.data]:iterate(v).map(x=>num
     cla:()=>{ax.lines=[];ax.image=null;return NONE},set_xlabel:a=>{ax.xlabel=a[0]&&a[0].t!=='none'?str(a[0]):'';return NONE},set_ylabel:a=>{ax.ylabel=a[0]&&a[0].t!=='none'?str(a[0]):'';return NONE},
     set_xlim:a=>{if(a[0]&&a[0].t!=='none')ax.xlim=iterate(a[0]).map(numOf);return NONE},set_ylim:a=>{if(a[0]&&a[0].t!=='none')ax.ylim=iterate(a[0]).map(numOf);return NONE},
     set_xscale:a=>{ax.xscale=str(a[0]);return NONE},set_yscale:a=>{ax.yscale=str(a[0]);return NONE},legend:a=>{if(a[0]&&a[0].t!=='none')ax.legend=iterate(a[0]).map(str);return NONE},grid:()=>NONE,
-    set_title:a=>{ax.title=str(a[0]);return NONE},imshow:a=>{const v=a[0];if(v.t==='pil'){ax.image={H:v.H,W:v.W,px:Float64Array.from(v.px,p=>p/255)};return NONE}const T=asTensor(v);const s=T.shape.filter(d=>d!==1);if(s.length!==2)err('TypeError',`Invalid shape (${T.shape.join(', ')}) for image data`);ax.image={H:s[0],W:s[1],px:Float64Array.from(T.data)};return NONE},
+    set_title:a=>{ax.title=str(a[0]);return NONE},imshow:(a,kw)=>{const v=a[0];const cm=kw&&kw.cmap?str(kw.cmap):null;if(v.t==='pil'){ax.image={H:v.H,W:v.W,px:Float64Array.from(v.px,p=>p/255)};return NONE}const T=asTensor(v);const s=T.shape.filter(d=>d!==1);if(s.length!==2)err('TypeError',`Invalid shape (${T.shape.join(', ')}) for image data`);ax.image={H:s[0],W:s[1],px:Float64Array.from(T.data),cmap:cm};return NONE},
     get_xaxis:()=>({t:'mod',name:'XAxis',attrs:{set_visible:fn('set_visible',()=>{ax.axisOff=true;return NONE})}}),get_yaxis:()=>({t:'mod',name:'YAxis',attrs:{set_visible:fn('set_visible',()=>{ax.axisOff=true;return NONE})}}),scatter:a=>{ax.lines.push({x:toArr(a[0]),y:toArr(a[1]),fmt:'o'});return NONE},axhline:()=>NONE};
   if(name==='axes')return ax;if(M[name])return fn(name,M[name]);return DUMMY}
 function subplots(a,kw){const nr=intOf(kwOr(kw,a,'nrows',0,I(1))),nc=intOf(kwOr(kw,a,'ncols',1,I(1)));const fig={t:'fig',rows:nr,cols:nc,axes:[],id:newId()};for(let i=0;i<nr*nc;i++)fig.axes.push(mkAx(fig));CUR.figs.push(fig);
+  if(kw.squeeze&&!truthy(kw.squeeze))return tup([fig,list(Array.from({length:nr},(_,r)=>list(fig.axes.slice(r*nc,r*nc+nc))))]);
   const axes=nr*nc===1?fig.axes[0]:{t:'axarr',fig,rows:nr,cols:nc};return tup([fig,axes])}
 function figSpec(fig){return{kind:'fig',rows:fig.rows,cols:fig.cols,axes:fig.axes.map(ax=>({lines:ax.lines.map(l=>({x:l.x.slice(),y:l.y.slice(),fmt:l.fmt})),image:ax.image,xlabel:ax.xlabel,ylabel:ax.ylabel,title:ax.title,legend:ax.legend.slice(),xlim:ax.xlim,ylim:ax.ylim,xscale:ax.xscale,yscale:ax.yscale}))}}
 const ipyDisplay=mod('IPython.display',{display:fn('display',(a,kw,ctx)=>{const v=a[0];if(v&&v.t==='fig'){v.shown=true}else if(v)ctx.outBuf+=repr(v)+'\n';return NONE}),clear_output:fn('clear_output',()=>NONE)});
@@ -8863,6 +9199,77 @@ class RNNModel(nn.Module):
                     torch.zeros((
                         self.num_directions * self.rnn.num_layers,
                         batch_size, self.num_hiddens), device=device))
+
+# ---------- 第 9、10 章：掩码和注意力 ----------
+def sequence_mask(X, valid_len, value=0):
+    """在序列中屏蔽不相关的项"""
+    maxlen = X.size(1)
+    mask = torch.arange((maxlen), dtype=torch.float32,
+                        device=X.device)[None, :] < valid_len[:, None]
+    X[~mask] = value
+    return X
+
+def show_heatmaps(matrices, xlabel, ylabel, titles=None, figsize=(2.5, 2.5),
+                  cmap='Reds'):
+    """显示矩阵热图"""
+    d2l.use_svg_display()
+    num_rows, num_cols = matrices.shape[0], matrices.shape[1]
+    fig, axes = d2l.plt.subplots(num_rows, num_cols, figsize=figsize,
+                                 sharex=True, sharey=True, squeeze=False)
+    for i, (row_axes, row_matrices) in enumerate(zip(axes, matrices)):
+        for j, (ax, matrix) in enumerate(zip(row_axes, row_matrices)):
+            pcm = ax.imshow(d2l.numpy(matrix), cmap=cmap)
+            if i == num_rows - 1:
+                ax.set_xlabel(xlabel)
+            if j == 0:
+                ax.set_ylabel(ylabel)
+            if titles:
+                ax.set_title(titles[j])
+    fig.colorbar(pcm, ax=axes, shrink=0.6);
+
+def masked_softmax(X, valid_lens):
+    """通过在最后一个轴上掩蔽元素来执行softmax操作"""
+    if valid_lens is None:
+        return nn.functional.softmax(X, dim=-1)
+    else:
+        shape = X.shape
+        if valid_lens.dim() == 1:
+            valid_lens = torch.repeat_interleave(valid_lens, shape[1])
+        else:
+            valid_lens = valid_lens.reshape(-1)
+        # 最后一轴上被掩蔽的元素使用一个非常大的负值替换，从而其softmax输出为0
+        X = d2l.sequence_mask(X.reshape(-1, shape[-1]), valid_lens,
+                              value=-1e6)
+        return nn.functional.softmax(X.reshape(shape), dim=-1)
+
+class AdditiveAttention(nn.Module):
+    """加性注意力"""
+    def __init__(self, key_size, query_size, num_hiddens, dropout, **kwargs):
+        super(AdditiveAttention, self).__init__(**kwargs)
+        self.W_k = nn.Linear(key_size, num_hiddens, bias=False)
+        self.W_q = nn.Linear(query_size, num_hiddens, bias=False)
+        self.w_v = nn.Linear(num_hiddens, 1, bias=False)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, queries, keys, values, valid_lens):
+        queries, keys = self.W_q(queries), self.W_k(keys)
+        features = queries.unsqueeze(2) + keys.unsqueeze(1)
+        features = torch.tanh(features)
+        scores = self.w_v(features).squeeze(-1)
+        self.attention_weights = masked_softmax(scores, valid_lens)
+        return torch.bmm(self.dropout(self.attention_weights), values)
+
+class DotProductAttention(nn.Module):
+    """缩放点积注意力"""
+    def __init__(self, dropout, **kwargs):
+        super(DotProductAttention, self).__init__(**kwargs)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, queries, keys, values, valid_lens=None):
+        d = queries.shape[-1]
+        scores = torch.bmm(queries, keys.transpose(1,2)) / math.sqrt(d)
+        self.attention_weights = masked_softmax(scores, valid_lens)
+        return torch.bmm(self.dropout(self.attention_weights), values)
 `;
 
 // ---------- 语法分析 ----------
@@ -8964,9 +9371,10 @@ torch.attrs.is_tensor=fn('is_tensor',a=>B(isT(a[0])&&!a[0].np));
 function ensurePrelude(){if(D2L.ready)return;D2L.ready=true;const sc=new Scope(null);sc.set('d2l',D2L);const saved=CUR;const ctx={scope:sc,outBuf:'',touched:[],plots:[],figs:[],fig:null,depth:0,steps:0,yields:null};CUR=ctx;try{for(const s of parse(D2L_PRELUDE))exec(s,sc,ctx)}finally{CUR=saved}for(const[k,v]of Object.entries(sc.vars))if(v.t==='func'||v.t==='cls'||(!(k in D2L.attrs)&&v.t!=='mod'&&k!=='d2l'))D2L.attrs[k]=v}
 D2L.attrs.load_array=fn('load_array',(a,kw)=>({t:'loader',ds:{t:'tdataset',tensors:iterate(a[0]).map(asTensor)},bs:intOf(a[1]),shuffle:truthy(kwOr(kw,a,'is_train',2,B(true))),drop_last:false}));
 function getAttr(o,name){if(isT(o))return tensorAttr(o,name);
+  if(o.t==='tuple'&&o.fields&&o.fields.includes(name))return o.items[o.fields.indexOf(name)];
   if(name==='__name__'&&(o.t==='type'||o.t==='cls'||o.t==='fn'||o.t==='func')&&o.name)return S(o.t==='type'?o.name.split('.').pop().replace(/^Tensor$/,'Tensor'):o.name);
   switch(o.t){case'mod':{const v=o.attrs[name];if(v!==undefined)return v;err('AttributeError',`module '${o.name}' has no attribute '${name}'`)}
-    case'nn':return nnAttr(o,name);case'ax':return axAttr(o,name);case'fig':return DUMMY;case'axarr':if(name==='flatten')return fn('flatten',()=>list(o.fig.axes.slice()));break;
+    case'nn':return nnAttr(o,name);case'ax':return axAttr(o,name);case'fig':return fn(name,()=>NONE);case'axarr':if(name==='flatten')return fn('flatten',()=>list(o.fig.axes.slice()));break;
     case'fmnist':if(name==='targets')return mkT([o.n],FM[o.train?'train':'test'].labels,'int64');if(name==='classes')return list(['T-shirt/top','Trouser','Pullover','Dress','Coat','Sandal','Shirt','Sneaker','Bag','Ankle boot'].map(S));if(name==='train')return B(o.train);break;case'optim':return optAttr(o,name);case'tdataset':if(name==='tensors')return tup(o.tensors);break;
     case'super':{const m=classLookup(o.cls.base,name);if(!m)err('AttributeError',`'super' object has no attribute '${name}'`);return(m.t==='func'||m.method)?{t:'bound',f:m,self:o.self}:m}
     case'df':return dfAttr(o,name);case'series':return seriesAttr(o,name);case'dist':return distAttr(o,name);case'dummy':return DUMMY;
@@ -9133,7 +9541,7 @@ function colors(){const cs=getComputedStyle(document.documentElement),g=n=>cs.ge
 function fitCanvas(cv,W,H){const r=window.devicePixelRatio||1;cv.width=Math.round(W*r);cv.height=Math.round(H*r);cv.style.width=W+'px';cv.style.height=H+'px';const c=cv.getContext('2d');c.setTransform(r,0,0,r,0,0);return c}
 const MONO='11px "JetBrains Mono",ui-monospace,monospace';
 const bodyFont=px=>`${px}px ${getComputedStyle(document.body).fontFamily}`;
-const DAYS=['1','2','3','4','5','6','7','8','9','10','11','12','13','14'];
+const DAYS=['1','2','3','4','5','6','7','8','9','10','11','12','13','14','15'];
 
 // ---------- 张量图示 ----------
 function cellText(v,dtype){if(dtype==='bool')return v?'T':'F';if(dtype==='int64')return String(v);if(!Number.isFinite(v))return String(v);return Number.isInteger(v)?String(v):(Math.abs(v)>=100?v.toFixed(0):v.toFixed(2))}
@@ -9252,7 +9660,7 @@ function setupCells(){$$('.cell').forEach((cell,i)=>{const ta=cell.querySelector
     else if(e.key==='Tab'&&!e.shiftKey){e.preventDefault();const s=ta.selectionStart;ta.setRangeText('    ',s,ta.selectionEnd,'end');autoSize(ta)}})})}
 function runAll(day){ENVS[day]=MT.newEnv();EXEC[day]=0;MT.resetFS();let errs=0;const main=$('#day'+day);
   $$('.cell',main).forEach(c=>{if(c.dataset.manual){const out=c.querySelector('.out');out.className='out';out.textContent='';const t=document.createElement('span');t.className='tip';t.textContent=`这一格要手动运行：${c.dataset.manual}。准备好了点这一格右上角的“运行”。`;out.appendChild(t);out.hidden=false;return}if(!runCellEl(c))errs++});RAN[day]=true;
-  const expected={'1':0,'2':5,'3':3,'4':0,'5':0,'6':0,'7':0,'8':0,'9':0,'10':0,'11':2,'12':0,'13':0,'14':0}[day]||0;
+  const expected={'1':0,'2':5,'3':3,'4':0,'5':0,'6':0,'7':0,'8':0,'9':0,'10':0,'11':2,'12':0,'13':0,'14':0,'15':0}[day]||0;
   $$('.runAllMsg',main).forEach(m=>m.textContent=errs>expected?`运行完了，有 ${errs} 个格子报错，往下找红字。`:expected?`全部运行完了。其中 ${expected} 个格子是故意报错的，用来练习读报错。`:'全部运行完了，没有报错。')}
 document.addEventListener('click',e=>{const b=e.target.closest('.runAll');if(b)runAll(b.dataset.day)});
 
@@ -9465,9 +9873,12 @@ function fmtStyle(fmt,i){const m=fmt.match(/^([bgrcmyk])?(--|-\.|-|:|o)?$/)||[];
 const VIRIDIS=[[68,1,84],[59,82,139],[33,145,140],[94,201,98],[253,231,37]];
 function viridis(t){t=Math.max(0,Math.min(1,t))*4;const i=Math.min(3,Math.floor(t)),f=t-i,a=VIRIDIS[i],b=VIRIDIS[i+1];return[a[0]+(b[0]-a[0])*f,a[1]+(b[1]-a[1])*f,a[2]+(b[2]-a[2])*f]}
 function drawImage(cv,img,px){const{H,W}=img;cv.width=W;cv.height=H;cv.style.width=px+'px';cv.style.height=Math.round(px*H/W)+'px';const c=cv.getContext('2d'),d=c.createImageData(W,H);let lo=Infinity,hi=-Infinity;for(const v of img.px){if(v<lo)lo=v;if(v>hi)hi=v}const rg=hi-lo||1;
-  for(let k=0;k<W*H;k++){const[r,g,b]=viridis((img.px[k]-lo)/rg);d.data[k*4]=r;d.data[k*4+1]=g;d.data[k*4+2]=b;d.data[k*4+3]=255}c.putImageData(d,0,0)}
+  const reds=t=>[Math.round(255-t*(255-103)),Math.round(245-t*245),Math.round(240-t*(240-13))];for(let k=0;k<W*H;k++){const[r,g,b]=img.cmap==='Reds'?reds((img.px[k]-lo)/rg):viridis((img.px[k]-lo)/rg);d.data[k*4]=r;d.data[k*4+1]=g;d.data[k*4+2]=b;d.data[k*4+3]=255}c.putImageData(d,0,0)}
 function renderFig(wrap,fig){if(fig.axes.some(a=>a.image)){const grid=document.createElement('div');grid.className='imgrid';grid.style.gridTemplateColumns=`repeat(${fig.cols},minmax(0,1fr))`;
-    for(const ax of fig.axes){const cell=document.createElement('figure');if(ax.title){const t=document.createElement('figcaption');t.textContent=ax.title;cell.appendChild(t)}if(ax.image){const cv=document.createElement('canvas');cv.setAttribute('aria-label',ax.title||'图片');cell.appendChild(cv);drawImage(cv,ax.image,72)}grid.appendChild(cell)}wrap.appendChild(grid);return}
+    const hm=fig.axes.some(a=>a.image&&a.image.cmap),sz=hm?Math.max(110,Math.min(260,Math.floor(((wrap.parentElement&&wrap.parentElement.clientWidth)||320)/fig.cols)-16)):72;
+    for(const ax of fig.axes){const cell=document.createElement('figure');if(ax.title){const t=document.createElement('figcaption');t.textContent=ax.title;cell.appendChild(t)}if(ax.image){const cv=document.createElement('canvas');cv.setAttribute('aria-label',ax.title||(hm?'注意力权重热图':'图片'));cv.className=hm?'hm':'';cell.appendChild(cv);drawImage(cv,ax.image,sz)}
+      if(hm&&(ax.xlabel||ax.ylabel)){const c=document.createElement('figcaption');c.className='small muted';c.textContent=`横轴（列）：${ax.xlabel||''}　纵轴（行）：${ax.ylabel||''}`;cell.appendChild(c)}grid.appendChild(cell)}
+    if(hm){const n=document.createElement('p');n.className='small muted';n.textContent='颜色越深权重越大：最浅是这张图里的最小值，最深是最大值。';wrap.appendChild(grid);wrap.appendChild(n);return}wrap.appendChild(grid);return}
   for(const ax of fig.axes){if(!ax.lines.length)continue;const spec={series:ax.lines.map((l,i)=>({x:l.x,y:l.y,label:ax.legend[i]||'',...fmtStyle(l.fmt,i)})),hlines:[],xlabel:ax.xlabel,ylabel:ax.ylabel,legend:ax.legend.length>0,xlim:ax.xlim,ylim:ax.ylim,xscale:ax.xscale,yscale:ax.yscale};const cv=document.createElement('canvas');cv.setAttribute('aria-label','训练曲线');wrap.appendChild(cv);drawPlot(cv,spec)}}
 
 // ---------- 第 7 天：解压内嵌的 Fashion-MNIST，像素查看器 ----------
@@ -9651,6 +10062,31 @@ function gtRender(){const host=$('#gtHost');if(!host.offsetParent)return;const F
   drawPlot($('#gtCv'),{series:[{x:xs,y:keep.map(v=>Math.max(v,1e-12)),label:'第 1 步的信息还剩多少'},{x:xs,y:grad.map(v=>Math.max(v,1e-30)),label:'梯度 ∂(第 t 步)/∂(第 1 步)'}],hlines:[],xlabel:'时间步 t',ylabel:'',legend:true,yscale:'log',ylim:[1e-12,2]});
   $('#gtCalc').textContent=mode==='lstm'?`记忆元：Cₜ = F·C_{t−1} + I·C̃ₜ\n第 1 步写入的信息每一步乘 F，40 步后还剩 F³⁹ = ${(F**39).toExponential(2)}\n梯度 ∂C₄₀/∂C₁ = F³⁹，也是 ${(F**39).toExponential(2)}（所以图上两条线重合）\n\n${F>0.98?'遗忘门接近 1：信息和梯度都几乎原样穿过 40 步。':F<0.6?'遗忘门小：很快就忘了，梯度也消失。':'遗忘门适中：慢慢忘掉。'}\n输入门 I 只影响新写入的噪声有多少，不影响旧信息能留多久。\n真实 LSTM 里 F 每一步都是学出来的：需要记住时接近 1，需要清空时接近 0。`:`普通 RNN：hₜ = tanh(0.9·h_{t−1} + xₜ)\n每一步梯度乘 0.9 × tanh′，40 步后约 ${grad[T-1].toExponential(2)}\n第 1 步的不同（h₁ = 1 和 h₁ = 0 两条轨迹的差）也很快被噪声淹没。\n切回 LSTM，把遗忘门调到 0.99 对比一下。`}
 ['#gtF','#gtI'].forEach(s=>$(s).addEventListener('input',gtRender));$('#gtM').onchange=gtRender;
+// ---------- 第 15 天：Nadaraya-Watson 的查询和核宽度 ----------
+const NW=(()=>{const g=sgRng(21);const u=(()=>{let s=99;return()=>{s=s+0x6D2B79F5>>>0;let t=Math.imul(s^s>>>15,1|s);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}})();const f=x=>2*Math.sin(x)+x**0.8;const x=Array.from({length:50},()=>u()*5).sort((a,b)=>a-b);return{f,x,y:x.map(v=>f(v)+0.5*g())}})();
+function nwPred(q,w){const s=NW.x.map(xi=>-(((q-xi)*w)**2)/2),m=Math.max(...s),e=s.map(v=>Math.exp(v-m)),z=e.reduce((a,b)=>a+b,0),a=e.map(v=>v/z);return{a,y:a.reduce((t,v,i)=>t+v*NW.y[i],0)}}
+function nwRender(){const host=$('#nwHost');if(!host.offsetParent)return;const C=colors(),q=+$('#nwQ').value,w=+$('#nwW').value;$('#nwQv').textContent=q.toFixed(2);$('#nwWv').textContent=w.toFixed(2);
+  const W=Math.max(260,host.clientWidth),H=Math.round(Math.min(320,W*.75)),ctx=fitCanvas($('#nwCv'),W,H),pl=8,pr=8,top=10,bh=60,sx=x=>pl+x/5*(W-pl-pr),sy=y=>top+(5-y)/6*(H-top-bh-20);
+  ctx.strokeStyle=C.line;ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(pl,sy(0));ctx.lineTo(W-pr,sy(0));ctx.stroke();
+  ctx.strokeStyle=C.muted;ctx.lineWidth=2;ctx.beginPath();for(let k=0;k<=200;k++){const x=5*k/200;k?ctx.lineTo(sx(x),sy(NW.f(x))):ctx.moveTo(sx(x),sy(NW.f(x)))}ctx.stroke();
+  ctx.strokeStyle=C.pos;ctx.lineWidth=2.5;ctx.beginPath();for(let k=0;k<=200;k++){const x=5*k/200,y=nwPred(x,w).y;k?ctx.lineTo(sx(x),sy(y)):ctx.moveTo(sx(x),sy(y))}ctx.stroke();
+  const r=nwPred(q,w),mx=Math.max(...r.a);NW.x.forEach((x,i)=>{ctx.fillStyle=C.accent;ctx.globalAlpha=.25+.75*r.a[i]/mx;ctx.beginPath();ctx.arc(sx(x),sy(NW.y[i]),3,0,7);ctx.fill();ctx.globalAlpha=1;const h=r.a[i]/mx*(bh-8);ctx.fillStyle=C.accent;ctx.fillRect(sx(x)-2,H-6-h,4,h)});
+  ctx.strokeStyle=C.ink;ctx.setLineDash([4,4]);ctx.beginPath();ctx.moveTo(sx(q),0);ctx.lineTo(sx(q),H);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle=C.pos;ctx.beginPath();ctx.arc(sx(q),sy(r.y),5,0,7);ctx.fill();
+  ctx.font=bodyFont(11);ctx.fillStyle=C.muted;ctx.fillText('注意力权重',pl+2,H-bh+4);
+  const top3=r.a.map((a,i)=>[a,i]).sort((a,b)=>b[0]-a[0]).slice(0,3),ent=-r.a.reduce((s,a)=>s+(a>0?a*Math.log(a):0),0);
+  $('#nwCalc').textContent=`查询 x = ${q.toFixed(2)}，w = ${w.toFixed(2)}\n预测 ${r.y.toFixed(3)}，真实值 ${NW.f(q).toFixed(3)}\n\n权重最大的 3 个训练点：\n${top3.map(([a,i])=>`  x = ${NW.x[i].toFixed(2)}  y = ${NW.y[i].toFixed(2)}  权重 ${a.toFixed(3)}`).join('\n')}\n相当于在约 ${Math.exp(ent).toFixed(1)} 个点之间平均（50 个点全平均时是 50）\n\n${w<0.3?'w 很小：几乎所有点权重一样，接近平均汇聚，预测是一条平线。':w>6?'w 很大：只看最近的一两个点，预测曲线跟着噪声抖。':'w 适中：主要看附近的点，曲线比较平滑地跟着真实函数。'}`}
+['#nwQ','#nwW'].forEach(s=>$(s).addEventListener('input',nwRender));
+// ---------- 第 15 天：缩放点积 ----------
+const SD={seed:1};
+function sdRender(){const host=$('#sdHost');if(!host.offsetParent)return;const d=+$('#sdD').value;$('#sdDv').textContent=d;const g=sgRng(SD.seed*7919+d);
+  const q=Array.from({length:d},g),ks=Array.from({length:8},()=>Array.from({length:d},g)),sc=ks.map(k=>k.reduce((s,v,i)=>s+v*q[i],0)),sm=a=>{const m=Math.max(...a),e=a.map(v=>Math.exp(v-m)),z=e.reduce((x,y)=>x+y,0);return e.map(v=>v/z)};
+  const p0=sm(sc),p1=sm(sc.map(v=>v/Math.sqrt(d))),C=colors();
+  const W=Math.max(260,host.clientWidth),H=200,ctx=fitCanvas($('#sdCv'),W,H),pl=10,pr=10,bw=(W-pl-pr)/8;ctx.font=bodyFont(11);
+  for(let i=0;i<8;i++){const x=pl+i*bw;[[p0[i],C.neg,0],[p1[i],C.accent,1]].forEach(([p,col,j])=>{const h=p*(H-46);ctx.fillStyle=col;ctx.fillRect(x+bw*(0.12+0.38*j),H-24-h,bw*0.34,h)});ctx.fillStyle=C.muted;ctx.textAlign='center';ctx.fillText('键 '+(i+1),x+bw/2,H-8)}
+  ctx.textAlign='left';ctx.fillStyle=C.neg;ctx.fillRect(pl,6,12,10);ctx.fillStyle=C.ink;ctx.fillText('不缩放 qᵀk',pl+16,15);ctx.fillStyle=C.accent;ctx.fillRect(pl+110,6,12,10);ctx.fillStyle=C.ink;ctx.fillText('除以 √d',pl+126,15);
+  const sdv=a=>Math.sqrt(a.reduce((s,v)=>s+v*v,0)/a.length);
+  $('#sdCalc').textContent=`d = ${d}\n8 个分数的标准差：不缩放 ${sdv(sc).toFixed(2)}，除以 √d 后 ${sdv(sc.map(v=>v/Math.sqrt(d))).toFixed(2)}\n最大的权重：不缩放 ${Math.max(...p0).toFixed(3)}，除以 √d 后 ${Math.max(...p1).toFixed(3)}\n\n${d<4?'d 很小时两者差别不大。':Math.max(...p0)>0.95?'不缩放时几乎所有权重都压在一个键上，softmax 饱和了：其他键的梯度接近 0，学不动。':'d 越大，不缩放的分数越分散，权重越尖。'}`}
+$('#sdD').addEventListener('input',sdRender);$('#sdGo').onclick=()=>{SD.seed++;sdRender()};
 // ---------- 小结勾选、课程表、切换天数 ----------
 function checksSetup(){$$('.check-list').forEach(ul=>{const day=ul.dataset.day,key='checks'+day,st=store.get(key,{});$$('input',ul).forEach(c=>{c.checked=!!st[c.dataset.k];c.onchange=()=>{const s=store.get(key,{});s[c.dataset.k]=c.checked;store.set(key,s);checkMsg(ul)}});checkMsg(ul)})}
 function checkMsg(ul){const day=ul.dataset.day,all=$$('input',ul),n=all.filter(c=>c.checked).length,msg=ul.parentElement.querySelector('.check-msg');const done=n===all.length;
@@ -9663,7 +10099,7 @@ const ROAD=[['1','第 1 章 引言 + 2.1 数据操作'],['2','2.2 数据预处�
   ['18','11.4 至 11.6 + 11.10 小批量随机梯度下降、动量、Adam（论文用的优化器）','paper'],['19','论文专题：离线策略评估 IPS、SNIPS、DR（书里没有）','paper'],['20','论文专题：逐行读你的 experiment.py','paper'],
   ['选学','4.7 前向传播、反向传播和计算图；4.10 Kaggle 房价预测'],['选学','第 6 至 7 章 卷积神经网络（LeNet、ResNet 等）'],['选学','9.3 至 9.8 深度和双向循环网络、机器翻译、seq2seq'],['选学','第 11 章其余优化算法、第 12 章计算性能'],['选学','第 13 至 15 章 计算机视觉、自然语言处理']];
 function roadRender(){$('#roadList').innerHTML=ROAD.map(([d,t,f])=>{const live=DAYS.includes(d);return`<div><span class="d">${/^\d+$/.test(d)?`第 ${d} 天`:d}</span><span>${live?`<a href="#day${d}">${esc(t)}</a>`:esc(t)}${f==='paper'?' <span class="mark">论文</span>':''}</span><span class="st${live?' now':''}">${live?'已上线':'未上线'}</span></div>`}).join('')}
-const REDRAW={'1':()=>{kRender();imRender();ofRender()},'2':()=>{dotRender();normRender()},'3':()=>{secRender();gradRender()},'4':()=>{diceRender();bayesRender();bktRender()},'5':()=>{houseRender();if(!sgd.X)sgdData();sgdRender()},'6':()=>{smRender();calRender()},'7':()=>{pixRender()},'8':()=>{uaRender();actRender()},'9':()=>{spRender();rdRender();dpRender()},'10':()=>{sgRender();shRender()},'11':()=>{pcRender()},'12':()=>{tkRender();ptRender();rnRender()},'13':()=>{clRender();btRender()},'14':()=>{gtRender()}};
+const REDRAW={'1':()=>{kRender();imRender();ofRender()},'2':()=>{dotRender();normRender()},'3':()=>{secRender();gradRender()},'4':()=>{diceRender();bayesRender();bktRender()},'5':()=>{houseRender();if(!sgd.X)sgdData();sgdRender()},'6':()=>{smRender();calRender()},'7':()=>{pixRender()},'8':()=>{uaRender();actRender()},'9':()=>{spRender();rdRender();dpRender()},'10':()=>{sgRender();shRender()},'11':()=>{pcRender()},'12':()=>{tkRender();ptRender();rnRender()},'13':()=>{clRender();btRender()},'14':()=>{gtRender()},'15':()=>{nwRender();sdRender()}};
 function showDay(day,scroll){if(!DAYS.includes(day))day='1';$$('main.day').forEach(m=>m.hidden=m.dataset.day!==day);$$('[data-nav]').forEach(a=>a.classList.toggle('on',a.dataset.nav===day));store.set('lastDay',day);
   if(!RAN[day]){if(day==='7'&&!FM_U8){fmReady.then(ok=>{if(ok&&!RAN['7']){runAll('7');REDRAW['7']()}});}else runAll(day)}$$('#day'+day+' textarea').forEach(autoSize);REDRAW[day]();if(scroll)window.scrollTo(0,0)}
 function route(){const h=location.hash.replace('#','');const m=h.match(/^day(\d+)$/);if(m){showDay(m[1],true);return}
@@ -9823,6 +10259,17 @@ const QUIZ={
  {t:'c',q:'DKT 用第 t 步的隐状态去预测哪一题？',o:['第 t 题','第 t + 1 题','第 1 题','最后一题'],a:1,why:'h_t 已经看过第 t 题的对错，用它预测下一题。所以 qpos 是 0 到 T−2，目标是 rs[:, 1:]。'},
  {t:'c',q:'模拟数据里“知道真实掌握状态时的 AUC”为什么到不了 1？',o:['代码有错','即使知道会不会，蒙对（guess）和失误（slip）还是随机的','因为用了 Dropout','因为学生太少'],a:1,why:'这是数据本身的随机性，任何模型都无法消除。真实数据里也一样，所以 KT 的 AUC 一般在 0.7 到 0.85 之间。'},
  {t:'code',q:'写代码：logits = torch.tensor([[0.0, 2.0, -1.0], [1.0, 0.5, 3.0]])，每行是对 3 个知识点的 logit。下一题考的知识点是 q = [1, 2]，真实对错是 y = [1.0, 0.0]。用 gather 取出对应的 logit 存成 picked（形状 (2,)），再算 loss = F.binary_cross_entropy_with_logits(picked, y)。',start:'from torch.nn import functional as F\nlogits = torch.tensor([[0.0, 2.0, -1.0], [1.0, 0.5, 3.0]])\nq = torch.tensor([1, 2])\ny = torch.tensor([1.0, 0.0])\npicked = \nloss = \nloss',check:env=>{const p=env.vars.picked,l=env.vars.loss;if(!p||!MT.isT(p)||p.shape.join()!=='2'||Math.abs(p.data[0]-2)>1e-6||Math.abs(p.data[1]-3)>1e-6)return'picked 应该是 tensor([2., 3.])，形状 (2,)。提示：logits.gather(-1, q.unsqueeze(-1)).squeeze(-1)';const want=(Math.log(1+Math.exp(-2))+Math.log(1+Math.exp(3)))/2;if(!l||!MT.isT(l)||Math.abs(l.data[0]-want)>1e-4)return`loss 应该约等于 ${want.toFixed(4)}`;return true},why:'picked = logits.gather(-1, q.unsqueeze(-1)).squeeze(-1) 得到 [2., 3.]。第一题答对，logit 2 预测得不错；第二题答错，logit 3 却很有信心说会对，损失主要来自这里。'},
+],
+'15':[
+ {t:'c',q:'注意力汇聚的输出是什么？',o:['查询本身','分数最高的那个键','值的加权平均，权重由查询和各个键的相似程度决定','所有键的平均'],a:2,why:'f(q) = Σ softmax(a(q, kᵢ)) vᵢ。'},
+ {t:'c',q:'Nadaraya-Watson 核回归里，查询、键、值分别是什么？',o:['查询是测试点 x，键是训练点 xᵢ，值是训练点的 yᵢ','查询是 yᵢ，键是 xᵢ，值是 x','三者都是 x','没有键'],a:0,why:'用测试点和每个训练点的距离算权重，再对训练点的 y 加权平均。'},
+ {t:'c',q:'核回归里 w 很小（核很宽）会怎样？',o:['预测贴着噪声走','几乎所有训练点权重相同，预测接近平均汇聚的那条平线','报错','预测等于真实函数'],a:1,why:'−((x − xᵢ)·w)²/2 几乎都是 0，softmax 后接近均匀分布。'},
+ {t:'shape',q:'批量矩阵乘法的结果形状？',code:'torch.bmm(torch.ones(2, 1, 4), torch.ones(2, 4, 6))',why:'(2, 1, 4) 和 (2, 4, 6)：两个批量各自做 (1, 4) @ (4, 6)，得到 (2, 1, 6)。'},
+ {t:'c',q:'masked_softmax 怎样让某些位置的权重变成 0？',o:['把权重直接设成 0 再归一化','把这些位置的分数换成 −10⁶，softmax 后 exp(−10⁶) ≈ 0','删掉这些位置','乘以 0.5'],a:1,why:'这样剩下位置的权重仍然加起来等于 1。'},
+ {t:'c',q:'缩放点积注意力为什么要除以 √d？',o:['让计算更快','q 和 k 的分量方差为 1 时，点积的方差是 d；除以 √d 把分数的方差拉回 1，避免 softmax 饱和','为了让权重和为 1','为了防止过拟合'],a:1,why:'d 大时不缩放的分数很大，softmax 几乎只选一个键，梯度接近 0。'},
+ {t:'c',q:'查询和键的长度不同（比如查询 20 维、键 2 维），该用哪种评分函数？',o:['缩放点积','加性注意力：先各自用线性层变到同一长度','都不行','点积不缩放'],a:1,why:'点积要求两个向量一样长。加性注意力的 W_q、W_k 把它们映射到同一个 h 维空间。'},
+ {t:'c',q:'你论文 DKVMN 读记忆时 w = softmax(qe @ Mk.t())，这里的查询是什么？',o:['学生上一题的对错','下一题知识点的嵌入 qe','记忆矩阵 M','输出层'],a:1,why:'qe 和 20 个记忆槽的键 Mk 做点积，softmax 后的权重用来对记忆 M（值）加权求和。'},
+ {t:'code',q:'写代码：一个查询 q = torch.tensor([1.0, 0.0])，三个键 k = torch.tensor([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]])，三个值 v = torch.tensor([10.0, 20.0, 30.0])。用缩放点积算权重 w（softmax(k @ q / √2)），再算输出 out = (w * v).sum()。',start:'import math\nq = torch.tensor([1.0, 0.0])\nk = torch.tensor([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]])\nv = torch.tensor([10.0, 20.0, 30.0])\nw = \nout = \nw, out',check:env=>{const w=env.vars.w,o=env.vars.out;const s=[1,0,1].map(x=>x/Math.SQRT2),e=s.map(Math.exp),z=e.reduce((a,b)=>a+b,0),ww=e.map(x=>x/z);if(!w||!MT.isT(w)||w.data.length!==3||ww.some((x,i)=>Math.abs(x-w.data[i])>1e-4))return`w 应该约等于 [${ww.map(x=>x.toFixed(4)).join(', ')}]。提示：torch.softmax(k @ q / math.sqrt(2), dim=0)`;const oo=ww[0]*10+ww[1]*20+ww[2]*30;if(!o||!MT.isT(o)||Math.abs(o.data[0]-oo)>1e-3)return`out 应该约等于 ${oo.toFixed(4)}`;return true},why:'分数是 [1, 0, 1] / √2，第 1 和第 3 个键和查询一样相似，权重相同且比第 2 个大。输出约 19.9，偏向 10 和 30 的平均值。'},
 ],
 };
 function quizState(day){return store.get('quiz'+day,{})}

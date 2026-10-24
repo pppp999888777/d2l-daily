@@ -1,0 +1,6 @@
+CELLS = [
+"import torch\nfrom torch import nn\nfrom d2l import torch as d2l\nn_train = 6\nx_train = torch.tensor([0.3, 0.9, 1.7, 2.2, 3.1, 4.5])\ny_train = 2 * torch.sin(x_train) + x_train ** 0.8\nX_tile = x_train.repeat((n_train, 1))\nY_tile = y_train.repeat((n_train, 1))\nkeys = d2l.reshape(X_tile[(1 - d2l.eye(n_train)).type(torch.bool)], (n_train, -1))\nvalues = d2l.reshape(Y_tile[(1 - d2l.eye(n_train)).type(torch.bool)], (n_train, -1))\nkeys, values",
+"class NWKernelRegression(nn.Module):\n    def __init__(self, **kwargs):\n        super().__init__(**kwargs)\n        self.w = nn.Parameter(torch.tensor([0.4]))\n    def forward(self, queries, keys, values):\n        queries = d2l.reshape(queries.repeat_interleave(keys.shape[1]), (-1, keys.shape[1]))\n        self.attention_weights = nn.functional.softmax(-((queries - keys) * self.w)**2 / 2, dim=1)\n        return torch.bmm(self.attention_weights.unsqueeze(1), values.unsqueeze(-1)).reshape(-1)\nnet = NWKernelRegression()\nout = net(x_train, keys, values)\nl = nn.MSELoss(reduction='none')(out, y_train)\nl.sum().backward()\nout, l, net.w.grad",
+"net.w.grad = None\nout = net(x_train, keys, values)\nout.sum().backward()\nnet.w.grad",
+"net.w.grad = None\nnet(x_train, keys, values)\nnet.attention_weights.sum(0)[0].backward()\nnet.w.grad",
+]

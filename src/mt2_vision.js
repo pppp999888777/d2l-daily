@@ -27,10 +27,11 @@ function axAttr(ax,name){const toArr=v=>isT(v)?[...v.data]:iterate(v).map(x=>num
     cla:()=>{ax.lines=[];ax.image=null;return NONE},set_xlabel:a=>{ax.xlabel=a[0]&&a[0].t!=='none'?str(a[0]):'';return NONE},set_ylabel:a=>{ax.ylabel=a[0]&&a[0].t!=='none'?str(a[0]):'';return NONE},
     set_xlim:a=>{if(a[0]&&a[0].t!=='none')ax.xlim=iterate(a[0]).map(numOf);return NONE},set_ylim:a=>{if(a[0]&&a[0].t!=='none')ax.ylim=iterate(a[0]).map(numOf);return NONE},
     set_xscale:a=>{ax.xscale=str(a[0]);return NONE},set_yscale:a=>{ax.yscale=str(a[0]);return NONE},legend:a=>{if(a[0]&&a[0].t!=='none')ax.legend=iterate(a[0]).map(str);return NONE},grid:()=>NONE,
-    set_title:a=>{ax.title=str(a[0]);return NONE},imshow:a=>{const v=a[0];if(v.t==='pil'){ax.image={H:v.H,W:v.W,px:Float64Array.from(v.px,p=>p/255)};return NONE}const T=asTensor(v);const s=T.shape.filter(d=>d!==1);if(s.length!==2)err('TypeError',`Invalid shape (${T.shape.join(', ')}) for image data`);ax.image={H:s[0],W:s[1],px:Float64Array.from(T.data)};return NONE},
+    set_title:a=>{ax.title=str(a[0]);return NONE},imshow:(a,kw)=>{const v=a[0];const cm=kw&&kw.cmap?str(kw.cmap):null;if(v.t==='pil'){ax.image={H:v.H,W:v.W,px:Float64Array.from(v.px,p=>p/255)};return NONE}const T=asTensor(v);const s=T.shape.filter(d=>d!==1);if(s.length!==2)err('TypeError',`Invalid shape (${T.shape.join(', ')}) for image data`);ax.image={H:s[0],W:s[1],px:Float64Array.from(T.data),cmap:cm};return NONE},
     get_xaxis:()=>({t:'mod',name:'XAxis',attrs:{set_visible:fn('set_visible',()=>{ax.axisOff=true;return NONE})}}),get_yaxis:()=>({t:'mod',name:'YAxis',attrs:{set_visible:fn('set_visible',()=>{ax.axisOff=true;return NONE})}}),scatter:a=>{ax.lines.push({x:toArr(a[0]),y:toArr(a[1]),fmt:'o'});return NONE},axhline:()=>NONE};
   if(name==='axes')return ax;if(M[name])return fn(name,M[name]);return DUMMY}
 function subplots(a,kw){const nr=intOf(kwOr(kw,a,'nrows',0,I(1))),nc=intOf(kwOr(kw,a,'ncols',1,I(1)));const fig={t:'fig',rows:nr,cols:nc,axes:[],id:newId()};for(let i=0;i<nr*nc;i++)fig.axes.push(mkAx(fig));CUR.figs.push(fig);
+  if(kw.squeeze&&!truthy(kw.squeeze))return tup([fig,list(Array.from({length:nr},(_,r)=>list(fig.axes.slice(r*nc,r*nc+nc))))]);
   const axes=nr*nc===1?fig.axes[0]:{t:'axarr',fig,rows:nr,cols:nc};return tup([fig,axes])}
 function figSpec(fig){return{kind:'fig',rows:fig.rows,cols:fig.cols,axes:fig.axes.map(ax=>({lines:ax.lines.map(l=>({x:l.x.slice(),y:l.y.slice(),fmt:l.fmt})),image:ax.image,xlabel:ax.xlabel,ylabel:ax.ylabel,title:ax.title,legend:ax.legend.slice(),xlim:ax.xlim,ylim:ax.ylim,xscale:ax.xscale,yscale:ax.yscale}))}}
 const ipyDisplay=mod('IPython.display',{display:fn('display',(a,kw,ctx)=>{const v=a[0];if(v&&v.t==='fig'){v.shown=true}else if(v)ctx.outBuf+=repr(v)+'\n';return NONE}),clear_output:fn('clear_output',()=>NONE)});
@@ -492,4 +493,75 @@ class RNNModel(nn.Module):
                     torch.zeros((
                         self.num_directions * self.rnn.num_layers,
                         batch_size, self.num_hiddens), device=device))
+
+# ---------- 第 9、10 章：掩码和注意力 ----------
+def sequence_mask(X, valid_len, value=0):
+    """在序列中屏蔽不相关的项"""
+    maxlen = X.size(1)
+    mask = torch.arange((maxlen), dtype=torch.float32,
+                        device=X.device)[None, :] < valid_len[:, None]
+    X[~mask] = value
+    return X
+
+def show_heatmaps(matrices, xlabel, ylabel, titles=None, figsize=(2.5, 2.5),
+                  cmap='Reds'):
+    """显示矩阵热图"""
+    d2l.use_svg_display()
+    num_rows, num_cols = matrices.shape[0], matrices.shape[1]
+    fig, axes = d2l.plt.subplots(num_rows, num_cols, figsize=figsize,
+                                 sharex=True, sharey=True, squeeze=False)
+    for i, (row_axes, row_matrices) in enumerate(zip(axes, matrices)):
+        for j, (ax, matrix) in enumerate(zip(row_axes, row_matrices)):
+            pcm = ax.imshow(d2l.numpy(matrix), cmap=cmap)
+            if i == num_rows - 1:
+                ax.set_xlabel(xlabel)
+            if j == 0:
+                ax.set_ylabel(ylabel)
+            if titles:
+                ax.set_title(titles[j])
+    fig.colorbar(pcm, ax=axes, shrink=0.6);
+
+def masked_softmax(X, valid_lens):
+    """通过在最后一个轴上掩蔽元素来执行softmax操作"""
+    if valid_lens is None:
+        return nn.functional.softmax(X, dim=-1)
+    else:
+        shape = X.shape
+        if valid_lens.dim() == 1:
+            valid_lens = torch.repeat_interleave(valid_lens, shape[1])
+        else:
+            valid_lens = valid_lens.reshape(-1)
+        # 最后一轴上被掩蔽的元素使用一个非常大的负值替换，从而其softmax输出为0
+        X = d2l.sequence_mask(X.reshape(-1, shape[-1]), valid_lens,
+                              value=-1e6)
+        return nn.functional.softmax(X.reshape(shape), dim=-1)
+
+class AdditiveAttention(nn.Module):
+    """加性注意力"""
+    def __init__(self, key_size, query_size, num_hiddens, dropout, **kwargs):
+        super(AdditiveAttention, self).__init__(**kwargs)
+        self.W_k = nn.Linear(key_size, num_hiddens, bias=False)
+        self.W_q = nn.Linear(query_size, num_hiddens, bias=False)
+        self.w_v = nn.Linear(num_hiddens, 1, bias=False)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, queries, keys, values, valid_lens):
+        queries, keys = self.W_q(queries), self.W_k(keys)
+        features = queries.unsqueeze(2) + keys.unsqueeze(1)
+        features = torch.tanh(features)
+        scores = self.w_v(features).squeeze(-1)
+        self.attention_weights = masked_softmax(scores, valid_lens)
+        return torch.bmm(self.dropout(self.attention_weights), values)
+
+class DotProductAttention(nn.Module):
+    """缩放点积注意力"""
+    def __init__(self, dropout, **kwargs):
+        super(DotProductAttention, self).__init__(**kwargs)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, queries, keys, values, valid_lens=None):
+        d = queries.shape[-1]
+        scores = torch.bmm(queries, keys.transpose(1,2)) / math.sqrt(d)
+        self.attention_weights = masked_softmax(scores, valid_lens)
+        return torch.bmm(self.dropout(self.attention_weights), values)
 `;

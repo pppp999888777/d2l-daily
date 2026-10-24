@@ -1,0 +1,307 @@
+<main class="wrap day" id="day15" data-day="15" hidden>
+<section class="hero">
+  <div class="eyebrow">第 15 天 · 原书第 10.1 节 + 第 10.2 节 + 第 10.3 节 · 论文路线第 8 课</div>
+  <h1>注意力：按相关程度加权求和</h1>
+  <p class="lead">注意力机制的核心只有一句话：<b>用一个查询去和一组键比较，算出权重，再用这些权重对值做加权平均</b>。今天从最古老的形式（1964 年的 Nadaraya-Watson 核回归）讲起，再看两种常用的“打分函数”：加性注意力和缩放点积注意力。你论文的 DKVMN 读记忆时用的就是点积注意力，SAKT、AKT、simpleKT 的核心也是它（明天和后天细讲）。</p>
+  <div class="plan">
+    <div><b class="k">今天的时间</b>大约 70 分钟。代码格都很快，自动运行。</div>
+    <div><b class="k">学完你能</b><ul><li>说出查询、键、值分别是什么</li><li>把核回归看成注意力汇聚</li><li>写出加性注意力和缩放点积注意力</li><li>用掩码让模型看不到某些位置</li></ul></div>
+    <div><b class="k">和你的论文</b><ul><li>DKVMN 的 <code>softmax(qemb @ Mk.t())</code></li><li>读记忆：权重 × 记忆槽再求和</li><li>为什么要除以 √d</li></ul></div>
+  </div>
+</section>
+
+<section class="part" id="attcue">
+  <div class="part-h"><div class="eyebrow">第一部分</div><h2>10.1 注意力提示</h2><span class="src">对应原书第 10.1 节，代码来自原书 PyTorch 版</span></div>
+  <div class="prose"><div class="row"><button class="btn primary runAll" data-day="15">从头全部运行</button><span class="small muted runAllMsg"></span></div></div>
+  <div class="blk">
+    <div class="prose">
+      <p>原书用人的视觉打比方：桌上有报纸、论文、笔记本、书和一杯红色的咖啡。你不刻意找的时候，眼睛会被最显眼的红色咖啡杯吸引（<b>非自主性提示</b>）；喝完咖啡想读书，你会主动去找书（<b>自主性提示</b>）。</p>
+      <p>放到模型里：自主性提示叫<b>查询</b>（query，我现在想找什么）；每个可选的东西都有一个<b>键</b>（key，它长什么样）和一个<b>值</b>（value，选中它能拿到什么）。查询和每个键比较，得到注意力权重；输出是值的加权平均。这个过程叫<b>注意力汇聚</b>。</p>
+    </div>
+    <div class="cell"><textarea>from d2l import torch as d2l
+import torch</textarea></div>
+    <div class="prose"><p>注意力权重是一个（查询数 × 键数）的矩阵，常用热图来看。先画一个最简单的：单位矩阵，表示每个查询只关注和它同编号的键。</p></div>
+    <div class="cell"><textarea>#@save
+def show_heatmaps(matrices, xlabel, ylabel, titles=None, figsize=(2.5, 2.5),
+                  cmap='Reds'):
+    """显示矩阵热图"""
+    d2l.use_svg_display()
+    num_rows, num_cols = matrices.shape[0], matrices.shape[1]
+    fig, axes = d2l.plt.subplots(num_rows, num_cols, figsize=figsize,
+                                 sharex=True, sharey=True, squeeze=False)
+    for i, (row_axes, row_matrices) in enumerate(zip(axes, matrices)):
+        for j, (ax, matrix) in enumerate(zip(row_axes, row_matrices)):
+            pcm = ax.imshow(d2l.numpy(matrix), cmap=cmap)
+            if i == num_rows - 1:
+                ax.set_xlabel(xlabel)
+            if j == 0:
+                ax.set_ylabel(ylabel)
+            if titles:
+                ax.set_title(titles[j])
+    fig.colorbar(pcm, ax=axes, shrink=0.6);</textarea></div>
+    <div class="cell"><textarea>attention_weights = d2l.reshape(d2l.eye(10), (1, 1, 10, 10))
+show_heatmaps(attention_weights, xlabel='Keys', ylabel='Queries')</textarea></div>
+  </div>
+</section>
+
+<section class="part" id="nw">
+  <div class="part-h"><div class="eyebrow">第二部分</div><h2>10.2 注意力汇聚：Nadaraya-Watson 核回归</h2><span class="src">对应原书第 10.2 节，代码来自原书 PyTorch 版</span></div>
+  <div class="blk"><div class="blk-h"><span class="n">10.2.1</span><h3>生成数据集</h3></div>
+    <div class="prose"><p>真实函数 f(x) = 2 sin(x) + x^0.8，取 50 个带噪声的训练点。任务：给一个新的 x（查询），预测 y。</p></div>
+    <div class="cell"><textarea>from d2l import torch as d2l
+import torch
+from torch import nn
+
+n_train = 50  # 训练样本数
+x_train, _ = torch.sort(d2l.rand(n_train) * 5)   # 排序后的训练样本</textarea></div>
+    <div class="cell"><textarea>def f(x):
+    return 2 * d2l.sin(x) + x**0.8
+
+y_train = f(x_train) + d2l.normal(0.0, 0.5, (n_train,))  # 训练样本的输出
+x_test = d2l.arange(0, 5, 0.1)  # 测试样本
+y_truth = f(x_test)  # 测试样本的真实输出
+n_test = len(x_test)  # 测试样本数
+n_test</textarea></div>
+    <div class="cell"><textarea>def plot_kernel_reg(y_hat):
+    d2l.plot(x_test, [y_truth, y_hat], 'x', 'y', legend=['Truth', 'Pred'],
+             xlim=[0, 5], ylim=[-1, 5])
+    d2l.plt.plot(x_train, y_train, 'o', alpha=0.5);</textarea></div>
+  </div>
+  <div class="blk"><div class="blk-h"><span class="n">10.2.2</span><h3>平均汇聚</h3></div>
+    <div class="prose"><p>最笨的办法：不管查询是多少，都预测所有训练 y 的平均值。相当于给每个训练点同样的权重 1/n。</p></div>
+    <div class="cell"><textarea>y_hat = torch.repeat_interleave(y_train.mean(), n_test)
+plot_kernel_reg(y_hat)</textarea></div>
+  </div>
+  <div class="blk"><div class="blk-h"><span class="n">10.2.3</span><h3>非参数注意力汇聚</h3></div>
+    <div class="prose">
+      <p>更合理的做法：离查询 x 越近的训练点，权重越大。Nadaraya 和 Watson 在 1964 年提出：</p>
+      <p class="math">f(x) = Σᵢ α(x, xᵢ) yᵢ，α(x, xᵢ) = softmax(−(x − xᵢ)² / 2)</p>
+      <p>用注意力的话说：x 是<b>查询</b>，训练点 xᵢ 是<b>键</b>，yᵢ 是<b>值</b>，α 是注意力权重。它不需要训练（没有参数），所以叫非参数注意力汇聚。</p>
+    </div>
+    <div class="cell"><textarea># X_repeat的形状:(n_test,n_train),
+# 每一行都包含着相同的测试输入（例如：同样的查询）
+X_repeat = d2l.reshape(x_test.repeat_interleave(n_train), (-1, n_train))
+# x_train包含着键。attention_weights的形状：(n_test,n_train),
+# 每一行都包含着要在给定的每个查询的值（y_train）之间分配的注意力权重
+attention_weights = nn.functional.softmax(-(X_repeat - x_train)**2 / 2, dim=1)
+# y_hat的每个元素都是值的加权平均值，其中的权重是注意力权重
+y_hat = d2l.matmul(attention_weights, y_train)
+plot_kernel_reg(y_hat)</textarea></div>
+    <div class="prose"><p>注意力权重热图：每一行是一个测试点（查询），每一列是一个训练点（键）。因为两边都排过序，权重集中在对角线附近：每个查询主要关注和它挨得近的训练点。</p></div>
+    <div class="cell"><textarea>d2l.show_heatmaps(attention_weights.unsqueeze(0).unsqueeze(0),
+                  xlabel='Sorted training inputs',
+                  ylabel='Sorted testing inputs')</textarea></div>
+    <div class="panel stack" id="nwLab">
+      <h4>拖动查询和核宽度</h4>
+      <p class="small muted">灰色曲线是真实函数，点是训练数据（这里另外生成了一份）。竖线是查询 x。每个训练点下面的柱子是它得到的注意力权重，橙色线是 Nadaraya-Watson 的预测。w 越大，权重越集中在查询附近：太小像平均汇聚（欠拟合），太大会贴着噪声走（过拟合）。</p>
+      <div class="row"><label class="ctrl" for="nwQ">查询 x <output id="nwQv">2.50</output><input type="range" id="nwQ" min="0" max="5" step="0.05" value="2.5"></label><label class="ctrl" for="nwW">核宽度参数 w <output id="nwWv">1.00</output><input type="range" id="nwW" min="0.1" max="12" step="0.1" value="1"></label></div>
+      <div class="cv" id="nwHost"><canvas id="nwCv" aria-label="核回归和注意力权重"></canvas></div>
+      <div class="calc pw" id="nwCalc"></div>
+    </div>
+  </div>
+  <div class="blk"><div class="blk-h"><span class="n">10.2.4</span><h3>带参数的注意力汇聚</h3></div>
+    <div class="prose"><p>加一个可学习的参数 w 控制核的宽度：α(x, xᵢ) = softmax(−((x − xᵢ)·w)² / 2)。先认识批量矩阵乘法 <code>torch.bmm</code>：两个形状 (n, a, b) 和 (n, b, c) 的张量，第 i 个矩阵和第 i 个矩阵相乘，得到 (n, a, c)。</p></div>
+    <div class="cell"><textarea>X = d2l.ones((2, 1, 4))
+Y = d2l.ones((2, 4, 6))
+torch.bmm(X, Y).shape</textarea></div>
+    <div class="prose"><p>用 bmm 做加权平均：权重变成 (批量, 1, n)，值变成 (批量, n, 1)，乘出来是 (批量, 1, 1)。</p></div>
+    <div class="cell"><textarea>weights = d2l.ones((2, 10)) * 0.1
+values = d2l.reshape(d2l.arange(20.0), (2, 10))
+torch.bmm(weights.unsqueeze(1), values.unsqueeze(-1))</textarea></div>
+    <div class="cell"><textarea>class NWKernelRegression(nn.Module):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.w = nn.Parameter(torch.rand((1,), requires_grad=True))
+
+    def forward(self, queries, keys, values):
+        # queries和attention_weights的形状为(查询个数，“键－值”对个数)
+        queries = d2l.reshape(
+            queries.repeat_interleave(keys.shape[1]), (-1, keys.shape[1]))
+        self.attention_weights = nn.functional.softmax(
+            -((queries - keys) * self.w)**2 / 2, dim=1)
+        # values的形状为(查询个数，“键－值”对个数)
+        return torch.bmm(self.attention_weights.unsqueeze(1),
+                         values.unsqueeze(-1)).reshape(-1)</textarea></div>
+    <div class="prose"><p>训练时，每个训练点都当一次查询，键和值是<b>除了它自己以外</b>的其他训练点（不然它只会盯着自己）。<code>1 - eye</code> 是对角线为 0 的掩码，用来去掉自己。</p></div>
+    <div class="cell"><textarea># X_tile的形状:(n_train，n_train)，每一行都包含着相同的训练输入
+X_tile = x_train.repeat((n_train, 1))
+# Y_tile的形状:(n_train，n_train)，每一行都包含着相同的训练输出
+Y_tile = y_train.repeat((n_train, 1))
+# keys的形状:('n_train'，'n_train'-1)
+keys = d2l.reshape(X_tile[(1 - d2l.eye(n_train)).type(torch.bool)],
+                   (n_train, -1))
+# values的形状:('n_train'，'n_train'-1)
+values = d2l.reshape(Y_tile[(1 - d2l.eye(n_train)).type(torch.bool)],
+                     (n_train, -1))</textarea></div>
+    <div class="prose"><p><b>和原书的不同</b>：加了一行 <code>torch.manual_seed(1)</code>。w 是随机初始化的，本页的随机数每次打开都一样，不加这一行时 w 恰好落在 0.1 左右，那一带损失几乎是平的，w 会被推向 0，曲线学成一条平线（我在真 PyTorch 上用同样的数据和初始值验证过，是同样的结果，不是网页的问题）。</p></div>
+    <div class="cell"><textarea>torch.manual_seed(1)   # 本页加的，原因见上
+net = NWKernelRegression()
+loss = nn.MSELoss(reduction='none')
+trainer = torch.optim.SGD(net.parameters(), lr=0.5)
+animator = d2l.Animator(xlabel='epoch', ylabel='loss', xlim=[1, 5])
+
+for epoch in range(5):
+    trainer.zero_grad()
+    l = loss(net(x_train, keys, values), y_train)
+    l.sum().backward()
+    trainer.step()
+    print(f'epoch {epoch + 1}, loss {float(l.sum()):.6f}')
+    animator.add(epoch + 1, float(l.sum()))</textarea></div>
+    <div class="cell"><textarea>print('学到的 w：', net.w.item())
+# keys的形状:(n_test，n_train)，每一行包含着相同的训练输入（例如，相同的键）
+keys = x_train.repeat((n_test, 1))
+# value的形状:(n_test，n_train)
+values = y_train.repeat((n_test, 1))
+y_hat = net(x_test, keys, values).unsqueeze(1).detach()
+plot_kernel_reg(y_hat)</textarea></div>
+    <div class="prose"><p>学到的 w 比 1 大，权重更集中，曲线也更“抖”（开始跟着噪声走了）：</p></div>
+    <div class="cell"><textarea>d2l.show_heatmaps(net.attention_weights.unsqueeze(0).unsqueeze(0),
+                  xlabel='Sorted training inputs',
+                  ylabel='Sorted testing inputs')</textarea></div>
+  </div>
+</section>
+
+<section class="part" id="score">
+  <div class="part-h"><div class="eyebrow">第三部分</div><h2>10.3 注意力评分函数</h2><span class="src">对应原书第 10.3 节，代码来自原书 PyTorch 版</span></div>
+  <div class="blk">
+    <div class="prose">
+      <p>上面用的 −(x − xᵢ)²/2 叫<b>注意力评分函数</b> a(q, k)：给查询和键打分。分数经过 softmax 变成权重，再对值加权求和：</p>
+      <p class="math">f(q) = Σᵢ softmax(a(q, kᵢ)) · vᵢ</p>
+      <p>不同的评分函数就是不同的注意力。</p>
+    </div>
+    <div class="cell"><textarea>from d2l import torch as d2l
+import math
+import torch
+from torch import nn</textarea></div>
+  </div>
+  <div class="blk"><div class="blk-h"><span class="n">10.3.1</span><h3>掩蔽 softmax</h3></div>
+    <div class="prose"><p>有时有些键不该被看到：比如批量里的序列长短不一，补齐的位置是假的。做法是把这些位置的分数换成一个很大的负数（−10⁶），softmax 以后权重就是 0。<code>valid_lens</code> 给出每个序列（或每个查询）有效的长度。</p></div>
+    <div class="cell"><textarea>#@save
+def masked_softmax(X, valid_lens):
+    """通过在最后一个轴上掩蔽元素来执行softmax操作"""
+    # X:3D张量，valid_lens:1D或2D张量
+    if valid_lens is None:
+        return nn.functional.softmax(X, dim=-1)
+    else:
+        shape = X.shape
+        if valid_lens.dim() == 1:
+            valid_lens = torch.repeat_interleave(valid_lens, shape[1])
+        else:
+            valid_lens = valid_lens.reshape(-1)
+        # 最后一轴上被掩蔽的元素使用一个非常大的负值替换，从而其softmax输出为0
+        X = d2l.sequence_mask(X.reshape(-1, shape[-1]), valid_lens,
+                              value=-1e6)
+        return nn.functional.softmax(X.reshape(shape), dim=-1)</textarea></div>
+    <div class="cell"><textarea>masked_softmax(torch.rand(2, 2, 4), torch.tensor([2, 3]))</textarea></div>
+    <div class="cell"><textarea>masked_softmax(torch.rand(2, 2, 4), d2l.tensor([[1, 3], [2, 4]]))</textarea></div>
+    <div class="callout"><h4>对照你的论文：掩码</h4><p>KT 里的掩码更重要：第 t 步只能看到第 t 步以前的记录，不能偷看未来的答案。SAKT、AKT、simpleKT 都用一个“下三角”的掩码（后天学 Transformer 时会看到）。你论文 <code>batch_loss</code> 里的 <code>m</code> 是另一种掩码：窗口不满 100 步时，补出来的位置不计入损失。</p></div>
+  </div>
+  <div class="blk"><div class="blk-h"><span class="n">10.3.2</span><h3>加性注意力</h3></div>
+    <div class="prose"><p>查询和键的长度可以不同。先各自用一个线性层变到同样长度 h，相加后过 tanh，再用一个向量 w_v 打分：</p>
+      <p class="math">a(q, k) = w_vᵀ tanh(W_q q + W_k k)</p></div>
+    <div class="cell"><textarea>#@save
+class AdditiveAttention(nn.Module):
+    """加性注意力"""
+    def __init__(self, key_size, query_size, num_hiddens, dropout, **kwargs):
+        super(AdditiveAttention, self).__init__(**kwargs)
+        self.W_k = nn.Linear(key_size, num_hiddens, bias=False)
+        self.W_q = nn.Linear(query_size, num_hiddens, bias=False)
+        self.w_v = nn.Linear(num_hiddens, 1, bias=False)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, queries, keys, values, valid_lens):
+        queries, keys = self.W_q(queries), self.W_k(keys)
+        # 在维度扩展后，
+        # queries的形状：(batch_size，查询的个数，1，num_hidden)
+        # key的形状：(batch_size，1，“键－值”对的个数，num_hiddens)
+        # 使用广播方式进行求和
+        features = queries.unsqueeze(2) + keys.unsqueeze(1)
+        features = torch.tanh(features)
+        # self.w_v仅有一个输出，因此从形状中移除最后那个维度。
+        # scores的形状：(batch_size，查询的个数，“键-值”对的个数)
+        scores = self.w_v(features).squeeze(-1)
+        self.attention_weights = masked_softmax(scores, valid_lens)
+        # values的形状：(batch_size，“键－值”对的个数，值的维度)
+        return torch.bmm(self.dropout(self.attention_weights), values)</textarea></div>
+    <div class="prose"><p>2 个批量，每批 1 个查询、10 个键值对。所有键都一样，所以权重在有效范围内是均匀的：第一批只看前 2 个，第二批看前 6 个。</p></div>
+    <div class="cell"><textarea>queries, keys = d2l.normal(0, 1, (2, 1, 20)), d2l.ones((2, 10, 2))
+# values的小批量，两个值矩阵是相同的
+values = torch.arange(40, dtype=torch.float32).reshape(1, 10, 4).repeat(
+    2, 1, 1)
+valid_lens = d2l.tensor([2, 6])
+
+attention = AdditiveAttention(key_size=2, query_size=20, num_hiddens=8,
+                              dropout=0.1)
+attention.eval()
+attention(queries, keys, values, valid_lens)</textarea></div>
+    <div class="cell"><textarea>d2l.show_heatmaps(d2l.reshape(attention.attention_weights, (1, 1, 2, 10)),
+                  xlabel='Keys', ylabel='Queries')</textarea></div>
+  </div>
+  <div class="blk"><div class="blk-h"><span class="n">10.3.3</span><h3>缩放点积注意力</h3></div>
+    <div class="prose"><p>查询和键长度相同（都是 d）时，直接用点积打分，更快：</p>
+      <p class="math">a(q, k) = qᵀk / √d</p>
+      <p>为什么除以 √d？如果 q 和 k 的每个分量都是均值 0、方差 1 的独立随机数，点积 qᵀk 是 d 项之和，方差是 d。d 越大，分数越大，softmax 就越接近“只选一个”，梯度几乎为 0。除以 √d 把方差拉回 1。下面的交互可以看到这个效果。</p></div>
+    <div class="cell"><textarea>#@save
+class DotProductAttention(nn.Module):
+    """缩放点积注意力"""
+    def __init__(self, dropout, **kwargs):
+        super(DotProductAttention, self).__init__(**kwargs)
+        self.dropout = nn.Dropout(dropout)
+
+    # queries的形状：(batch_size，查询的个数，d)
+    # keys的形状：(batch_size，“键－值”对的个数，d)
+    # values的形状：(batch_size，“键－值”对的个数，值的维度)
+    # valid_lens的形状:(batch_size，)或者(batch_size，查询的个数)
+    def forward(self, queries, keys, values, valid_lens=None):
+        d = queries.shape[-1]
+        # 设置transpose_b=True为了交换keys的最后两个维度
+        scores = torch.bmm(queries, keys.transpose(1,2)) / math.sqrt(d)
+        self.attention_weights = masked_softmax(scores, valid_lens)
+        return torch.bmm(self.dropout(self.attention_weights), values)</textarea></div>
+    <div class="cell"><textarea>queries = d2l.normal(0, 1, (2, 1, 2))
+attention = DotProductAttention(dropout=0.5)
+attention.eval()
+attention(queries, keys, values, valid_lens)</textarea></div>
+    <div class="cell"><textarea>d2l.show_heatmaps(d2l.reshape(attention.attention_weights, (1, 1, 2, 10)),
+                  xlabel='Keys', ylabel='Queries')</textarea></div>
+    <div class="panel stack" id="spLab2">
+      <h4>为什么要除以 √d</h4>
+      <p class="small muted">随机生成 1 个查询和 8 个键，每个分量都服从标准正态分布。比较“不缩放”和“除以 √d”时 softmax 出来的 8 个权重。d 越大，不缩放的权重越接近“只有一个是 1，其余是 0”。</p>
+      <div class="row"><label class="ctrl" for="sdD">维度 d <output id="sdDv">64</output><input type="range" id="sdD" min="1" max="512" step="1" value="64"></label><button class="btn sm" id="sdGo">重新抽一组</button></div>
+      <div class="cv" id="sdHost"><canvas id="sdCv" aria-label="缩放和不缩放的注意力权重"></canvas></div>
+      <div class="calc pw" id="sdCalc"></div>
+    </div>
+    <div class="callout"><h4>对照你的论文：DKVMN 读记忆就是点积注意力</h4><p>DKVMN（第 1112 行）有 N = 20 个记忆槽。键矩阵 <code>Mk</code> 是 (20, d)，每一行是一个记忆槽的“键”；值矩阵 M 是每个学生自己的 (20, d) 记忆，随着做题不断改写。读的时候（第 1131 到 1137 行）：</p>
+<pre class="code">qe = self.qemb(q)                          <span class="c"># 查询：下一题知识点的嵌入，d 维</span>
+w = torch.softmax(qe @ self.Mk.t(), -1)    <span class="c"># 和 20 个键做点积，softmax 成 20 个权重</span>
+r = torch.einsum("btmn,btnd->btmd", w, M)  <span class="c"># 用权重对 20 个记忆槽（值）加权求和</span></pre>
+      <p>和今天的公式一模一样：查询是题目的嵌入，键是 <code>Mk</code>，值是记忆 M。唯一的区别是没有除以 √d（d = 64，Mk 初始化时乘了 0.1，分数本来就不大）。写记忆时（第 1121 到 1127 行）用的是同一组权重 w：权重大的槽改得多。</p></div>
+  </div>
+</section>
+
+<section class="part quiz-sec">
+  <div class="part-h"><div class="eyebrow">课后题</div><h2>做几道题检查一下</h2><span class="src">选择题点选项马上出结果；写形状和写代码的题，网页会现场运行代码判断对错。答题记录只存在你这台设备的浏览器里。</span></div>
+  <div class="quiz dayquiz" data-day="15"></div>
+  <div class="row small muted quizscore" data-day="15"></div>
+</section>
+
+<section class="part">
+  <div class="part-h"><div class="eyebrow">今日小结</div><h2>今天学会了吗？</h2></div>
+  <div class="two">
+    <div class="panel stack">
+      <ul class="check-list" data-day="15">
+        <li><label><input type="checkbox" data-k="c1">查询和键打分 → softmax 成权重 → 对值加权平均</label></li>
+        <li><label><input type="checkbox" data-k="c2">Nadaraya-Watson 核回归就是一种注意力汇聚</label></li>
+        <li><label><input type="checkbox" data-k="c3"><code>torch.bmm</code> 做一批矩阵乘法；掩码把不该看的位置设成 −10⁶</label></li>
+        <li><label><input type="checkbox" data-k="c4">加性注意力 w_vᵀ tanh(W_q q + W_k k)；缩放点积 qᵀk/√d</label></li>
+        <li><label><input type="checkbox" data-k="c5">DKVMN 读记忆：题目嵌入当查询，Mk 当键，记忆 M 当值</label></li>
+      </ul>
+      <span class="small check-msg"></span>
+    </div>
+    <div class="panel stack">
+      <h3>明天（第 16 天）学什么</h3>
+      <p>原书 10.5 多头注意力、10.6 自注意力和位置编码。一个序列自己当查询、键和值，每个位置都去关注其他位置：SAKT 就是这样读学生的做题历史的。还有位置编码：注意力本身不知道顺序，要额外告诉它“这是第几步”。</p>
+    </div>
+  </div>
+</section>
+</main>

@@ -143,6 +143,17 @@ const QUIZ={
  {t:'c',q:'模拟数据里“知道真实掌握状态时的 AUC”为什么到不了 1？',o:['代码有错','即使知道会不会，蒙对（guess）和失误（slip）还是随机的','因为用了 Dropout','因为学生太少'],a:1,why:'这是数据本身的随机性，任何模型都无法消除。真实数据里也一样，所以 KT 的 AUC 一般在 0.7 到 0.85 之间。'},
  {t:'code',q:'写代码：logits = torch.tensor([[0.0, 2.0, -1.0], [1.0, 0.5, 3.0]])，每行是对 3 个知识点的 logit。下一题考的知识点是 q = [1, 2]，真实对错是 y = [1.0, 0.0]。用 gather 取出对应的 logit 存成 picked（形状 (2,)），再算 loss = F.binary_cross_entropy_with_logits(picked, y)。',start:'from torch.nn import functional as F\nlogits = torch.tensor([[0.0, 2.0, -1.0], [1.0, 0.5, 3.0]])\nq = torch.tensor([1, 2])\ny = torch.tensor([1.0, 0.0])\npicked = \nloss = \nloss',check:env=>{const p=env.vars.picked,l=env.vars.loss;if(!p||!MT.isT(p)||p.shape.join()!=='2'||Math.abs(p.data[0]-2)>1e-6||Math.abs(p.data[1]-3)>1e-6)return'picked 应该是 tensor([2., 3.])，形状 (2,)。提示：logits.gather(-1, q.unsqueeze(-1)).squeeze(-1)';const want=(Math.log(1+Math.exp(-2))+Math.log(1+Math.exp(3)))/2;if(!l||!MT.isT(l)||Math.abs(l.data[0]-want)>1e-4)return`loss 应该约等于 ${want.toFixed(4)}`;return true},why:'picked = logits.gather(-1, q.unsqueeze(-1)).squeeze(-1) 得到 [2., 3.]。第一题答对，logit 2 预测得不错；第二题答错，logit 3 却很有信心说会对，损失主要来自这里。'},
 ],
+'15':[
+ {t:'c',q:'注意力汇聚的输出是什么？',o:['查询本身','分数最高的那个键','值的加权平均，权重由查询和各个键的相似程度决定','所有键的平均'],a:2,why:'f(q) = Σ softmax(a(q, kᵢ)) vᵢ。'},
+ {t:'c',q:'Nadaraya-Watson 核回归里，查询、键、值分别是什么？',o:['查询是测试点 x，键是训练点 xᵢ，值是训练点的 yᵢ','查询是 yᵢ，键是 xᵢ，值是 x','三者都是 x','没有键'],a:0,why:'用测试点和每个训练点的距离算权重，再对训练点的 y 加权平均。'},
+ {t:'c',q:'核回归里 w 很小（核很宽）会怎样？',o:['预测贴着噪声走','几乎所有训练点权重相同，预测接近平均汇聚的那条平线','报错','预测等于真实函数'],a:1,why:'−((x − xᵢ)·w)²/2 几乎都是 0，softmax 后接近均匀分布。'},
+ {t:'shape',q:'批量矩阵乘法的结果形状？',code:'torch.bmm(torch.ones(2, 1, 4), torch.ones(2, 4, 6))',why:'(2, 1, 4) 和 (2, 4, 6)：两个批量各自做 (1, 4) @ (4, 6)，得到 (2, 1, 6)。'},
+ {t:'c',q:'masked_softmax 怎样让某些位置的权重变成 0？',o:['把权重直接设成 0 再归一化','把这些位置的分数换成 −10⁶，softmax 后 exp(−10⁶) ≈ 0','删掉这些位置','乘以 0.5'],a:1,why:'这样剩下位置的权重仍然加起来等于 1。'},
+ {t:'c',q:'缩放点积注意力为什么要除以 √d？',o:['让计算更快','q 和 k 的分量方差为 1 时，点积的方差是 d；除以 √d 把分数的方差拉回 1，避免 softmax 饱和','为了让权重和为 1','为了防止过拟合'],a:1,why:'d 大时不缩放的分数很大，softmax 几乎只选一个键，梯度接近 0。'},
+ {t:'c',q:'查询和键的长度不同（比如查询 20 维、键 2 维），该用哪种评分函数？',o:['缩放点积','加性注意力：先各自用线性层变到同一长度','都不行','点积不缩放'],a:1,why:'点积要求两个向量一样长。加性注意力的 W_q、W_k 把它们映射到同一个 h 维空间。'},
+ {t:'c',q:'你论文 DKVMN 读记忆时 w = softmax(qe @ Mk.t())，这里的查询是什么？',o:['学生上一题的对错','下一题知识点的嵌入 qe','记忆矩阵 M','输出层'],a:1,why:'qe 和 20 个记忆槽的键 Mk 做点积，softmax 后的权重用来对记忆 M（值）加权求和。'},
+ {t:'code',q:'写代码：一个查询 q = torch.tensor([1.0, 0.0])，三个键 k = torch.tensor([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]])，三个值 v = torch.tensor([10.0, 20.0, 30.0])。用缩放点积算权重 w（softmax(k @ q / √2)），再算输出 out = (w * v).sum()。',start:'import math\nq = torch.tensor([1.0, 0.0])\nk = torch.tensor([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]])\nv = torch.tensor([10.0, 20.0, 30.0])\nw = \nout = \nw, out',check:env=>{const w=env.vars.w,o=env.vars.out;const s=[1,0,1].map(x=>x/Math.SQRT2),e=s.map(Math.exp),z=e.reduce((a,b)=>a+b,0),ww=e.map(x=>x/z);if(!w||!MT.isT(w)||w.data.length!==3||ww.some((x,i)=>Math.abs(x-w.data[i])>1e-4))return`w 应该约等于 [${ww.map(x=>x.toFixed(4)).join(', ')}]。提示：torch.softmax(k @ q / math.sqrt(2), dim=0)`;const oo=ww[0]*10+ww[1]*20+ww[2]*30;if(!o||!MT.isT(o)||Math.abs(o.data[0]-oo)>1e-3)return`out 应该约等于 ${oo.toFixed(4)}`;return true},why:'分数是 [1, 0, 1] / √2，第 1 和第 3 个键和查询一样相似，权重相同且比第 2 个大。输出约 19.9，偏向 10 和 30 的平均值。'},
+],
 };
 function quizState(day){return store.get('quiz'+day,{})}
 function quizSave(day,s){store.set('quiz'+day,s)}

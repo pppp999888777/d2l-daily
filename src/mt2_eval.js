@@ -98,9 +98,10 @@ torch.attrs.is_tensor=fn('is_tensor',a=>B(isT(a[0])&&!a[0].np));
 function ensurePrelude(){if(D2L.ready)return;D2L.ready=true;const sc=new Scope(null);sc.set('d2l',D2L);const saved=CUR;const ctx={scope:sc,outBuf:'',touched:[],plots:[],figs:[],fig:null,depth:0,steps:0,yields:null};CUR=ctx;try{for(const s of parse(D2L_PRELUDE))exec(s,sc,ctx)}finally{CUR=saved}for(const[k,v]of Object.entries(sc.vars))if(v.t==='func'||v.t==='cls'||(!(k in D2L.attrs)&&v.t!=='mod'&&k!=='d2l'))D2L.attrs[k]=v}
 D2L.attrs.load_array=fn('load_array',(a,kw)=>({t:'loader',ds:{t:'tdataset',tensors:iterate(a[0]).map(asTensor)},bs:intOf(a[1]),shuffle:truthy(kwOr(kw,a,'is_train',2,B(true))),drop_last:false}));
 function getAttr(o,name){if(isT(o))return tensorAttr(o,name);
+  if(o.t==='tuple'&&o.fields&&o.fields.includes(name))return o.items[o.fields.indexOf(name)];
   if(name==='__name__'&&(o.t==='type'||o.t==='cls'||o.t==='fn'||o.t==='func')&&o.name)return S(o.t==='type'?o.name.split('.').pop().replace(/^Tensor$/,'Tensor'):o.name);
   switch(o.t){case'mod':{const v=o.attrs[name];if(v!==undefined)return v;err('AttributeError',`module '${o.name}' has no attribute '${name}'`)}
-    case'nn':return nnAttr(o,name);case'ax':return axAttr(o,name);case'fig':return DUMMY;case'axarr':if(name==='flatten')return fn('flatten',()=>list(o.fig.axes.slice()));break;
+    case'nn':return nnAttr(o,name);case'ax':return axAttr(o,name);case'fig':return fn(name,()=>NONE);case'axarr':if(name==='flatten')return fn('flatten',()=>list(o.fig.axes.slice()));break;
     case'fmnist':if(name==='targets')return mkT([o.n],FM[o.train?'train':'test'].labels,'int64');if(name==='classes')return list(['T-shirt/top','Trouser','Pullover','Dress','Coat','Sandal','Shirt','Sneaker','Bag','Ankle boot'].map(S));if(name==='train')return B(o.train);break;case'optim':return optAttr(o,name);case'tdataset':if(name==='tensors')return tup(o.tensors);break;
     case'super':{const m=classLookup(o.cls.base,name);if(!m)err('AttributeError',`'super' object has no attribute '${name}'`);return(m.t==='func'||m.method)?{t:'bound',f:m,self:o.self}:m}
     case'df':return dfAttr(o,name);case'series':return seriesAttr(o,name);case'dist':return distAttr(o,name);case'dummy':return DUMMY;

@@ -4,7 +4,7 @@ C=runpy.run_path(d+sys.argv[1])['CELLS'];out=[];g={}
 import types
 _d2l=types.ModuleType('d2l');_t=types.ModuleType('d2l.torch');_t.plot=lambda *a,**k:None;_t.set_figsize=lambda *a,**k:None;_t.use_svg_display=lambda *a,**k:None
 import torch as _torch
-for _n in ['ones','zeros','tensor','normal','matmul','arange','exp','sin','cos','float32','randn']: setattr(_t,_n,getattr(_torch,_n))
+for _n in ['ones','zeros','tensor','normal','matmul','arange','exp','sin','cos','float32','randn','eye','bmm','rand']: setattr(_t,_n,getattr(_torch,_n))
 _t.reshape=lambda x,s:x.reshape(s);_t.numpy=lambda x:x.detach().numpy();_t.plt=types.SimpleNamespace(scatter=lambda *a,**k:None,plot=lambda *a,**k:None,axhline=lambda *a,**k:None,legend=lambda *a,**k:None,gca=lambda:types.SimpleNamespace(set_xlabel=lambda *a:None,set_ylabel=lambda *a:None),rcParams={})
 def _linreg(X,w,b): return _torch.matmul(X,w)+b
 def _sq(y_hat,y): return (y_hat-y.reshape(y_hat.shape))**2/2

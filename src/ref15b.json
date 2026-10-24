@@ -1,0 +1,1 @@
+["", "", "50\n", "", "", "", "", "torch.Size([2, 1, 6])\n", "tensor([[[ 4.5000]],\n\n        [[14.5000]]])\n", "", "", "epoch 1, loss 45.966343\nepoch 2, loss 14.692318\nepoch 3, loss 14.514404\nepoch 4, loss 14.315644\nepoch 5, loss 14.098244\n", "", ""]
