@@ -18,7 +18,7 @@ def artifact_daily():
     with open(P('minitorch2.js'), 'w', encoding='utf-8') as f:
         f.write(mt)
     data = '<script type="text/plain" id="fmData">' + read('fmnist_b64.txt').strip() + '</script>\n'
-    return read('page_head_full.html') + read('page_body2.html') + '\n' + data + '<script>\n' + mt + '\n' + read('page2.js') + '</script>\n'
+    return read('page_head_full.html') + read('page_body2.html') + '\n' + data + '<script>\n' + mt + '\n' + read('page2.js') + '\n' + read('quiz.js') + '</script>\n'
 
 SKELETON = '''<!doctype html>
 <html lang="zh-CN">
