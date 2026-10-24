@@ -1,0 +1,2100 @@
+<header class="top"><div class="wrap">
+  <span class="brand">动手学深度学习每日课</span>
+  <nav class="days" id="dayNav" aria-label="课程天数">
+    <a href="#day1" data-nav="1">第 1 天</a><a href="#day2" data-nav="2">第 2 天</a><a href="#day3" data-nav="3">第 3 天</a><a href="#day4" data-nav="4">第 4 天</a><a href="#day5" data-nav="5">第 5 天</a><a href="#day6" data-nav="6">第 6 天</a><a href="#day7" data-nav="7">第 7 天</a><a href="#day8" data-nav="8">第 8 天</a>
+    <a href="#road" class="road-link">课程表</a>
+    <a class="soon" href="#road">第 9 天</a><a class="soon" href="#road">第 10 天</a>
+  </nav>
+</div></header>
+
+<main class="wrap day" id="day1" data-day="1">
+<section class="hero">
+  <div class="eyebrow">第 1 天 · 原书第 1 章 + 第 2.1 节</div>
+  <h1>机器学习是什么，以及你的第一个张量</h1>
+  <p class="lead">跟着《动手学深度学习》（第二版，PyTorch 版）每天学一点。书上的代码在这一页里就能运行：改代码，按“运行”（或 Ctrl/⌘ + Enter），马上看到结果和图示，不用注册，也不用装任何东西。</p>
+  <div class="plan">
+    <div><b class="k">今天的时间</b>大约 60 分钟。第一部分 20 分钟，第二部分 40 分钟。</div>
+    <div><b class="k">学完你能</b><ul><li>说出机器学习的四个组成部分</li><li>分清回归、分类等问题类型</li><li>创建张量、看懂 shape、改形状</li><li>用上广播、索引和切片</li></ul></div>
+    <div><b class="k">怎么学</b><ul><li>先读一段，再动手玩</li><li>每个代码格都试着改一改</li><li>最后做完练习，勾上今日小结</li></ul></div>
+  </div>
+</section>
+
+<!-- ============ 第一部分：第 1 章 引言 ============ -->
+<section class="part" id="intro">
+  <div class="part-h"><div class="eyebrow">第一部分</div><h2>第 1 章 引言：用数据编程</h2><span class="src">对应原书 1.1 至 1.3 节</span></div>
+  <div class="prose">
+    <p>书一开始举了个例子：写一个程序，听到“Hey Siri”就回答“是”。麦克风每秒采集约 44000 个数字，谁也写不出“哪些数字组合代表 Hey Siri”的规则。机器学习的做法是反过来：<b>不写规则，写一个带很多“旋钮”的程序，再用一大堆标好答案的录音，自动把旋钮拧到合适的位置。</b></p>
+    <p>这些旋钮叫<b>参数</b>。参数拧好以后的程序叫<b>模型</b>。拧旋钮的过程叫<b>训练</b>。这就是书里说的“用数据编程”。</p>
+  </div>
+
+  <div class="blk" id="knob">
+    <div class="blk-h"><span class="n">1.1</span><h3>参数就是旋钮：书里修水管的例子</h3></div>
+    <div class="prose"><p>书里的例子：承包商干了 3 小时收你 350 美元，干了 2 小时收你朋友 250 美元。你猜他的收费方式是“上门费 + 每小时费用”。这里的上门费 b 和每小时费用 w 就是两个参数。先自己拧旋钮试试能不能猜对，再点“训练”让电脑按书里的四步法去找。</p></div>
+    <div class="two">
+      <div class="panel stack">
+        <div class="row">
+          <label class="ctrl" for="kB">上门费 b（美元） <output id="kBv">0</output><input type="range" id="kB" min="0" max="200" step="1" value="0"></label>
+          <label class="ctrl" for="kW">每小时 w（美元） <output id="kWv">0</output><input type="range" id="kW" min="0" max="200" step="1" value="0"></label>
+        </div>
+        <div class="tblwrap"><table class="t" id="kTbl"></table></div>
+        <div class="row">
+          <button class="btn primary" id="kTrain">训练 50 步</button>
+          <button class="btn" id="kReset">参数归零</button>
+          <label class="row small" for="kThird" style="gap:6px"><input type="checkbox" id="kThird"> 再加一张账单：4 小时 480 美元</label>
+        </div>
+      </div>
+      <div class="panel stack">
+        <h4>书里的训练四步</h4>
+        <ol class="steps4" id="kSteps">
+          <li>从一个参数随机（这里是 0）的模型开始，它什么都不会</li>
+          <li>拿一些数据样本（这里是账单）</li>
+          <li>调整参数，让模型在这些样本上表现好一点</li>
+          <li>重复第 2、3 步，直到满意</li>
+        </ol>
+        <div class="calc" id="kCalc"></div>
+      </div>
+    </div>
+    <p class="note">勾上第三张账单以后，三个点不在一条直线上，没有任何 b 和 w 能把三张都猜对。这时只能让“误差的平方加起来”尽量小，这个量就是书里说的<b>平方误差损失</b>。真实数据几乎都是这样。</p>
+  </div>
+
+  <div class="blk">
+    <div class="blk-h"><span class="n">1.2</span><h3>机器学习的四个组件</h3></div>
+    <div class="prose"><p>书里说，不管什么机器学习问题，都离不开这四样东西。最后一列是你论文里对应的东西，学到后面会越来越清楚。</p></div>
+    <div class="panel tblwrap"><table class="t">
+      <thead><tr><th>组件</th><th>是什么</th><th>修水管的例子</th><th>你的论文（DKT）</th></tr></thead>
+      <tbody>
+        <tr><td><b>数据</b></td><td>拿来学习的样本，每个样本有<b>特征</b>，要预测的那一项叫<b>标签</b></td><td>账单：特征是小时数，标签是金额</td><td>学生的做题记录：特征是做过的题和对错，标签是下一题对不对</td></tr>
+        <tr><td><b>模型</b></td><td>把输入变成输出的程序，里面有参数</td><td>金额 = b + w × 小时</td><td>LSTM 神经网络，约 8 万个参数</td></tr>
+        <tr><td><b>目标函数</b></td><td>给模型打分，通常越小越好，所以也叫<b>损失函数</b></td><td>平方误差</td><td>交叉熵 BCE</td></tr>
+        <tr><td><b>优化算法</b></td><td>调参数、让损失变小的方法</td><td>梯度下降</td><td>Adam（梯度下降的改进版）</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+
+  <div class="blk">
+    <div class="blk-h"><span class="n">1.3</span><h3>特征有多少个：一张照片就是一串数</h3></div>
+    <div class="prose"><p>书里说：一张 200×200 的彩色照片由 200 × 200 × 3 = 120000 个数组成，3 是红、绿、蓝三个通道。改改尺寸看看。第二部分会学到，这正是一个形状为 <code>(200, 200, 3)</code> 的张量。</p></div>
+    <div class="panel row">
+      <label class="ctrl" for="imW">宽 <input type="text" id="imW" value="200" size="5"></label>
+      <label class="ctrl" for="imH">高 <input type="text" id="imH" value="200" size="5"></label>
+      <label class="ctrl" for="imC">通道数 <input type="text" id="imC" value="3" size="3"></label>
+      <div class="calc" id="imOut" style="flex:1 1 260px"></div>
+    </div>
+  </div>
+
+  <div class="blk" id="overfit">
+    <div class="blk-h"><span class="n">1.4</span><h3>训练集、测试集和过拟合</h3></div>
+    <div class="prose"><p>书里打了个比方：训练集上的成绩像模拟考试，测试集上的成绩像期末考试，模拟考得好不保证期末考得好。模型在训练数据上表现很好、换了新数据就不行，叫<b>过拟合</b>。</p>
+    <p>下面用一条曲线去拟合 10 个实心点（训练集），再用 10 个空心点（测试集）检验。拖动“模型复杂度”，看训练误差和测试误差怎么变。</p></div>
+    <div class="two">
+      <div class="stack">
+        <div class="cv" id="ofHost"><canvas id="ofCv" aria-label="多项式拟合训练点和测试点"></canvas></div>
+        <div class="row">
+          <label class="ctrl" for="ofDeg">模型复杂度（多项式次数） <output id="ofDegv">3</output><input type="range" id="ofDeg" min="0" max="9" value="3"></label>
+          <button class="btn" id="ofNew">换一批数据</button>
+        </div>
+      </div>
+      <div class="stack">
+        <div class="cv"><canvas id="ofErr" aria-label="不同复杂度下的训练误差和测试误差"></canvas></div>
+        <div class="calc" id="ofCalc"></div>
+      </div>
+    </div>
+    <p class="note">次数到 9 时，曲线穿过了全部 10 个训练点，训练误差几乎是 0，但在训练点之间乱扭，测试误差很大，这就是过拟合。次数太低（比如 0 或 1）时两个误差都大，叫欠拟合。书的第 4 章会专门讲这件事。</p>
+  </div>
+
+  <div class="blk" id="kinds">
+    <div class="blk-h"><span class="n">1.5</span><h3>这是哪种机器学习问题？</h3></div>
+    <div class="prose"><p>书里把常见问题分成几类。经验法则：问“有多少”的通常是<b>回归</b>，问“是哪一个”的通常是<b>分类</b>，没有标签、让机器自己找规律的是<b>无监督学习</b>，靠试错拿奖励的是<b>强化学习</b>。点选你的答案。</p></div>
+    <div class="quiz" id="kQuiz"></div>
+    <div class="row small muted" id="kScore"></div>
+  </div>
+
+  <div class="blk" id="mushroom">
+    <div class="blk-h"><span class="n">1.6</span><h3>最可能的答案，不一定是该做的决定</h3></div>
+    <div class="prose"><p>书里的例子：模型说一只蘑菇有 20% 的概率是剧毒的死帽蕈。80% 是安全的，那吃不吃？吃错的代价是送命，扔错的代价只是少吃一只蘑菇。所以要比较的是<b>预期损失</b> = 每种结果的概率 × 这种结果的代价，再加起来。这和你论文的核心问题是一回事：预测准不等于决策好。</p></div>
+    <div class="two">
+      <div class="panel stack">
+        <label class="ctrl" for="muP">模型给出的“有毒”概率 <output id="muPv">0.20</output><input type="range" id="muP" min="0" max="1" step="0.01" value="0.2"></label>
+        <label class="ctrl" for="muC">吃到毒蘑菇的代价（扔掉一只好蘑菇的代价算 1） <output id="muCv">1000</output><input type="range" id="muC" min="0" max="4" step="0.1" value="3"></label>
+      </div>
+      <div class="calc" id="muOut"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 第二部分：2.1 数据操作 ============ -->
+<section class="part" id="ndarray">
+  <div class="part-h"><div class="eyebrow">第二部分</div><h2>2.1 数据操作：你的第一个张量</h2><span class="src">对应原书第 2.1 节，代码全部来自原书 PyTorch 版</span></div>
+  <div class="prose">
+    <p>深度学习里所有数据都存成<b>张量</b>（tensor），也就是 n 维数组：一个轴的是向量，两个轴的是矩阵，更多轴的就直接叫张量。下面每个灰色框都是一个能运行的代码格，跟 Jupyter 一样：上面的格子定义的变量，下面的格子能接着用。页面打开时已经从头运行过一遍了。</p>
+    <p class="note">操作方法：点进代码框直接改，按 <b>Ctrl/⌘ + Enter</b> 或点“运行”。改乱了点“还原”。如果提示某个名字没定义，点右边的“从头全部运行”。这里的 torch 是浏览器里的简化版，书上这一节的代码输出跟真 PyTorch 一模一样，只有随机数和内存地址会不同。</p>
+    <div class="row"><button class="btn primary runAll" data-day="1">从头全部运行</button><span class="small muted runAllMsg"></span></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">2.1.1</span><h3>入门</h3></div>
+    <div class="prose"><p>首先导入 <code>torch</code>。虽然它叫 PyTorch，代码里写的是 <code>torch</code>。</p></div>
+    <div class="cell"><textarea>import torch</textarea></div>
+    <div class="prose"><p>用 <code>arange</code> 创建一个行向量 <code>x</code>，里面是从 0 开始的 12 个整数。张量里的每个值叫一个<b>元素</b>，所以 x 有 12 个元素。</p></div>
+    <div class="cell"><textarea>x = torch.arange(12)
+x</textarea></div>
+    <div class="prose"><p>用 <code>shape</code> 属性看张量的<b>形状</b>，也就是每个轴有多长。你在调试器里看到的 <code>[24, 64]</code> 就是这个东西。</p></div>
+    <div class="cell"><textarea>x.shape</textarea></div>
+    <div class="prose"><p>只想知道元素总数（形状里所有数相乘），用 <code>numel()</code>。</p></div>
+    <div class="cell"><textarea>x.numel()</textarea></div>
+    <div class="prose"><p>用 <code>reshape</code> 改形状，元素的数量和值都不变。把 12 个数排成 3 行 4 列：</p></div>
+    <div class="cell"><textarea>X = x.reshape(3, 4)
+X</textarea></div>
+    <div class="prose"><p>不用自己做除法：写 <code>-1</code> 让它自动算。<code>x.reshape(-1, 4)</code> 和 <code>x.reshape(3, -1)</code> 都等于 <code>x.reshape(3, 4)</code>。试试把下面改成 <code>reshape(2, -1)</code> 或 <code>reshape(5, -1)</code>，后者会报错，因为 12 不能被 5 整除。</p></div>
+    <div class="cell"><textarea>x.reshape(-1, 4)</textarea></div>
+    <div class="prose"><p>全 0、全 1 的张量，形状 (2, 3, 4)，可以想成 2 张 3 行 4 列的表摞在一起：</p></div>
+    <div class="cell"><textarea>torch.zeros((2, 3, 4))</textarea></div>
+    <div class="cell"><textarea>torch.ones((2, 3, 4))</textarea></div>
+    <div class="prose"><p>从均值 0、标准差 1 的正态分布里随机取数。神经网络的参数一开始通常就是这样随机初始化的（还记得训练四步的第 1 步吗）。每次运行结果都不一样。</p></div>
+    <div class="cell"><textarea>torch.randn(3, 4)</textarea></div>
+    <div class="prose"><p>也可以直接用 Python 列表指定每个元素。最外层列表对应轴 0（行），里层列表对应轴 1（列）。</p></div>
+    <div class="cell"><textarea>torch.tensor([[2, 1, 4, 3], [1, 2, 3, 4], [4, 3, 2, 1]])</textarea></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">2.1.2</span><h3>运算符</h3></div>
+    <div class="prose"><p>形状相同的两个张量，<code>+ - * / **</code> 都是<b>按元素</b>算的：对应位置的两个数各算各的。<code>**</code> 是求幂。逗号把 5 个结果拼成一个元组一起显示。</p></div>
+    <div class="cell"><textarea>x = torch.tensor([1.0, 2, 4, 8])
+y = torch.tensor([2, 2, 2, 2])
+x + y, x - y, x * y, x / y, x ** y  # **运算符是求幂运算</textarea></div>
+    <div class="prose"><p>一元运算也按元素算，比如求 e 的 x 次方。数字差别很大时 PyTorch 会改用科学计数法，<code>2.9810e+03</code> 就是 2981.0。</p></div>
+    <div class="cell"><textarea>torch.exp(x)</textarea></div>
+    <div class="prose"><p>把两个张量<b>连结</b>起来：<code>dim=0</code> 沿行方向上下拼，轴 0 的长度变成 3 + 3 = 6；<code>dim=1</code> 沿列方向左右拼，轴 1 的长度变成 4 + 4 = 8。</p></div>
+    <div class="cell"><textarea>X = torch.arange(12, dtype=torch.float32).reshape((3,4))
+Y = torch.tensor([[2.0, 1, 4, 3], [1, 2, 3, 4], [4, 3, 2, 1]])
+torch.cat((X, Y), dim=0), torch.cat((X, Y), dim=1)</textarea></div>
+    <div class="prose"><p>逻辑运算得到一个全是 True/False 的张量：每个位置上 X 和 Y 相等就是 True。</p></div>
+    <div class="cell"><textarea>X == Y</textarea></div>
+    <div class="prose"><p>把所有元素加起来，得到只有一个元素的张量：</p></div>
+    <div class="cell"><textarea>X.sum()</textarea></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">2.1.3</span><h3>广播机制</h3></div>
+    <div class="prose"><p>形状不同的两个张量也能按元素算，这叫<b>广播</b>：先把长度为 1 的轴复制几份，让两边形状一样，再按元素算。图示里虚线框的格子就是复制出来的。</p></div>
+    <div class="cell"><textarea>a = torch.arange(3).reshape((3, 1))
+b = torch.arange(2).reshape((1, 2))
+a, b</textarea></div>
+    <div class="prose"><p>a 是 3×1，b 是 1×2。a 把唯一的一列复制成 2 列，b 把唯一的一行复制成 3 行，都变成 3×2 后再相加：</p></div>
+    <div class="cell"><textarea>a + b</textarea></div>
+    <div class="prose"><p>规则：从最后一个轴往前对齐，每个轴的长度要么相等，要么有一边是 1。改成 <code>torch.arange(3).reshape((1, 3))</code> 再加 b 试试，会看到报错信息说哪个轴对不上。</p></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">2.1.4</span><h3>索引和切片</h3></div>
+    <div class="prose"><p>跟 Python 列表一样，第一个元素的下标是 0，最后一个是 -1。<code>[1:3]</code> 取第 2、3 个（包含 1，不包含 3）。图示里粗框是被选中的格子。</p></div>
+    <div class="cell"><textarea>X[-1], X[1:3]</textarea></div>
+    <div class="prose"><p>也可以通过下标写入。把第 2 行第 3 列改成 9（橙色框是被改动的格子）：</p></div>
+    <div class="cell"><textarea>X[1, 2] = 9
+X</textarea></div>
+    <div class="prose"><p>给一片区域赋同一个值：<code>[0:2, :]</code> 是第 1、2 行，冒号表示这个轴上全都要。</p></div>
+    <div class="cell"><textarea>X[0:2, :] = 12
+X</textarea></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">2.1.5</span><h3>节省内存</h3></div>
+    <div class="prose"><p><code>Y = Y + X</code> 会先把结果算到一块新内存里，再让 Y 指过去，所以 Y 的地址变了。Python 的 <code>id()</code> 给出一个对象的内存地址。</p></div>
+    <div class="cell"><textarea>before = id(Y)
+Y = Y + X
+id(Y) == before</textarea></div>
+    <div class="prose"><p>模型有上亿个参数、每秒更新很多次时，我们希望<b>原地</b>更新。写法是 <code>Z[:] = ...</code>：</p></div>
+    <div class="cell"><textarea>Z = torch.zeros_like(Y)
+print('id(Z):', id(Z))
+Z[:] = X + Y
+print('id(Z):', id(Z))</textarea></div>
+    <div class="prose"><p>或者 <code>X += Y</code>，地址也不变：</p></div>
+    <div class="cell"><textarea>before = id(X)
+X += Y
+id(X) == before</textarea></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">2.1.6</span><h3>转换为其他 Python 对象</h3></div>
+    <div class="prose"><p>张量和 NumPy 数组可以互相转换。</p></div>
+    <div class="cell"><textarea>A = X.numpy()
+B = torch.tensor(A)
+type(A), type(B)</textarea></div>
+    <div class="prose"><p>只有一个元素的张量，可以用 <code>item()</code>、<code>float()</code>、<code>int()</code> 变成普通的 Python 数字。</p></div>
+    <div class="cell"><textarea>a = torch.tensor([3.5])
+a, a.item(), float(a), int(a)</textarea></div>
+  </div>
+
+  <div class="blk" id="predict">
+    <div class="blk-h"><span class="n">2.1.7</span><h3>小测：先猜形状，再运行验证</h3></div>
+    <div class="prose"><p>调试时最常用的能力：看到一行代码，就能说出结果的形状。在框里写下你猜的形状，比如 <code>(3, 4)</code>，再点“检查”。</p></div>
+    <div class="quiz" id="shapeQuiz"></div>
+  </div>
+
+  <div class="blk" id="exercises">
+    <div class="blk-h"><span class="n">2.1.8</span><h3>练习</h3></div>
+    <div class="prose"><p><b>练习 1（原书）</b>：把条件 <code>X == Y</code> 改成 <code>X &lt; Y</code> 或 <code>X &gt; Y</code>，看看得到什么样的张量。</p></div>
+    <div class="cell" data-fresh="X = torch.arange(12, dtype=torch.float32).reshape((3,4))&#10;Y = torch.tensor([[2.0, 1, 4, 3], [1, 2, 3, 4], [4, 3, 2, 1]])"><textarea># 这个格子自己重新造了 X 和 Y，不受上面改动的影响
+X = torch.arange(12, dtype=torch.float32).reshape((3,4))
+Y = torch.tensor([[2.0, 1, 4, 3], [1, 2, 3, 4], [4, 3, 2, 1]])
+X &lt; Y</textarea></div>
+    <div class="prose"><p><b>练习 2（原书）</b>：把广播里的两个张量换成三维的，结果和你预期的一样吗？先猜下面的形状，再运行。</p></div>
+    <div class="cell"><textarea>a = torch.arange(6).reshape(2, 3, 1)
+b = torch.arange(4).reshape(1, 1, 4)
+(a + b).shape</textarea></div>
+    <div class="prose"><p><b>练习 3（本课加的）</b>：做一个形状为 <code>[24, 64]</code> 的张量，名字叫 <code>h</code>。这就是“24 个字、每个字 64 个数”。至少用两种不同的方法做出来，比如 <code>zeros</code>、<code>randn</code>、<code>arange</code> 加 <code>reshape</code>。</p></div>
+    <div class="cell" data-check="h24"><textarea># 在等号右边写代码，让 h 的形状是 [24, 64]
+h = torch.zeros((1, 1))
+h.shape</textarea></div>
+    <div class="prose"><p><b>练习 4（本课加的）</b>：你论文里 DKT 一批数据的形状是 <code>[256, 100, 64]</code>（256 个学生、100 步、每步 64 个数）。造一个这么大的全 0 张量，取出第 1 个学生的全部数据，结果应该是 <code>[100, 64]</code>。再试试取第 1 个学生最后一步的数据，形状是什么？</p></div>
+    <div class="cell" data-check="z100"><textarea>z = torch.zeros((256, 100, 64))
+one = z[0]
+one.shape</textarea></div>
+    <div class="prose"><p><b>草稿本</b>：随便写，随便试。</p></div>
+    <div class="cell"><textarea>t = torch.arange(24).reshape(2, 3, 4)
+t.sum(dim=0), t.sum(dim=1).shape, t[:, 0, :]</textarea></div>
+  </div>
+</section>
+
+<section class="part" id="wrapup">
+  <div class="part-h"><div class="eyebrow">今日小结</div><h2>今天学会了吗？</h2></div>
+  <div class="two">
+    <div class="panel stack">
+      <h3>勾一勾</h3>
+      <ul class="check-list" data-day="1">
+        <li><label><input type="checkbox" data-k="c1">我能说出机器学习的四个组件：数据、模型、目标函数、优化算法</label></li>
+        <li><label><input type="checkbox" data-k="c2">我知道训练集好不等于测试集好，这叫过拟合</label></li>
+        <li><label><input type="checkbox" data-k="c3">看到 <code>shape</code> 我知道每个数字是哪个轴的长度</label></li>
+        <li><label><input type="checkbox" data-k="c4">我会用 <code>reshape</code>，知道 <code>-1</code> 的意思</label></li>
+        <li><label><input type="checkbox" data-k="c5">我能说清 3×1 加 1×2 为什么得到 3×2（广播）</label></li>
+        <li><label><input type="checkbox" data-k="c6">我会用 <code>X[-1]</code>、<code>X[1:3]</code>、<code>X[0:2, :]</code></label></li>
+      </ul>
+      <span class="small check-msg"></span>
+    </div>
+    <div class="panel stack">
+      <h3>明天（第 2 天）学什么</h3>
+      <p>原书 2.2 数据预处理（用 pandas 读表格、处理缺失值，再变成张量）和 2.3 线性代数（标量、向量、矩阵、点积、矩阵乘法、范数）。矩阵乘法就是你在调试台第 3 章玩过的那个。</p>
+      <p class="small muted">想提前看：原书在线版 <a href="https://zh.d2l.ai/chapter_preliminaries/pandas.html" target="_blank" rel="noopener">2.2 数据预处理</a>，<a href="https://zh.d2l.ai/chapter_preliminaries/linear-algebra.html" target="_blank" rel="noopener">2.3 线性代数</a>。</p>
+    </div>
+  </div>
+</section>
+
+
+</main>
+<main class="wrap day" id="day2" data-day="2" hidden>
+<section class="hero">
+  <div class="eyebrow">第 2 天 · 原书第 2.2 节 + 第 2.3 节</div>
+  <h1>把表格变成张量，再学会张量的几种乘法</h1>
+  <p class="lead">真实数据通常是一张有缺失的表格，模型只吃张量。今天先学怎么把表格整理成张量，再学线性代数里深度学习天天用的几样东西：转置、按轴求和、点积、矩阵乘法和范数。</p>
+  <div class="plan">
+    <div><b class="k">今天的时间</b>大约 60 分钟。第一部分 20 分钟，第二部分 40 分钟。</div>
+    <div><b class="k">学完你能</b><ul><li>读 CSV、补缺失值、把文字列变成数字</li><li>说清“维度”在不同地方的两种意思</li><li>算按轴求和，并预测结果形状</li><li>分清按元素乘和矩阵乘</li></ul></div>
+    <div><b class="k">和你的论文</b><ul><li>ASSISTments 原始数据就是一张 CSV</li><li>DKT 输出层 <code>z @ W</code> 就是今天的矩阵乘法</li></ul></div>
+  </div>
+</section>
+
+<section class="part" id="pandas">
+  <div class="part-h"><div class="eyebrow">第一部分</div><h2>2.2 数据预处理：从表格到张量</h2><span class="src">对应原书第 2.2 节</span></div>
+  <div class="prose">
+    <p>原书造了一个很小的房价数据集：4 套房子，每套有房间数 NumRooms、巷子类型 Alley、价格 Price 三列，其中有几格是空的（写成 NA）。流程是：<b>写成 CSV 文件 → 用 pandas 读进来 → 处理缺失值 → 文字变数字 → 转成张量</b>。</p>
+    <p class="note">这个网页里有一个模拟的文件夹，下面的代码真的会“写文件”和“读文件”，只是文件存在浏览器内存里，刷新页面就没了。</p>
+    <div class="row"><button class="btn primary runAll" data-day="2">从头全部运行</button><span class="small muted runAllMsg"></span></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">2.2.1</span><h3>读取数据集</h3></div>
+    <div class="prose"><p>先把数据一行一行写进 <code>../data/house_tiny.csv</code>。CSV 就是用逗号分隔的纯文本表格，第一行是列名。</p></div>
+    <div class="cell"><textarea>import os
+
+os.makedirs(os.path.join('..', 'data'), exist_ok=True)
+data_file = os.path.join('..', 'data', 'house_tiny.csv')
+with open(data_file, 'w') as f:
+    f.write('NumRooms,Alley,Price\n')  # 列名
+    f.write('NA,Pave,127500\n')  # 每行表示一个数据样本
+    f.write('2,NA,106000\n')
+    f.write('4,NA,178100\n')
+    f.write('NA,NA,140000\n')</textarea></div>
+    <div class="prose"><p>看看文件里到底写了什么：</p></div>
+    <div class="cell"><textarea>print(open(data_file).read())</textarea></div>
+    <div class="prose"><p>用 pandas 的 <code>read_csv</code> 读进来，得到一个 <b>DataFrame</b>（数据框，就是带列名的表格）。原来写 NA 的格子变成了 <code>NaN</code>，意思是“不是一个数”，也就是缺失值。</p></div>
+    <div class="cell"><textarea>import pandas as pd
+
+data = pd.read_csv(data_file)
+print(data)</textarea></div>
+    <div class="prose"><p>每列缺了几个？<code>isna()</code> 把每格变成“是否缺失”，再 <code>sum()</code> 按列数一数：</p></div>
+    <div class="cell"><textarea>data.isna().sum()</textarea></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">2.2.2</span><h3>处理缺失值：顺便学会读报错</h3></div>
+    <div class="prose"><p>处理缺失值有两种办法：<b>插值法</b>用一个替代值补上，<b>删除法</b>直接丢掉。原书用插值法：先用 <code>iloc</code>（按位置取行列）把前两列当输入 <code>inputs</code>、最后一列当输出 <code>outputs</code>，再用每列的平均值补空格。下面是原书的原样代码，运行它：</p></div>
+    <div class="cell"><textarea>inputs, outputs = data.iloc[:, 0:2], data.iloc[:, 2]
+inputs = inputs.fillna(inputs.mean())
+print(inputs)</textarea></div>
+    <div class="callout">
+      <h4>报错了，而且不是你的错</h4>
+      <p>原书写的时候用的是老版本 pandas，那时 <code>mean()</code> 会悄悄跳过文字列。现在的 pandas（我在你电脑上用的是 3.0）遇到文字列 Alley 会直接报 <code>TypeError: Cannot perform reduction 'mean' with string dtype</code>，意思是“没法对文字求平均”。这种“书上能跑、我这里报错”的情况，以后跑论文代码会经常碰到。读报错的方法：<b>看最后一行的错误类型和说明</b>，这里说的是“mean 遇到了字符串”。</p>
+      <p>修法是告诉它只算数字列：<code>mean(numeric_only=True)</code>。</p>
+    </div>
+    <div class="cell"><textarea>inputs.mean(numeric_only=True)</textarea></div>
+    <div class="prose"><p>NumRooms 的平均值是 (2 + 4) ÷ 2 = 3.0，缺失的格子不参与计算。用它补上：</p></div>
+    <div class="cell"><textarea>inputs = inputs.fillna(inputs.mean(numeric_only=True))
+print(inputs)</textarea></div>
+    <div class="prose"><p>Alley 列是文字（Pave 或缺失），没法求平均。原书的做法是把“缺失”也当成一个类别，用 <code>get_dummies</code> 拆成两列 0/1（这里显示成 True/False）：是 Pave 的那一行 Alley_Pave 为 True，缺失的那一行 Alley_nan 为 True。这种做法叫<b>独热编码</b>（one-hot）。</p></div>
+    <div class="cell"><textarea>inputs = pd.get_dummies(inputs, dummy_na=True)
+print(inputs)</textarea></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">2.2.3</span><h3>转换为张量</h3></div>
+    <div class="prose"><p>现在每一格都是数字了，可以变成张量。注意输出里的 <code>dtype=torch.float64</code>：从 pandas 来的小数默认是 64 位，而深度学习一般用 32 位，训练前通常再加一句 <code>X = X.float()</code>。</p></div>
+    <div class="cell"><textarea>import torch
+
+X = torch.tensor(inputs.to_numpy(dtype=float))
+y = torch.tensor(outputs.to_numpy(dtype=float))
+X, y</textarea></div>
+    <div class="flowline" aria-label="数据处理流程">
+      <span><b>CSV 文件</b>5 行文本</span><i>→</i><span><b>data</b>形状 (4, 3)</span><i>→</i><span><b>inputs / outputs</b>(4, 2) 和 (4,)</span><i>→</i><span><b>独热编码后</b>(4, 3)</span><i>→</i><span><b>张量 X / y</b>[4, 3] 和 [4]</span>
+    </div>
+    <div class="prose"><p>如果跳过整理、直接把含文字的表格转成张量，会怎样？试试：</p></div>
+    <div class="cell"><textarea>torch.tensor(data.to_numpy())</textarea></div>
+    <div class="prose"><p>报错说 <code>numpy.object_</code> 类型不能转换：表里还有文字，张量只能装数字。所以“文字变数字”这一步不能省。</p></div>
+  </div>
+
+  <div class="blk" id="ktdata"><div class="blk-h"><span class="n">2.2.4</span><h3>换成你论文的数据长什么样</h3></div>
+    <div class="prose"><p>你论文用的 ASSISTments 2009 原始数据也是一张 CSV，实验代码读的四列是 <code>user_id, skill_id, correct, order_id</code>：哪个学生、做了哪个技能的题、对没对、第几次做题。下面是按这个格式手写的几行示例数据，不是真实记录。</p></div>
+    <div class="cell"><textarea>with open('../data/kt_tiny.csv', 'w') as f:
+    f.write('user_id,skill_id,correct,order_id\n')
+    f.write('1,10,0,1\n1,10,1,2\n1,12,1,3\n')
+    f.write('2,10,1,4\n2,12,0,5\n2,12,0,6\n2,12,1,7\n')
+kt = pd.read_csv('../data/kt_tiny.csv')
+print(kt)</textarea></div>
+    <div class="prose"><p>取出 2 号学生的做题记录，把技能和对错变成张量。DKT 读进去的就是这样的序列，只是有成千上万个学生、每人最多 100 步。</p></div>
+    <div class="cell"><textarea>s2 = kt[kt['user_id'] == 2]
+skills = torch.tensor(s2['skill_id'].to_numpy())
+answers = torch.tensor(s2['correct'].to_numpy())
+print(s2)
+skills, answers, kt['correct'].mean()</textarea></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">2.2.5</span><h3>练习（原书）</h3></div>
+    <div class="prose"><p><b>练习 1</b>：删除缺失值最多的列。提示：<code>data.isna().sum()</code> 数出每列缺几个，<code>.idxmax()</code> 找出最多的那列的名字，<code>data.drop(columns=[...])</code> 删掉它。把结果存成 <code>clean</code>。</p></div>
+    <div class="cell" data-check="clean"><textarea>worst = data.isna().sum().idxmax()
+print('缺失最多的列：', worst)
+clean = data   # 改这一行，删掉 worst 这一列
+print(clean)</textarea></div>
+    <div class="prose"><p><b>练习 2</b>：把 <code>clean</code> 变成张量。剩下的 NumRooms 还有缺失，先补上再转换，结果存成 <code>T</code>，形状应该是 [4, 2]。练习 1 没做完时，表里还剩文字列 Alley，这一格会报 <code>could not convert string to float</code>，做完练习 1 再运行它。</p></div>
+    <div class="cell" data-check="T42"><textarea>clean2 = clean.fillna(clean.mean(numeric_only=True))
+T = torch.tensor(clean2.to_numpy(dtype=float))
+T</textarea></div>
+  </div>
+</section>
+
+<section class="part" id="linalg">
+  <div class="part-h"><div class="eyebrow">第二部分</div><h2>2.3 线性代数</h2><span class="src">对应原书第 2.3 节，代码全部来自原书 PyTorch 版</span></div>
+  <div class="prose"><p>这一节的东西你在调试台第 1 章和第 3 章已经玩过一部分。这里按原书的顺序过一遍，重点是三件事：<b>按轴求和以后形状怎么变、按元素乘和矩阵乘的区别、范数是什么</b>。</p>
+    <div class="row"><button class="btn primary runAll" data-day="2">从头全部运行</button><span class="small muted runAllMsg"></span></div></div>
+
+  <div class="blk"><div class="blk-h"><span class="n">2.3.1</span><h3>标量、向量、矩阵、张量</h3></div>
+    <div class="prose"><p><b>标量</b>只有一个数，用只有一个元素的张量表示：</p></div>
+    <div class="cell"><textarea>import torch
+
+x = torch.tensor(3.0)
+y = torch.tensor(2.0)
+
+x + y, x * y, x / y, x**y</textarea></div>
+    <div class="prose"><p><b>向量</b>是一串数，用一维张量表示，可以用下标取出某个元素：</p></div>
+    <div class="cell"><textarea>x = torch.arange(4)
+x</textarea></div>
+    <div class="cell"><textarea>x[3]</textarea></div>
+    <div class="prose"><p>向量的长度用 <code>len()</code> 或 <code>.shape</code> 看：</p></div>
+    <div class="cell"><textarea>len(x), x.shape</textarea></div>
+    <div class="callout">
+      <h4>“维度”这个词有两种意思，很容易搞混</h4>
+      <p>说“<b>向量的维度</b>是 64”时，指的是这个向量有 64 个数，也就是长度。说“<b>张量的维度</b>是 2”时，指的是它有 2 个轴，也就是形状里有几个数。所以 <code>[24, 64]</code> 这个张量是“二维的”，它的每一行是“64 维的向量”。论文里说“隐藏维度 d = 64”，用的是第一种意思。</p>
+    </div>
+    <div class="prose"><p><b>矩阵</b>有两个轴。交换行和列叫<b>转置</b>，写作 <code>A.T</code>：原来第 i 行第 j 列的数，转置后在第 j 行第 i 列，形状从 (5, 4) 变成 (4, 5)。</p></div>
+    <div class="cell"><textarea>A = torch.arange(20).reshape(5, 4)
+A</textarea></div>
+    <div class="cell"><textarea>A.T</textarea></div>
+    <div class="prose"><p>转置以后和自己相等的方阵叫<b>对称矩阵</b>：</p></div>
+    <div class="cell"><textarea>B = torch.tensor([[1, 2, 3], [2, 0, 4], [3, 4, 5]])
+B == B.T</textarea></div>
+    <div class="prose"><p>两个轴以上就统称张量。处理图片时会用到三个轴：高、宽、颜色通道。</p></div>
+    <div class="cell"><textarea>X = torch.arange(24).reshape(2, 3, 4)
+X</textarea></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">2.3.2</span><h3>按元素运算和 Hadamard 积</h3></div>
+    <div class="prose"><p>形状相同的两个张量做按元素运算，结果形状不变。<code>clone()</code> 复制一份新的，改 B 不会影响 A。</p></div>
+    <div class="cell"><textarea>A = torch.arange(20, dtype=torch.float32).reshape(5, 4)
+B = A.clone()  # 通过分配新内存，将A的一个副本分配给B
+A, A + B</textarea></div>
+    <div class="prose"><p>两个矩阵<b>按元素相乘</b>叫 Hadamard 积，数学符号是 ⊙，代码就是 <code>*</code>。它和后面的矩阵乘法完全是两回事。</p></div>
+    <div class="cell"><textarea>A * B</textarea></div>
+    <div class="prose"><p>张量和一个普通数字相加或相乘，每个元素都加上或乘上这个数，形状不变：</p></div>
+    <div class="cell"><textarea>a = 2
+X = torch.arange(24).reshape(2, 3, 4)
+a + X, (a * X).shape</textarea></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">2.3.3</span><h3>降维：按轴求和</h3></div>
+    <div class="prose"><p>求和默认把所有元素加成一个数：</p></div>
+    <div class="cell"><textarea>x = torch.arange(4, dtype=torch.float32)
+x, x.sum()</textarea></div>
+    <div class="cell"><textarea>A.shape, A.sum()</textarea></div>
+    <div class="prose"><p>指定 <code>axis=0</code>，就是<b>沿着轴 0 把数加起来</b>：每一列上下加成一个数，轴 0 这一维消失，形状从 (5, 4) 变成 (4,)。图示里同一种颜色的格子被加到了一起。</p></div>
+    <div class="cell"><textarea>A_sum_axis0 = A.sum(axis=0)
+A_sum_axis0, A_sum_axis0.shape</textarea></div>
+    <div class="prose"><p><code>axis=1</code> 是每一行左右加成一个数，轴 1 消失，形状变成 (5,)。</p></div>
+    <div class="cell"><textarea>A_sum_axis1 = A.sum(axis=1)
+A_sum_axis1, A_sum_axis1.shape</textarea></div>
+    <div class="cell"><textarea>A.sum(axis=[0, 1])  # 结果和A.sum()相同</textarea></div>
+    <div class="prose"><p>平均值就是总和除以个数，也可以按轴求：</p></div>
+    <div class="cell"><textarea>A.mean(), A.sum() / A.numel()</textarea></div>
+    <div class="cell"><textarea>A.mean(axis=0), A.sum(axis=0) / A.shape[0]</textarea></div>
+    <div class="prose"><p>记形状变化的口诀：<b>对哪个轴求和，形状里就删掉哪个数</b>。(5, 4) 沿轴 0 求和删掉 5，得到 (4,)。</p></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">2.3.4</span><h3>非降维求和</h3></div>
+    <div class="prose"><p>加上 <code>keepdims=True</code>，被求和的轴不删，长度变成 1：(5, 4) 变成 (5, 1)。好处是可以直接用广播去除 A，算出每个数在本行里占多少比例。</p></div>
+    <div class="cell"><textarea>sum_A = A.sum(axis=1, keepdims=True)
+sum_A</textarea></div>
+    <div class="cell"><textarea>A / sum_A</textarea></div>
+    <div class="prose"><p>每行加起来都等于 1。第 6 天学 softmax 时，就是用这一招把一行打分变成概率。<code>cumsum</code> 是累加，形状不变：</p></div>
+    <div class="cell"><textarea>A.cumsum(axis=0)</textarea></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">2.3.5</span><h3>点积</h3></div>
+    <div class="prose"><p>两个向量对应位置相乘再加起来，叫<b>点积</b>。</p></div>
+    <div class="cell"><textarea>y = torch.ones(4, dtype = torch.float32)
+x, y, torch.dot(x, y)</textarea></div>
+    <div class="cell"><textarea>torch.sum(x * y)</textarea></div>
+    <div class="prose"><p>点积的一个常见用法是加权平均：权重都非负且加起来是 1 时，点积就是加权平均。比如平时 20%、期中 30%、期末 50%：</p></div>
+    <div class="cell"><textarea>w = torch.tensor([0.2, 0.3, 0.5])
+scores = torch.tensor([80.0, 90.0, 70.0])
+torch.dot(w, scores)</textarea></div>
+    <div class="panel stack" id="dotLab">
+      <h4>点积还能衡量两个方向像不像</h4>
+      <p class="small muted">两个向量都缩放到长度 1 以后，点积就是它们夹角的余弦：方向相同是 1，垂直是 0，相反是 −1。第 5 章注意力里的“打分”就是这样算的。拖动两个角度试试。</p>
+      <div class="two">
+        <div class="cv" id="dotHost"><canvas id="dotCv" aria-label="两个二维向量和它们的夹角"></canvas></div>
+        <div class="stack">
+          <label class="ctrl" for="dotA">向量 a 的角度 <output id="dotAv">30°</output><input type="range" id="dotA" min="0" max="360" value="30"></label>
+          <label class="ctrl" for="dotB">向量 b 的角度 <output id="dotBv">80°</output><input type="range" id="dotB" min="0" max="360" value="80"></label>
+          <div class="calc" id="dotCalc"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">2.3.6</span><h3>矩阵-向量积和矩阵乘法</h3></div>
+    <div class="prose"><p>矩阵乘向量：矩阵的每一行和向量做一次点积，得到一个新向量。A 是 (5, 4)，x 长 4，结果长 5。要求 A 的列数等于 x 的长度。</p></div>
+    <div class="cell"><textarea>A.shape, x.shape, torch.mv(A, x)</textarea></div>
+    <div class="prose"><p>矩阵乘矩阵就是做好几次矩阵乘向量，再拼起来。(5, 4) 乘 (4, 3) 得到 (5, 3)。规则和调试台第 3 章一样：<b>左边的列数等于右边的行数</b>。</p></div>
+    <div class="cell"><textarea>B = torch.ones(4, 3)
+torch.mm(A, B)</textarea></div>
+    <div class="prose"><p>平时写代码更常用 <code>@</code>。形状对不上会报错，报错里会写出两边的形状，照着它查：</p></div>
+    <div class="cell"><textarea>W = torch.ones(3, 4)
+W @ x, (W @ x).shape</textarea></div>
+    <div class="cell"><textarea>torch.mm(A, torch.ones(3, 3))</textarea></div>
+    <p class="note">你论文的 DKT 输出层就是一次矩阵乘法：每一步的状态 z 形状是 [64]，乘上形状 [64, K] 的权重 W，得到 K 个技能各自的打分。K 在 ASSISTments 上是 145。</p>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">2.3.7</span><h3>范数：一个向量有多“大”</h3></div>
+    <div class="prose"><p><b>L2 范数</b>是各元素平方和再开根号，就是向量的长度（勾股定理）；<b>L1 范数</b>是各元素绝对值之和。向量 (3, −4) 的 L2 范数是 5，L1 范数是 7。</p></div>
+    <div class="cell"><textarea>u = torch.tensor([3.0, -4.0])
+torch.norm(u)</textarea></div>
+    <div class="cell"><textarea>torch.abs(u).sum()</textarea></div>
+    <div class="prose"><p>矩阵的 <b>Frobenius 范数</b>就是把所有元素当成一个长向量求 L2 范数。4×9 的全 1 矩阵有 36 个 1，根号 36 = 6：</p></div>
+    <div class="cell"><textarea>torch.norm(torch.ones((4, 9)))</textarea></div>
+    <div class="panel stack" id="normLab">
+      <h4>L2 是走直线，L1 是走格子</h4>
+      <p class="small muted">点图上任意位置放向量。蓝线是 L2（直线距离），橙线是 L1（只能横着走、竖着走，像在城市街区里走路）。</p>
+      <div class="two">
+        <div class="cv" id="normHost"><canvas id="normCv" aria-label="二维向量的 L1 和 L2 范数"></canvas></div>
+        <div class="calc" id="normCalc"></div>
+      </div>
+    </div>
+    <p class="note">深度学习里，目标函数常常就是某种范数。你在第 1 天修水管的例子里最小化的平方误差，就是“预测减真实”这个向量的 L2 范数的平方。</p>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">2.3.8</span><h3>练习（原书）</h3></div>
+    <div class="prose"><p>原书第 1 到 3 题是证明题，可以用代码先验证一下再想为什么。<b>第 1 题</b>：转置的转置等于自己。</p></div>
+    <div class="cell"><textarea>A.T.T == A</textarea></div>
+    <div class="prose"><p><b>第 3 题</b>：方阵加上它的转置，总是对称的吗？想一想第 i 行第 j 列和第 j 行第 i 列分别是什么。</p></div>
+    <div class="cell"><textarea>C = torch.arange(9.0).reshape(3, 3)
+(C + C.T) == (C + C.T).T</textarea></div>
+    <div class="prose"><p><b>第 4、5 题</b>：形状 (2, 3, 4) 的 X，<code>len(X)</code> 是多少？它总是对应哪个轴？</p></div>
+    <div class="cell"><textarea>X = torch.arange(24, dtype=torch.float32).reshape(2, 3, 4)
+len(X)</textarea></div>
+    <div class="prose"><p><b>第 6 题</b>：运行 <code>A / A.sum(axis=1)</code>，看看会发生什么，为什么？提示：A 是 (5, 4)，<code>A.sum(axis=1)</code> 是 (5,)，广播时从最后一个轴往前对齐。</p></div>
+    <div class="cell"><textarea>A / A.sum(axis=1)</textarea></div>
+    <div class="prose"><p><b>第 7 题</b>：形状 (2, 3, 4) 的张量分别沿轴 0、1、2 求和，形状是什么？先自己写下答案再运行。</p></div>
+    <div class="cell"><textarea>X.sum(axis=0).shape, X.sum(axis=1).shape, X.sum(axis=2).shape</textarea></div>
+    <div class="prose"><p><b>第 8 题</b>：给 <code>linalg.norm</code> 一个三个轴的张量，算出来的是什么？和把它展平成一维再求 L2 范数比一比。</p></div>
+    <div class="cell"><textarea>torch.linalg.norm(X), torch.norm(X.reshape(-1))</textarea></div>
+  </div>
+</section>
+
+<section class="part">
+  <div class="part-h"><div class="eyebrow">今日小结</div><h2>今天学会了吗？</h2></div>
+  <div class="two">
+    <div class="panel stack">
+      <ul class="check-list" data-day="2">
+        <li><label><input type="checkbox" data-k="c1">我会用 pandas 读 CSV，知道 NaN 是缺失值</label></li>
+        <li><label><input type="checkbox" data-k="c2">我会补缺失值、用 get_dummies 把文字列变成 0/1</label></li>
+        <li><label><input type="checkbox" data-k="c3">遇到报错我会先看最后一行的类型和说明</label></li>
+        <li><label><input type="checkbox" data-k="c4">我能分清“向量的维度”和“张量的维度”</label></li>
+        <li><label><input type="checkbox" data-k="c5">对哪个轴求和，形状里就删掉哪个数</label></li>
+        <li><label><input type="checkbox" data-k="c6">我分得清 <code>A * B</code>（按元素）和 <code>A @ B</code>（矩阵乘）</label></li>
+        <li><label><input type="checkbox" data-k="c7">我知道 L2 范数是长度，L1 范数是绝对值之和</label></li>
+      </ul>
+      <span class="small check-msg"></span>
+    </div>
+    <div class="panel stack">
+      <h3>明天（第 3 天）学什么</h3>
+      <p>原书 2.4 微积分（导数、梯度、链式法则）和 2.5 自动微分。学完你就知道 PyTorch 里 <code>loss.backward()</code> 这一行到底算了什么，你论文训练代码里最核心的就是这一行。</p>
+    </div>
+  </div>
+</section>
+</main>
+
+<main class="wrap day" id="day3" data-day="3" hidden>
+<section class="hero">
+  <div class="eyebrow">第 3 天 · 原书第 2.4 节 + 第 2.5 节</div>
+  <h1>导数、梯度，和 <code class="big">loss.backward()</code> 到底做了什么</h1>
+  <p class="lead">训练模型就是不停地问：每个参数往哪边拧一点，损失会变小？回答这个问题的数学工具是导数和梯度，PyTorch 里自动算梯度的功能叫自动微分。今天学完，你就能看懂所有训练代码里最核心的那一行。</p>
+  <div class="plan">
+    <div><b class="k">今天的时间</b>大约 60 分钟。第一部分 25 分钟，第二部分 35 分钟。</div>
+    <div><b class="k">学完你能</b><ul><li>说清导数和梯度是什么</li><li>用链式法则拆复合函数</li><li>用 <code>requires_grad</code> 和 <code>backward()</code> 求梯度</li><li>知道为什么每次要清零梯度</li></ul></div>
+    <div><b class="k">和你的论文</b><ul><li>论文里“梯度符号检查”检查的就是今天的东西</li><li>训练循环 <code>loss.backward(); opt.step()</code></li></ul></div>
+  </div>
+</section>
+
+<section class="part" id="calculus">
+  <div class="part-h"><div class="eyebrow">第一部分</div><h2>2.4 微积分</h2><span class="src">对应原书第 2.4 节</span></div>
+  <div class="prose">
+    <p>原书说，拟合模型其实是两件事：<b>优化</b>（让模型在训练数据上表现好）和<b>泛化</b>（让它在没见过的数据上也好）。今天讲优化要用的工具。</p>
+    <div class="row"><button class="btn primary runAll" data-day="3">从头全部运行</button><span class="small muted runAllMsg"></span></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">2.4.1</span><h3>导数：x 动一点点，y 动多少</h3></div>
+    <div class="prose"><p>函数 f 在 x 处的导数定义为：让 h 趋近于 0 时，<b>(f(x + h) − f(x)) ÷ h</b> 的极限。它是 f 在 x 处的瞬时变化率，也是曲线在这一点切线的斜率。原书用 f(x) = 3x² − 4x 做实验：</p></div>
+    <div class="cell"><textarea>%matplotlib inline
+from d2l import torch as d2l
+from matplotlib_inline import backend_inline
+import numpy as np
+
+def f(x):
+    return 3 * x ** 2 - 4 * x</textarea></div>
+    <div class="prose"><p>令 x = 1，让 h 一次比一次小，算出来的数越来越接近 2：</p></div>
+    <div class="cell"><textarea>def numerical_lim(f, x, h):
+    return (f(x + h) - f(x)) / h
+
+h = 0.1
+for i in range(5):
+    print(f'h={h:.5f}, numerical limit={numerical_lim(f, 1, h):.5f}')
+    h *= 0.1</textarea></div>
+    <div class="panel stack" id="secLab">
+      <h4>割线怎么变成切线</h4>
+      <p class="small muted">绿线连接 x 和 x + h 两个点，叫割线，它的斜率就是上面算的那个数。把 h 往 0 拖，割线慢慢贴住曲线，变成虚线的切线。</p>
+      <div class="two">
+        <div class="cv" id="secHost"><canvas id="secCv" aria-label="函数曲线、割线和切线"></canvas></div>
+        <div class="stack">
+          <label class="ctrl" for="secX">在哪一点 x <output id="secXv">1.0</output><input type="range" id="secX" min="0" max="2.5" step="0.1" value="1"></label>
+          <label class="ctrl" for="secH">h <output id="secHv">1.00</output><input type="range" id="secH" min="-3" max="0" step="0.05" value="0"></label>
+          <div class="calc" id="secCalc"></div>
+        </div>
+      </div>
+    </div>
+    <div class="prose"><p>用求导法则可以直接算：常数的导数是 0，xⁿ 的导数是 n·xⁿ⁻¹，eˣ 的导数是 eˣ，ln x 的导数是 1/x，再加上常数倍、加法、乘法、除法几条法则。所以 f'(x) = 3·2x − 4 = 6x − 4，x = 1 时正好是 2。</p></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">2.4.2</span><h3>画出函数和切线</h3></div>
+    <div class="prose"><p>原书写了几个用 matplotlib 画图的函数（<code>use_svg_display</code>、<code>set_figsize</code>、<code>set_axes</code>、<code>plot</code>），并保存进了 d2l 包。这个网页里 <code>d2l.plot</code> 已经准备好了，图直接画在代码格下面。下面画 f(x) 和它在 x = 1 处的切线 y = 2x − 3：</p></div>
+    <div class="cell"><textarea>x = np.arange(0, 3, 0.1)
+d2l.plot(x, [f(x), 2 * x - 3], 'x', 'f(x)', legend=['f(x)', 'Tangent line (x=1)'])</textarea></div>
+    <div class="prose"><p><b>练习 1（原书）</b>：画出 f(x) = x³ − 1/x 和它在 x = 1 处的切线。先自己算导数：f'(x) = 3x² + 1/x²，x = 1 时斜率是 4，f(1) = 0，所以切线是 y = 4x − 4。把下面的代码补完整（x 不能取 0，所以从 0.1 开始）。</p></div>
+    <div class="cell"><textarea>x = np.arange(0.1, 3, 0.1)
+g = x ** 3 - 1 / x
+tangent = 4 * x - 4      # 切线：斜率 4，过点 (1, 0)
+d2l.plot(x, [g, tangent], 'x', 'f(x)', legend=['f(x)', 'Tangent line (x=1)'])</textarea></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">2.4.3</span><h3>偏导数和梯度</h3></div>
+    <div class="prose"><p>模型的损失通常同时依赖很多个参数。只让其中一个参数动、其他不动时求出的导数叫<b>偏导数</b>。把对每个参数的偏导数排成一个向量，就是<b>梯度</b>，写作 ∇f。梯度指向函数增长最快的方向，所以往梯度的<b>反方向</b>走一小步，函数值下降得最快。这就是梯度下降。</p></div>
+    <div class="panel stack" id="gradLab">
+      <h4>在山坡上找下山的方向</h4>
+      <p class="small muted">函数是 f(x₁, x₂) = x₁² + 3x₂²，颜色越深越高，最低点在中间。点图上任意位置放一个小球，箭头是负梯度方向。点“走一步”，小球按 <code>位置 ← 位置 − 学习率 × 梯度</code> 往下走。</p>
+      <div class="two">
+        <div class="cv" id="gradHost"><canvas id="gradCv" aria-label="二元函数等高线、梯度箭头和下降路径"></canvas></div>
+        <div class="stack">
+          <div class="row"><button class="btn primary" id="gradStep">走一步</button><button class="btn" id="gradRun">走 10 步</button><button class="btn" id="gradReset">回到起点</button></div>
+          <label class="ctrl" for="gradLr">学习率 <output id="gradLrv">0.10</output><input type="range" id="gradLr" min="0.02" max="0.4" step="0.02" value="0.1"></label>
+          <div class="calc" id="gradCalc"></div>
+        </div>
+      </div>
+      <p class="note">把学习率调到 0.34 以上，小球会在 x₂ 方向来回越跳越远。第 1 天修水管时学习率太大参数爆炸，也是这个原因。</p>
+    </div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">2.4.4</span><h3>链式法则</h3></div>
+    <div class="prose"><p>深度学习的函数是一层套一层的。如果 y = f(u)，u = g(x)，那么 <b>dy/dx = dy/du × du/dx</b>：一层一层的导数乘起来。比如 y = (3x + 1)²，令 u = 3x + 1，则 dy/du = 2u，du/dx = 3，所以 dy/dx = 6(3x + 1)。x = 2 时是 42。用数值方法验证：</p></div>
+    <div class="cell"><textarea>def y_of(x):
+    return (3 * x + 1) ** 2
+
+x0 = 2.0
+chain = 2 * (3 * x0 + 1) * 3        # dy/du × du/dx
+numeric = numerical_lim(y_of, x0, 1e-6)
+print(f'链式法则: {chain}, 数值近似: {numeric:.4f}')</textarea></div>
+    <div class="prose"><p>神经网络有几十上百层，手算每层的导数再乘起来太累了，而且容易出错。PyTorch 会帮你自动按链式法则从最后一层往回乘，这就是第二部分要讲的自动微分，也叫<b>反向传播</b>。</p></div>
+  </div>
+</section>
+
+<section class="part" id="autograd">
+  <div class="part-h"><div class="eyebrow">第二部分</div><h2>2.5 自动微分</h2><span class="src">对应原书第 2.5 节，代码全部来自原书 PyTorch 版</span></div>
+  <div class="prose"><p>PyTorch 在你做计算的时候，会悄悄记下“哪个数是由哪些数、经过什么运算得到的”，这张记录叫<b>计算图</b>。调用 <code>backward()</code> 时，它沿着计算图往回走，用链式法则把梯度算出来，存进每个参数的 <code>.grad</code> 里。下面的代码格会把计算图画出来。</p>
+    <div class="row"><button class="btn primary runAll" data-day="3">从头全部运行</button><span class="small muted runAllMsg"></span></div></div>
+
+  <div class="blk"><div class="blk-h"><span class="n">2.5.1</span><h3>一个简单的例子</h3></div>
+    <div class="prose"><p>求 y = 2xᵀx 对向量 x 的梯度。先创建 x：</p></div>
+    <div class="cell"><textarea>import torch
+
+x = torch.arange(4.0)
+x</textarea></div>
+    <div class="prose"><p>告诉 PyTorch：“我要对 x 求梯度，请记账”。<code>x.grad</code> 是存梯度的地方，现在还是空的（None）。</p></div>
+    <div class="cell"><textarea>x.requires_grad_(True)  # 等价于x=torch.arange(4.0,requires_grad=True)
+x.grad  # 默认值是None</textarea></div>
+    <div class="prose"><p>计算 y。注意输出里多了 <code>grad_fn=&lt;MulBackward0&gt;</code>：PyTorch 记住了 y 是乘法算出来的。图示是计算图，从 y 往下追到 x。</p></div>
+    <div class="cell"><textarea>y = 2 * torch.dot(x, x)
+y</textarea></div>
+    <div class="prose"><p>调用反向传播，梯度就出现在 <code>x.grad</code> 里了：</p></div>
+    <div class="cell"><textarea>y.backward()
+x.grad</textarea></div>
+    <div class="prose"><p>手算：y = 2(x₀² + x₁² + x₂² + x₃²)，对每个 xᵢ 求偏导是 4xᵢ。验证一下：</p></div>
+    <div class="cell"><textarea>x.grad == 4 * x</textarea></div>
+    <div class="prose"><p>再算 x 的另一个函数。PyTorch <b>默认会把新梯度加到旧梯度上</b>，所以先用 <code>zero_()</code> 清零。y = x 各元素之和，每个偏导都是 1：</p></div>
+    <div class="cell"><textarea># 在默认情况下，PyTorch会累积梯度，我们需要清除之前的值
+x.grad.zero_()
+y = x.sum()
+y.backward()
+x.grad</textarea></div>
+    <div class="callout">
+      <h4>忘记清零会怎样？</h4>
+      <p>把上面那格里的 <code>x.grad.zero_()</code> 删掉，多运行几次，会看到梯度每次都多加一份 1：变成 2、3、4……这是新手最常见的 bug 之一。训练循环里每一步都要先 <code>optimizer.zero_grad()</code>，就是这个原因。</p>
+    </div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">2.5.2</span><h3>非标量变量的反向传播</h3></div>
+    <div class="prose"><p><code>backward()</code> 默认只能从一个数（标量）开始往回算。y = x * x 是一个向量，深度学习里通常先把它加起来变成一个数再求梯度，这样得到的是每个样本偏导数的和。</p></div>
+    <div class="cell"><textarea>x.grad.zero_()
+y = x * x
+# 等价于y.backward(torch.ones(len(x)))
+y.sum().backward()
+x.grad</textarea></div>
+    <div class="prose"><p>不加 <code>.sum()</code> 直接对向量调用会报错，试试：</p></div>
+    <div class="cell"><textarea>y = x * x
+y.backward()</textarea></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">2.5.3</span><h3>分离计算</h3></div>
+    <div class="prose"><p>有时要把某个中间结果当成常数，不让梯度从它那里往回流。<code>detach()</code> 返回一个数值相同、但和计算图断开的新张量 u。于是 z = u * x 对 x 的梯度就是 u，而不是 3x²。</p></div>
+    <div class="cell"><textarea>x.grad.zero_()
+y = x * x
+u = y.detach()
+z = u * x
+
+z.sum().backward()
+x.grad == u</textarea></div>
+    <div class="prose"><p>y 自己的计算图还在，所以还能对 y 反向传播，得到 2x：</p></div>
+    <div class="cell"><textarea>x.grad.zero_()
+y.sum().backward()
+x.grad == 2 * x</textarea></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">2.5.4</span><h3>Python 控制流的梯度计算</h3></div>
+    <div class="prose"><p>即使函数里有 while 循环和 if 判断，循环次数还取决于输入，自动微分照样能算。因为计算图记录的是这一次实际走过的运算。</p></div>
+    <div class="cell"><textarea>def f(a):
+    b = a * 2
+    while b.norm() < 1000:
+        b = b * 2
+    if b.sum() > 0:
+        c = b
+    else:
+        c = 100 * b
+    return c</textarea></div>
+    <div class="cell"><textarea>a = torch.randn(size=(), requires_grad=True)
+d = f(a)
+d.backward()</textarea></div>
+    <div class="prose"><p>不管走了几次循环，f(a) 都等于 k × a（k 是某个常数），所以导数就是 k = d / a：</p></div>
+    <div class="cell"><textarea>a.grad == d / a</textarea></div>
+  </div>
+
+  <div class="blk" id="trainloop"><div class="blk-h"><span class="n">2.5.5</span><h3>把今天学的拼起来：一个最小的训练循环</h3></div>
+    <div class="prose"><p>这一格不在原书里，是把今天的东西串起来，第 5 天线性回归的训练循环就长这样：算损失 → <code>backward()</code> 求梯度 → 在 <code>torch.no_grad()</code> 里更新参数 → 清零梯度。目标是把 x 从 1 推到 5。</p></div>
+    <div class="cell"><textarea>x = torch.ones(3, requires_grad=True)
+for step in range(3):
+    loss = ((x - 5) ** 2).sum()
+    loss.backward()
+    with torch.no_grad():
+        x -= 0.1 * x.grad
+    x.grad.zero_()
+    print(step, loss.item(), x)</textarea></div>
+    <div class="prose"><p>为什么更新时要放在 <code>torch.no_grad()</code> 里？因为“更新参数”这个动作本身不该被记进计算图。不放会怎样？试试：</p></div>
+    <div class="cell"><textarea>x = torch.ones(3, requires_grad=True)
+x -= 0.1</textarea></div>
+    <p class="note">你论文的实验代码里，每个训练步也是这几行，只是参数从 3 个变成了约 8 万个，并且用 <code>torch.optim.Adam</code> 代替了手写的 <code>x -= 0.1 * x.grad</code>。论文还专门做了“梯度符号检查”：确认损失里的 −λ·V̂ 项求出来的梯度方向，确实能让价值估计变大（余弦值为 −1）。这检查的就是今天学的 backward。</p>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">2.5.6</span><h3>练习（原书）</h3></div>
+    <div class="prose"><p><b>练习 2</b>：反向传播之后立刻再运行一次，看看会发生什么。</p></div>
+    <div class="cell"><textarea>x = torch.arange(4.0, requires_grad=True)
+y = 2 * torch.dot(x, x)
+y.backward()
+y.backward()</textarea></div>
+    <div class="prose"><p>报错的意思是：第一次反向传播后，计算图里存的中间值已经被释放了。真需要传两次，第一次写 <code>y.backward(retain_graph=True)</code>。</p>
+    <p><b>练习 3</b>：控制流的例子里，把 a 换成随机向量会怎样？把下面的 <code>size=()</code> 改成 <code>size=(3,)</code> 试试。提示：<code>d</code> 变成向量了，需要先求和。</p></div>
+    <div class="cell"><textarea>a = torch.randn(size=(), requires_grad=True)
+d = f(a)
+d.backward()
+a.grad == d / a</textarea></div>
+    <div class="prose"><p><b>练习 5</b>：令 f(x) = sin(x)，画出 f(x) 和 df/dx 的图像，不准直接用 cos(x)，要用自动微分算导数。</p></div>
+    <div class="cell"><textarea>x = torch.arange(-6.0, 6.0, 0.1, requires_grad=True)
+y = torch.sin(x)
+y.sum().backward()
+d2l.plot(x.detach(), [y.detach(), x.grad], 'x', 'f(x)', legend=['sin(x)', 'd sin(x) / dx'])</textarea></div>
+    <div class="prose"><p>画出来的导数曲线正好是 cos(x)。用数字确认一下误差几乎为 0：</p></div>
+    <div class="cell"><textarea>(x.grad - torch.cos(x.detach())).abs().max()</textarea></div>
+  </div>
+</section>
+
+<section class="part">
+  <div class="part-h"><div class="eyebrow">今日小结</div><h2>今天学会了吗？</h2></div>
+  <div class="two">
+    <div class="panel stack">
+      <ul class="check-list" data-day="3">
+        <li><label><input type="checkbox" data-k="c1">导数是 x 动一点点时 y 变化的速度，也是切线斜率</label></li>
+        <li><label><input type="checkbox" data-k="c2">梯度是所有偏导数排成的向量，往负梯度方向走函数下降最快</label></li>
+        <li><label><input type="checkbox" data-k="c3">链式法则：一层层的导数乘起来</label></li>
+        <li><label><input type="checkbox" data-k="c4">我会用 <code>requires_grad=True</code>、<code>backward()</code>、<code>.grad</code></label></li>
+        <li><label><input type="checkbox" data-k="c5">我知道梯度会累加，每次要先清零</label></li>
+        <li><label><input type="checkbox" data-k="c6">我知道更新参数要放在 <code>torch.no_grad()</code> 里</label></li>
+      </ul>
+      <span class="small check-msg"></span>
+    </div>
+    <div class="panel stack">
+      <h3>明天（第 4 天）学什么</h3>
+      <p>原书 2.6 概率（掷骰子、大数定律、条件概率、贝叶斯定理）和 2.7 查阅文档。你论文里 BKT 模拟学生的 guess、slip 参数，就是条件概率。</p>
+    </div>
+  </div>
+</section>
+</main>
+
+<main class="wrap day" id="day4" data-day="4" hidden>
+<section class="hero">
+  <div class="eyebrow">第 4 天 · 原书第 2.6 节 + 第 2.7 节</div>
+  <h1>概率：模型说“70% 会做对”是什么意思</h1>
+  <p class="lead">机器学习就是在不确定的情况下做预测，概率是描述“有多确定”的语言。今天学抽样、大数定律、条件概率和贝叶斯定理。你论文里 BKT 模拟学生的核心公式就是贝叶斯定理，今天会亲手算一遍。最后学怎么自己查 PyTorch 的文档。</p>
+  <div class="plan">
+    <div><b class="k">今天的时间</b>大约 50 分钟。第一部分 40 分钟，第二部分 10 分钟。</div>
+    <div><b class="k">学完你能</b><ul><li>用 torch 模拟掷骰子</li><li>说清联合、条件、边际概率</li><li>用贝叶斯定理算“检测阳性后真的患病的概率”</li><li>算期望和方差，会用 dir 和 help</li></ul></div>
+    <div><b class="k">和你的论文</b><ul><li>BKT 的 guess、slip 是条件概率</li><li>学生答对后掌握概率怎么更新</li></ul></div>
+  </div>
+</section>
+
+<section class="part" id="prob">
+  <div class="part-h"><div class="eyebrow">第一部分</div><h2>2.6 概率</h2><span class="src">对应原书第 2.6 节</span></div>
+  <div class="prose">
+    <p>原书举了两个例子：从一张很模糊的照片判断是猫还是狗，以及预测明天会不会下雨。两种情况我们都不确定，但性质不同：照片里实际就是猫或狗中的一个，只是我们看不清；下雨则是真正的随机事件。概率可以同时描述这两种不确定。</p>
+    <div class="row"><button class="btn primary runAll" data-day="4">从头全部运行</button><span class="small muted runAllMsg"></span></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">2.6.1</span><h3>掷骰子：抽样和大数定律</h3></div>
+    <div class="prose"><p>一个公平的骰子，每个点数出现的概率都是 1/6。怎么检查一个真实骰子公不公平？只能多掷几次，用“出现次数 ÷ 总次数”去估计概率。<b>大数定律</b>说：掷得越多，这个估计越接近真实概率。</p>
+    <p>从概率分布里取出样本叫<b>抽样</b>。给每个可能结果分配概率的分布叫<b>多项分布</b>。先导入需要的包：</p></div>
+    <div class="cell"><textarea>%matplotlib inline
+from d2l import torch as d2l
+import torch
+from torch.distributions import multinomial</textarea></div>
+    <div class="prose"><p>传入一个概率向量就能掷一次。结果是一个长度为 6 的向量，第 i 个位置是点数 i+1 出现的次数。每次运行结果都不同。</p></div>
+    <div class="cell"><textarea>fair_probs = torch.ones([6]) / 6
+multinomial.Multinomial(1, fair_probs).sample()</textarea></div>
+    <div class="prose"><p>一次掷 10 个：</p></div>
+    <div class="cell"><textarea>multinomial.Multinomial(10, fair_probs).sample()</textarea></div>
+    <div class="prose"><p>掷 1000 次，用相对频率估计每个点数的概率，应该都在 0.167 附近：</p></div>
+    <div class="cell"><textarea># 将结果存储为32位浮点数以进行除法
+counts = multinomial.Multinomial(1000, fair_probs).sample()
+counts / 1000  # 相对频率作为估计值</textarea></div>
+    <div class="prose"><p>看估计值怎么随实验次数收敛：做 500 组实验，每组掷 10 次，用 <code>cumsum</code>（第 2 天学的累加）算出“到第 k 组为止”的累计次数，再按行除以总数（第 2 天学的 <code>keepdims=True</code> 广播）。6 条线都慢慢贴近 0.167 的虚线。</p></div>
+    <div class="cell"><textarea>counts = multinomial.Multinomial(10, fair_probs).sample((500,))
+cum_counts = counts.cumsum(dim=0)
+estimates = cum_counts / cum_counts.sum(dim=1, keepdims=True)
+
+d2l.set_figsize((6, 4.5))
+for i in range(6):
+    d2l.plt.plot(estimates[:, i].numpy(),
+                 label=("P(die=" + str(i + 1) + ")"))
+d2l.plt.axhline(y=0.167, color='black', linestyle='dashed')
+d2l.plt.gca().set_xlabel('Groups of experiments')
+d2l.plt.gca().set_ylabel('Estimated probability')
+d2l.plt.legend();</textarea></div>
+    <div class="panel stack" id="diceLab">
+      <h4>换一个灌了铅的骰子</h4>
+      <p class="small muted">把 6 点的概率调高，再一次次掷。掷得少的时候，柱子高低很乱，很难看出骰子有问题；掷到几千次，6 点那根柱子就明显高出虚线了。虚线是每个点数的真实概率。</p>
+      <div class="row">
+        <label class="ctrl" for="diceW">6 点的真实概率 <output id="diceWv">0.167</output><input type="range" id="diceW" min="0.05" max="0.6" step="0.01" value="0.167"></label>
+        <button class="btn" data-roll="1">掷 1 次</button><button class="btn" data-roll="10">掷 10 次</button><button class="btn primary" data-roll="100">掷 100 次</button><button class="btn" data-roll="1000">掷 1000 次</button><button class="btn" id="diceReset">重来</button>
+      </div>
+      <div class="two"><div class="cv" id="diceHost"><canvas id="diceCv" aria-label="每个点数的相对频率和真实概率"></canvas></div><div class="calc" id="diceCalc"></div></div>
+    </div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">2.6.2</span><h3>样本空间、事件和随机变量</h3></div>
+    <div class="prose">
+      <p>掷骰子所有可能的结果 {1, 2, 3, 4, 5, 6} 叫<b>样本空间</b>。由一些结果组成的集合叫<b>事件</b>，比如“掷出 5”是 {5}，“掷出奇数”是 {1, 3, 5}。掷出 3 时，“掷出奇数”这个事件就发生了。</p>
+      <p>概率要满足三条公理（科尔莫戈罗夫 1933 年提出）：任何事件的概率都不是负数；整个样本空间的概率是 1；互不相交的事件，“其中任意一个发生”的概率等于它们各自概率之和。</p>
+      <p><b>随机变量</b>是取值有随机性的量，比如骰子点数 X。P(X = 5) 是“X 取 5”的概率。点数这种只能取几个值的叫离散随机变量；身高这种可以取任意小数的叫连续随机变量，“身高正好 1.80 米”的概率是 0，有意义的是“落在 1.79 到 1.81 之间”的概率。</p>
+    </div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">2.6.3</span><h3>多个随机变量：联合、条件、边际</h3></div>
+    <div class="prose">
+      <p><b>联合概率</b> P(A = a, B = b)：两件事同时发生的概率。它一定不大于其中任何一件单独发生的概率。</p>
+      <p><b>条件概率</b> P(B = b | A = a) = P(A = a, B = b) ÷ P(A = a)：已经知道 A = a 发生了，B = b 的概率。</p>
+      <p><b>贝叶斯定理</b>：P(A | B) = P(B | A) · P(A) ÷ P(B)。它把“已知原因求结果的概率”翻转成“已知结果求原因的概率”。</p>
+      <p><b>边际化</b>：P(B) = Σ_A P(A, B)，把另一个变量的所有可能加起来，消掉它。</p>
+      <p><b>独立</b>：A 和 B 互不影响时，P(A, B) = P(A) · P(B)，也就是 P(A | B) = P(A)。比如连续两次掷骰子。灯的开关和房间亮不亮就不独立。</p>
+    </div>
+  </div>
+
+  <div class="blk" id="hiv"><div class="blk-h"><span class="n">2.6.4</span><h3>应用：检测阳性，真的感染了吗？</h3></div>
+    <div class="prose"><p>原书的例子：某种 HIV 检测，感染者一定能查出阳性；健康人有 1% 会被误报阳性。人群中感染率是 0.15%。一个人第一次检测是阳性，他真的感染的概率是多少？很多人会猜 99%。用贝叶斯定理算：</p></div>
+    <div class="cell"><textarea>P_H = torch.tensor([0.9985, 0.0015])        # P(H=0), P(H=1)
+P_D1_given_H = torch.tensor([0.01, 1.0])    # P(D1=1 | H=0), P(D1=1 | H=1)
+P_D1 = (P_D1_given_H * P_H).sum()           # 边际化
+P_H1_given_D1 = P_D1_given_H[1] * P_H[1] / P_D1   # 贝叶斯定理
+P_D1, P_H1_given_D1</textarea></div>
+    <div class="prose"><p>只有 13.06%。原因是健康人太多了：1% 的误报乘上 99.85% 的健康人，比真正的感染者还多。再做第二种检测（感染者 98% 阳性，健康人 3% 误报），假设两次检测在给定是否感染的条件下互相独立，两次都阳性时：</p></div>
+    <div class="cell"><textarea>P_D2_given_H = torch.tensor([0.03, 0.98])
+both = P_D1_given_H * P_D2_given_H          # 条件独立：两个条件概率相乘
+P_both = (both * P_H).sum()
+both, P_both, both[1] * P_H[1] / P_both</textarea></div>
+    <div class="prose"><p>概率升到 83.07%，和原书一致。</p></div>
+    <div class="panel stack" id="bayesLab">
+      <h4>用一万个人来想</h4>
+      <p class="small muted">把概率换成人数最容易理解。拖动下面三个数，看检测阳性的人里，真正感染的占多少。</p>
+      <div class="row">
+        <label class="ctrl" for="byP">人群感染率 <output id="byPv">0.15%</output><input type="range" id="byP" min="-4" max="-0.5" step="0.05" value="-2.824"></label>
+        <label class="ctrl" for="byS">感染者查出阳性的概率 <output id="bySv">100%</output><input type="range" id="byS" min="0.5" max="1" step="0.01" value="1"></label>
+        <label class="ctrl" for="byF">健康人误报阳性的概率 <output id="byFv">1.0%</output><input type="range" id="byF" min="0" max="0.1" step="0.001" value="0.01"></label>
+      </div>
+      <div class="pop" id="byBar" aria-label="阳性结果中真阳性和假阳性的比例"></div>
+      <div class="calc" id="byCalc"></div>
+    </div>
+  </div>
+
+  <div class="blk" id="bkt"><div class="blk-h"><span class="n">2.6.5</span><h3>你论文里的贝叶斯：BKT 怎么更新“学生会不会”</h3></div>
+    <div class="prose"><p>调试台第 8 章里，你论文用的 12 技能模拟学生是 BKT 模型。每个技能有四个参数：<b>p0</b> 一开始就会的概率，<b>guess</b> 不会但蒙对的概率 P(答对 | 不会)，<b>slip</b> 会了但失误的概率 P(答错 | 会)，<b>learn</b> 做一次题后学会的概率。看到学生答对一题，“他会了”的概率怎么变？这就是贝叶斯定理：</p>
+    <p style="font-family:var(--f-mono);font-size:14px">P(会 | 答对) = P(答对 | 会) · P(会) ÷ P(答对) = (1 − slip) · p ÷ [(1 − slip) · p + guess · (1 − p)]</p>
+    <p>下面的参数 p0 = 0.7、guess = 0.3、slip = 0.2、learn = 0.12，正是论文从 ASSISTments 2009 拟合出来的第 1 个技能的参数。</p></div>
+    <div class="cell"><textarea>p_L = 0.7          # 先验：学生本来就会的概率 p0
+guess, slip = 0.3, 0.2
+p_correct = p_L * (1 - slip) + (1 - p_L) * guess
+posterior = p_L * (1 - slip) / p_correct
+print(f'答对的概率 {p_correct:.3f}，答对之后“已经会了”的概率 {posterior:.3f}')</textarea></div>
+    <div class="prose"><p>把“答对”和“答错”两种情况写成一个函数，再加上“做完这题可能学会”（learn）这一步，就是 BKT 的完整更新。给它一串答题记录：</p></div>
+    <div class="cell"><textarea>def bkt_update(p_L, correct, guess=0.3, slip=0.2, learn=0.12):
+    if correct:
+        post = p_L * (1 - slip) / (p_L * (1 - slip) + (1 - p_L) * guess)
+    else:
+        post = p_L * slip / (p_L * slip + (1 - p_L) * (1 - guess))
+    return post + (1 - post) * learn
+
+p = 0.7
+for y in [1, 0, 0, 1, 1]:
+    p = bkt_update(p, y)
+    print(y, round(p, 4))</textarea></div>
+    <div class="panel stack" id="bktLab">
+      <h4>自己当学生答题</h4>
+      <p class="small muted">点“答对”或“答错”，看模型对“这个学生会不会”的估计怎么变。把 guess 调大（题目容易蒙对），会发现答对一题以后估计涨得很少，因为蒙对的可能性大，答对说明不了什么。</p>
+      <div class="row">
+        <label class="ctrl" for="bkP0">p0 <output id="bkP0v">0.70</output><input type="range" id="bkP0" min="0.05" max="0.95" step="0.05" value="0.7"></label>
+        <label class="ctrl" for="bkG">guess <output id="bkGv">0.30</output><input type="range" id="bkG" min="0" max="0.5" step="0.05" value="0.3"></label>
+        <label class="ctrl" for="bkS">slip <output id="bkSv">0.20</output><input type="range" id="bkS" min="0" max="0.5" step="0.05" value="0.2"></label>
+        <label class="ctrl" for="bkL">learn <output id="bkLv">0.12</output><input type="range" id="bkL" min="0" max="0.5" step="0.02" value="0.12"></label>
+      </div>
+      <div class="row"><button class="btn primary" id="bkYes">答对</button><button class="btn" id="bkNo">答错</button><button class="btn" id="bkReset">清空记录</button><span class="small muted" id="bkSeq"></span></div>
+      <div class="two"><div class="cv" id="bktHost"><canvas id="bktCv" aria-label="每答一题后掌握概率的变化"></canvas></div><div class="calc" id="bktCalc"></div></div>
+      <p class="note">DKT 做的是同一件事：根据答题记录估计“下一题能做对的概率”。区别是 BKT 用这几个人能看懂的参数和公式，DKT 用 LSTM 自己从数据里学出更新规则。</p>
+    </div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">2.6.6</span><h3>期望和方差</h3></div>
+    <div class="prose"><p><b>期望</b> E[X] = Σ x · P(X = x)，就是按概率加权的平均值。<b>方差</b> Var[X] = E[(X − E[X])²]，衡量取值离平均值有多分散，它也等于 E[X²] − E[X]²。方差开根号是<b>标准差</b>。公平骰子的期望是 3.5：</p></div>
+    <div class="cell"><textarea>x = torch.arange(1.0, 7.0)
+p = torch.ones(6) / 6
+E = (x * p).sum()
+Var = ((x - E) ** 2 * p).sum()
+E, Var, Var.sqrt(), (x ** 2 * p).sum() - E ** 2</textarea></div>
+    <p class="note">期望就是第 2 天学的点积：取值向量和概率向量的点积。</p>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">2.6.7</span><h3>练习（原书）</h3></div>
+    <div class="prose"><p><b>练习 1</b>：上面掷骰子的图用了 m = 500 组、每组 n = 10 次。把它改成 m = 50、n = 10 或 m = 500、n = 100，曲线有什么变化？</p></div>
+    <div class="cell"><textarea>m, n = 50, 10
+counts = multinomial.Multinomial(n, fair_probs).sample((m,))
+estimates = counts.cumsum(dim=0) / counts.cumsum(dim=0).sum(dim=1, keepdims=True)
+for i in range(6):
+    d2l.plt.plot(estimates[:, i].numpy(), label=("P(die=" + str(i + 1) + ")"))
+d2l.plt.axhline(y=0.167, color='black', linestyle='dashed')
+d2l.plt.legend();</textarea></div>
+    <div class="qa">
+      <details><summary><b>练习 2</b>：已知 P(A) 和 P(B)，P(A ∪ B) 和 P(A ∩ B) 最大最小各是多少？</summary><p>P(A ∪ B) 最小是 max(P(A), P(B))（一个完全包含另一个时），最大是 min(1, P(A) + P(B))（两者不相交时）。P(A ∩ B) 最小是 max(0, P(A) + P(B) − 1)，最大是 min(P(A), P(B))。画两个圆，让它们从完全分开慢慢挪到完全重叠，就能看出来。</p></details>
+      <details><summary><b>练习 3</b>：B 只依赖 A，C 只依赖 B，P(A, B, C) 能化简吗？</summary><p>能。P(A, B, C) = P(A) · P(B | A) · P(C | B)。因为知道 B 以后 C 和 A 无关，P(C | A, B) 就简化成 P(C | B)。这种结构叫马尔可夫链。BKT 也是这样：这一步会不会只取决于上一步会不会，学生的答题记录则只取决于这一步会不会。</p></details>
+      <details><summary><b>练习 4</b>：第一种检测更准，为什么不把第一种检测做两次，而要换第二种？</summary><p>上面的计算假设两次检测在“给定是否感染”时互相独立。同一种检测做两次，误报的原因往往是同一个（比如这个人体内有某种会干扰这种试剂的物质），第一次误报了第二次很可能也误报，两次结果不独立，第二次带来的新信息很少。换一种原理不同的检测，误报更接近独立，才能真正提高确定性。</p></details>
+    </div>
+  </div>
+</section>
+
+<section class="part" id="docs">
+  <div class="part-h"><div class="eyebrow">第二部分</div><h2>2.7 查阅文档</h2><span class="src">对应原书第 2.7 节</span></div>
+  <div class="prose"><p>书不可能讲到每一个函数。遇到不认识的函数时，有两个办法：<code>dir()</code> 列出一个模块里有什么，<code>help()</code> 显示一个函数怎么用。下面两格的输出和真 PyTorch 一模一样。</p></div>
+  <div class="blk">
+    <div class="prose"><p>看看随机分布模块里有哪些东西。两边带双下划线的（比如 <code>__doc__</code>）是 Python 内部用的，可以不管。剩下的名字能猜出不少：Normal 正态分布、Uniform 均匀分布、Bernoulli 伯努利分布、Multinomial 多项分布……</p></div>
+    <div class="cell"><textarea>import torch
+print(dir(torch.distributions))</textarea></div>
+    <div class="prose"><p>查 <code>ones</code> 函数怎么用：</p></div>
+    <div class="cell"><textarea>help(torch.ones)</textarea></div>
+    <div class="callout">
+      <h4>怎么读这段文档</h4>
+      <p>第一行 <code>ones(*size, *, out=None, dtype=None, …) -&gt; Tensor</code> 是函数签名：<code>*size</code> 表示形状可以写成好几个数（<code>ones(2, 3)</code>），也可以写成一个元组（<code>ones((2, 3))</code>）；第二个 <code>*</code> 后面的参数必须写名字，比如 <code>dtype=torch.float64</code>；<code>-&gt; Tensor</code> 说明它返回一个张量。<b>Args</b> 是位置参数，<b>Keyword arguments</b> 是要写名字的参数，<b>Example</b> 是例子，可以直接照抄。</p>
+    </div>
+    <div class="prose"><p>照文档说的试一下：</p></div>
+    <div class="cell"><textarea>torch.ones(4)</textarea></div>
+    <div class="prose"><p>在真正的 Jupyter 里，还可以写 <code>torch.ones?</code> 弹出文档，写 <code>torch.ones??</code> 看源代码。官方完整文档在 <a href="https://pytorch.org/docs/stable/index.html" target="_blank" rel="noopener">pytorch.org/docs</a>，函数名可以直接搜。</p>
+    <p class="note">这个网页里的 torch 是简化版，<code>help()</code> 只收录了 <code>ones</code>，<code>dir()</code> 也只对 <code>torch.distributions</code> 给出真实结果。在你自己电脑上装好 PyTorch 以后，所有函数都能这样查。</p></div>
+  </div>
+</section>
+
+<section class="part">
+  <div class="part-h"><div class="eyebrow">今日小结</div><h2>今天学会了吗？</h2></div>
+  <div class="two">
+    <div class="panel stack">
+      <ul class="check-list" data-day="4">
+        <li><label><input type="checkbox" data-k="c1">我会用 Multinomial 抽样，知道大数定律在说什么</label></li>
+        <li><label><input type="checkbox" data-k="c2">我能说出联合概率、条件概率、边际化的意思</label></li>
+        <li><label><input type="checkbox" data-k="c3">我能用贝叶斯定理算 HIV 的例子，知道为什么只有 13%</label></li>
+        <li><label><input type="checkbox" data-k="c4">我知道 BKT 的 guess、slip 是条件概率，答对后怎么更新</label></li>
+        <li><label><input type="checkbox" data-k="c5">我会算期望和方差</label></li>
+        <li><label><input type="checkbox" data-k="c6">我会用 dir() 和 help()，能读懂函数签名</label></li>
+      </ul>
+      <span class="small check-msg"></span>
+    </div>
+    <div class="panel stack">
+      <h3>明天（第 5 天）学什么</h3>
+      <p>原书第 3 章：3.1 线性回归和 3.2 从零开始实现。第 1 到 4 天学的张量、矩阵乘法、梯度、自动微分会全部用上，从头写出第一个真正的训练循环：生成数据、按小批量读取、定义模型和损失、用随机梯度下降训练。</p>
+    </div>
+  </div>
+</section>
+</main>
+
+<main class="wrap day" id="day5" data-day="5" hidden>
+<section class="hero">
+  <div class="eyebrow">第 5 天 · 原书第 3.1 节 + 第 3.2 节</div>
+  <h1>线性回归：从零写出第一个训练循环</h1>
+  <p class="lead">前四天学的张量、矩阵乘法、梯度和自动微分，今天全部用上。先理解线性回归的模型、损失和小批量随机梯度下降，再不借助任何高级工具，只用张量和 <code>backward()</code> 从头实现：造数据、分小批量、定义模型和损失、写优化器、训练。这套流程以后每一章都会重复出现，你论文的训练代码也是这个结构。</p>
+  <div class="plan">
+    <div><b class="k">今天的时间</b>大约 70 分钟。第一部分 30 分钟，第二部分 40 分钟。</div>
+    <div><b class="k">学完你能</b><ul><li>写出 ŷ = Xw + b，说出每个量的形状</li><li>解释小批量、批量大小、学习率、epoch</li><li>从零写出完整的训练循环</li><li>知道为什么要 reshape</li></ul></div>
+    <div><b class="k">和你的论文</b><ul><li>训练循环结构完全一样</li><li>批量大小 256、15 个 epoch 就是这里的超参数</li></ul></div>
+  </div>
+</section>
+
+<section class="part" id="linreg">
+  <div class="part-h"><div class="eyebrow">第一部分</div><h2>3.1 线性回归</h2><span class="src">对应原书第 3.1 节</span></div>
+  <div class="prose">
+    <p>线性回归有两个假设：一是输出 y 可以写成输入特征 x 的加权和；二是观测里的噪声比较“正常”，服从正态分布。原书的例子是按房子的面积和房龄估计房价。</p>
+    <div class="row"><button class="btn primary runAll" data-day="5">从头全部运行</button><span class="small muted runAllMsg"></span></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.1.1</span><h3>线性模型</h3></div>
+    <div class="prose"><p>价格 = w<sub>面积</sub> × 面积 + w<sub>房龄</sub> × 房龄 + b。w 叫<b>权重</b>，决定每个特征的影响有多大；b 叫<b>偏置</b>，是所有特征都为 0 时的预测值。有 d 个特征时写成点积 <b>ŷ = wᵀx + b</b>。把 n 个样本摞成矩阵 X（每行一个样本，每列一个特征），一次算出所有预测：<b>ŷ = Xw + b</b>，这里加 b 用的是第 1 天学的广播。</p></div>
+    <div class="panel stack" id="houseLab">
+      <h4>拧一拧权重和偏置</h4>
+      <div class="row">
+        <label class="ctrl" for="hsWa">w<sub>面积</sub>（每平方英尺多少美元） <output id="hsWav">150</output><input type="range" id="hsWa" min="0" max="400" step="5" value="150"></label>
+        <label class="ctrl" for="hsWg">w<sub>房龄</sub>（每老一年多少美元） <output id="hsWgv">-1000</output><input type="range" id="hsWg" min="-5000" max="1000" step="100" value="-1000"></label>
+        <label class="ctrl" for="hsB">b（美元） <output id="hsBv">20000</output><input type="range" id="hsB" min="-50000" max="100000" step="1000" value="20000"></label>
+      </div>
+      <div class="calc" id="hsCalc"></div>
+      <p class="small muted">表里的 4 套房子是编的示例数据。权重是负数表示这个特征越大价格越低，比如房龄。</p>
+    </div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.1.2</span><h3>损失函数和解析解</h3></div>
+    <div class="prose"><p>回归最常用的损失是<b>平方误差</b>：l = ½(ŷ − y)²。前面乘 ½ 只是为了求导后系数刚好是 1。在整个训练集上取平均，就是要最小化的 L(w, b)。</p>
+    <p>线性回归比较特殊，最优解可以用一个公式直接算出来，叫<b>解析解</b>：把 b 并进 w（给 X 加一列全 1），w* = (XᵀX)⁻¹Xᵀy。下面用 6 个样本验证：数据是按 w = [2, −3.4]、b = 4.2 造的，解析解正好算回这三个数。</p></div>
+    <div class="cell"><textarea>import torch
+
+Xf = torch.tensor([[1., 2.], [2., 1.], [3., 5.], [4., 3.], [5., 8.], [6., 1.]])
+yf = Xf @ torch.tensor([2.0, -3.4]) + 4.2
+X1 = torch.cat((Xf, torch.ones(6, 1)), dim=1)      # 加一列全 1，用来代替 b
+w_star = torch.linalg.inv(X1.T @ X1) @ X1.T @ yf
+X1.shape, w_star</textarea></div>
+    <div class="prose"><p>但绝大多数深度学习模型没有解析解，只能一步一步地优化。</p></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.1.3</span><h3>小批量随机梯度下降</h3></div>
+    <div class="prose"><p>梯度下降每更新一次都要算整个数据集的梯度，数据一多就太慢。实际做法是每次随机抽一小批样本（叫一个<b>小批量</b>），只用它们算梯度来更新参数，这叫<b>小批量随机梯度下降</b>：</p>
+    <p style="font-family:var(--f-mono);font-size:14px">(w, b) ← (w, b) − (η / |B|) · Σ<sub>i∈B</sub> ∂l⁽ⁱ⁾(w, b)</p>
+    <p>|B| 是每批的样本数，叫<b>批量大小</b>；η 是<b>学习率</b>。这两个是人手动设定、训练中不会更新的参数，叫<b>超参数</b>。所有样本都用过一遍叫一个 <b>epoch</b>（迭代周期）。调超参数要看模型在单独的<b>验证集</b>上的表现。你论文代码里的 <code>BS = 256</code>、15 个 epoch、DKT 的学习率 2e-3，说的就是这些。</p></div>
+    <div class="panel stack" id="sgdLab">
+      <h4>批量大小怎么影响下山的路</h4>
+      <p class="small muted">数据和下面 3.2 节一样：1000 个样本，真实 w = [2, −3.4]，b = 4.2。图上是 w₁、w₂ 两个参数的损失等高线（b 固定在真实值时），叉号是最低点。选不同的批量大小训练，看参数走出的路径。批量越小，每一步越“抖”，但一个 epoch 里更新的次数越多。</p>
+      <div class="row">
+        <label class="ctrl" for="sgB">批量大小
+          <select id="sgB"><option>1</option><option selected>10</option><option>100</option><option value="1000">1000（全部数据）</option></select></label>
+        <label class="ctrl" for="sgLr">学习率 <output id="sgLrv">0.030</output><input type="range" id="sgLr" min="-3" max="0" step="0.05" value="-1.52"></label>
+        <label class="ctrl" for="sgE">epoch 数 <output id="sgEv">1</output><input type="range" id="sgE" min="1" max="5" value="1"></label>
+        <button class="btn primary" id="sgRun">训练</button><button class="btn" id="sgReset">参数归零</button>
+      </div>
+      <div class="two"><div class="cv" id="sgHost"><canvas id="sgCv" aria-label="参数在损失等高线上的路径"></canvas></div><div class="stack"><div class="cv"><canvas id="sgLoss" aria-label="每一步之后的训练损失"></canvas></div><div class="calc" id="sgCalc"></div></div></div>
+    </div>
+    <div class="prose"><p>训练完的模型拿来估计新房子的价格，叫<b>预测</b>。很多人也叫“推断”，原书提醒在统计学里“推断”指的是估计参数，跟统计学家交流时容易误会。</p></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.1.4</span><h3>矢量化加速</h3></div>
+    <div class="prose"><p>训练时要同时处理一整个小批量，应该用张量运算一次算完，而不是在 Python 里写 for 循环一个一个算。先导入包，定义两个长 10000 的全 1 向量：</p></div>
+    <div class="cell"><textarea>%matplotlib inline
+from d2l import torch as d2l
+import math
+import torch
+import numpy as np
+import time
+
+n = 10000
+a = d2l.ones([n])
+b = d2l.ones([n])</textarea></div>
+    <div class="prose"><p>原书写了一个计时器类。<code>class</code> 定义一种新的对象，<code>__init__</code> 在创建时自动运行，<code>self</code> 指这个对象自己。这个类以后保存在 d2l 包里，可以直接用 <code>d2l.Timer()</code>。</p></div>
+    <div class="cell"><textarea>class Timer:  #@save
+    """记录多次运行时间"""
+    def __init__(self):
+        self.times = []
+        self.start()
+
+    def start(self):
+        """启动计时器"""
+        self.tik = time.time()
+
+    def stop(self):
+        """停止计时器并将时间记录在列表中"""
+        self.times.append(time.time() - self.tik)
+        return self.times[-1]
+
+    def avg(self):
+        """返回平均时间"""
+        return sum(self.times) / len(self.times)
+
+    def sum(self):
+        """返回时间总和"""
+        return sum(self.times)
+
+    def cumsum(self):
+        """返回累计时间"""
+        return np.array(self.times).cumsum().tolist()</textarea></div>
+    <div class="prose"><p>用 for 循环一个一个加：</p></div>
+    <div class="cell"><textarea>c = d2l.zeros(n)
+timer = Timer()
+for i in range(n):
+    c[i] = a[i] + b[i]
+f'{timer.stop():.5f} sec'</textarea></div>
+    <div class="prose"><p>用 <code>+</code> 一次加完：</p></div>
+    <div class="cell"><textarea>timer.start()
+d = a + b
+f'{timer.stop():.5f} sec'</textarea></div>
+    <p class="note">第二种快得多，通常快几个数量级。这个网页里的张量是用 JavaScript 模拟的，具体时间和真 PyTorch 不一样，但快慢的差距一样明显。</p>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.1.5</span><h3>正态分布与平方损失</h3></div>
+    <div class="prose"><p>正态分布（高斯分布）的概率密度是 p(x) = 1/√(2πσ²) · exp(−(x − μ)²/(2σ²))，μ 是均值，σ 是标准差。</p></div>
+    <div class="cell"><textarea>def normal(x, mu, sigma):
+    p = 1 / math.sqrt(2 * math.pi * sigma**2)
+    return p * np.exp(-0.5 / sigma**2 * (x - mu)**2)</textarea></div>
+    <div class="cell"><textarea># 再次使用numpy进行可视化
+x = np.arange(-7, 7, 0.01)
+# 均值和标准差对
+params = [(0, 1), (0, 2), (3, 1)]
+d2l.plot(x, [normal(x, mu, sigma) for mu, sigma in params], xlabel='x',
+         ylabel='p(x)', figsize=(4.5, 2.5),
+         legend=[f'mean {mu}, std {sigma}' for mu, sigma in params])</textarea></div>
+    <div class="prose"><p>改均值是把曲线左右平移，加大标准差会让曲线变矮变宽。</p>
+    <p>为什么线性回归用平方损失？假设观测 y = wᵀx + b + ε，噪声 ε 服从均值为 0 的正态分布。那么“看到这批数据的概率”（<b>似然</b>）是每个样本概率的乘积。让似然最大，等价于让负对数似然最小；把正态分布的公式代进去，去掉和 w、b 无关的常数，剩下的正好是平方误差之和。也就是说，<b>在高斯噪声假设下，最小化平方损失就是极大似然估计</b>。你论文的 DKT 预测对错用的交叉熵 BCE，也是这样从“伯努利分布的负对数似然”推出来的，第 6 天学 softmax 时会再讲。</p></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.1.6</span><h3>线性回归就是一个单层神经网络</h3></div>
+    <div class="neuron" aria-label="线性回归画成神经网络：d 个输入都连到一个输出">
+      <div class="col"><span>x₁</span><span>x₂</span><span>⋮</span><span>x<sub>d</sub></span><b>输入层（d 个特征）</b></div>
+      <div class="lines" aria-hidden="true">每条连线是一个权重 wᵢ</div>
+      <div class="col"><span class="out">o₁</span><b>输出层（1 个神经元）</b></div>
+    </div>
+    <div class="prose"><p>每个输入都连到每个输出，这种层叫<b>全连接层</b>（也叫稠密层）。数层数时不算输入层，所以线性回归是 1 层的神经网络。原书也讲了它和生物神经元的相似之处：树突接收输入，按突触权重加权，在细胞核里求和。不过原书提醒，现在深度学习的灵感主要来自数学、统计和计算机科学，就像飞机受鸟启发，但航空工程不靠鸟类学。</p></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.1.7</span><h3>练习（原书第 1 题）</h3></div>
+    <div class="prose"><p>有一组数 x₁ … xₙ，找一个常数 b 让 Σ(xᵢ − b)² 最小。对 b 求导并令它等于 0：−2Σ(xᵢ − b) = 0，得到 b = 平均值。验证一下：用平均值时平方和最小，换成别的数都更大。</p></div>
+    <div class="cell"><textarea>xs = torch.tensor([1.0, 2.0, 3.0, 10.0])
+xs.mean(), ((xs - xs.mean()) ** 2).sum(), ((xs - 2.0) ** 2).sum()</textarea></div>
+    <div class="qa"><details><summary>这和正态分布有什么关系？</summary><p>如果假设这些数来自均值为 b 的正态分布，b 的极大似然估计就是样本平均值，这和上面 3.1.5 讲的“平方损失 = 高斯噪声下的极大似然”是同一件事。</p></details></div>
+  </div>
+</section>
+
+<section class="part" id="scratch">
+  <div class="part-h"><div class="eyebrow">第二部分</div><h2>3.2 线性回归的从零开始实现</h2><span class="src">对应原书第 3.2 节，代码全部来自原书 PyTorch 版</span></div>
+  <div class="prose"><p>只用张量和自动微分，从头实现整个方法：数据流水线、模型、损失函数和小批量随机梯度下降优化器。现在的框架能自动完成这些，但自己写一遍才知道每一步在干什么。</p></div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.2.1</span><h3>生成数据集</h3></div>
+    <div class="cell"><textarea>%matplotlib inline
+from d2l import torch as d2l
+import torch
+import random</textarea></div>
+    <div class="prose"><p>按 y = Xw + b + ε 造 1000 个样本，每个样本 2 个特征，都从标准正态分布里取。真实参数 w = [2, −3.4]，b = 4.2，噪声 ε 的标准差是 0.01。我们要做的，就是只看数据把这三个数找回来。</p></div>
+    <div class="cell"><textarea>def synthetic_data(w, b, num_examples):  #@save
+    """生成y=Xw+b+噪声"""
+    X = d2l.normal(0, 1, (num_examples, len(w)))
+    y = d2l.matmul(X, w) + b
+    y += d2l.normal(0, 0.01, y.shape)
+    return X, d2l.reshape(y, (-1, 1))</textarea></div>
+    <div class="cell"><textarea>true_w = d2l.tensor([2, -3.4])
+true_b = 4.2
+features, labels = synthetic_data(true_w, true_b, 1000)</textarea></div>
+    <div class="prose"><p><code>features</code> 的每一行是一个样本的 2 个特征，<code>labels</code> 的每一行是它的标签：</p></div>
+    <div class="cell"><textarea>print('features:', features[0],'\nlabel:', labels[0])</textarea></div>
+    <div class="prose"><p>画出第二个特征和标签的散点图，能看出明显的线性关系（斜率约为 −3.4）：</p></div>
+    <div class="cell"><textarea>d2l.set_figsize()
+d2l.plt.scatter(d2l.numpy(features[:, 1]), d2l.numpy(labels), 1);</textarea></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.2.2</span><h3>读取数据集</h3></div>
+    <div class="prose"><p>训练时每次取一小批。<code>data_iter</code> 先把样本编号打乱，再按 <code>batch_size</code> 一段一段切出来。<code>yield</code> 让这个函数变成<b>生成器</b>：每次被 for 循环要一个小批量，就交出一个，下次从停下的地方接着来。</p></div>
+    <div class="cell"><textarea>def data_iter(batch_size, features, labels):
+    num_examples = len(features)
+    indices = list(range(num_examples))
+    # 这些样本是随机读取的，没有特定的顺序
+    random.shuffle(indices)
+    for i in range(0, num_examples, batch_size):
+        batch_indices = d2l.tensor(
+            indices[i: min(i + batch_size, num_examples)])
+        yield features[batch_indices], labels[batch_indices]</textarea></div>
+    <div class="prose"><p>读第一个小批量看看。X 的形状是 [批量大小, 特征数] = [10, 2]，y 是 [10, 1]：</p></div>
+    <div class="cell"><textarea>batch_size = 10
+
+for X, y in data_iter(batch_size, features, labels):
+    print(X, '\n', y)
+    break</textarea></div>
+    <p class="note">这个写法适合教学，但效率不高：要把全部数据放进内存，还要大量随机读取。框架自带的 DataLoader 快得多，第 6 天会用到。你论文的代码没用 DataLoader，用的正是这里的思路：<code>perm = rng.permutation(tr)</code> 打乱训练集的编号，再 <code>for i in range(0, len(perm), BS)</code> 每次切出 256 个。</p>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.2.3</span><h3>初始化模型参数、定义模型、损失和优化算法</h3></div>
+    <div class="prose"><p>权重从均值 0、标准差 0.01 的正态分布里随机取，偏置设为 0。两个都要 <code>requires_grad=True</code>，因为要对它们求梯度。</p></div>
+    <div class="cell"><textarea>w = torch.normal(0, 0.01, size=(2,1), requires_grad=True)
+b = torch.zeros(1, requires_grad=True)</textarea></div>
+    <div class="prose"><p>模型：Xw + b。X 是 [批量, 2]，w 是 [2, 1]，结果 [批量, 1]，再广播加上 b。</p></div>
+    <div class="cell"><textarea>def linreg(X, w, b):  #@save
+    """线性回归模型"""
+    return d2l.matmul(X, w) + b</textarea></div>
+    <div class="prose"><p>平方损失。把 y 的形状改成和 y_hat 一样，原因见下面的练习 5。</p></div>
+    <div class="cell"><textarea>def squared_loss(y_hat, y):  #@save
+    """均方损失"""
+    return (y_hat - d2l.reshape(y, y_hat.shape)) ** 2 / 2</textarea></div>
+    <div class="prose"><p>优化器：在 <code>no_grad</code> 里按梯度更新每个参数，再把梯度清零（第 3 天学的两个要点）。损失是一批样本的总和，所以除以批量大小，让步长不受批量大小影响。</p></div>
+    <div class="cell"><textarea>def sgd(params, lr, batch_size):  #@save
+    """小批量随机梯度下降"""
+    with torch.no_grad():
+        for param in params:
+            param -= lr * param.grad / batch_size
+            param.grad.zero_()</textarea></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.2.4</span><h3>训练</h3></div>
+    <div class="prose"><p>这段代码是整本书最重要的结构，后面几乎每一章都会再写一遍：<b>取一个小批量 → 算预测和损失 → backward 求梯度 → 优化器更新参数</b>。每个 epoch 结束后，在整个数据集上算一次损失。</p></div>
+    <div class="cell"><textarea>lr = 0.03
+num_epochs = 3
+net = linreg
+loss = squared_loss</textarea></div>
+    <div class="cell"><textarea>for epoch in range(num_epochs):
+    for X, y in data_iter(batch_size, features, labels):
+        l = loss(net(X, w, b), y)  # X和y的小批量损失
+        # 因为l形状是(batch_size,1)，而不是一个标量。l中的所有元素被加到一起，
+        # 并以此计算关于[w,b]的梯度
+        l.sum().backward()
+        sgd([w, b], lr, batch_size)  # 使用参数的梯度更新参数
+    with torch.no_grad():
+        train_l = loss(net(features, w, b), labels)
+        print(f'epoch {epoch + 1}, loss {float(train_l.mean()):f}')</textarea></div>
+    <div class="prose"><p>数据是自己造的，所以知道真实参数，可以比一比学到的参数差多少：</p></div>
+    <div class="cell"><textarea>print(f'w的估计误差: {true_w - d2l.reshape(w, true_w.shape)}')
+print(f'b的估计误差: {true_b - b}')</textarea></div>
+    <div class="callout"><h4>对照你的论文</h4><p>下面是你论文实验代码 <code>experiment.py</code> 里 <code>train_kt</code> 函数的训练循环（第 1355 到 1364 行，省略了几行记录日志和做检查的代码）。和上面逐行对照：</p>
+<pre class="code">for ep in range(epochs):                         <span class="c"># for epoch in range(num_epochs)</span>
+    model.train(); perm = rng.permutation(tr)    <span class="c"># data_iter 里的 random.shuffle(indices)</span>
+    for i in range(0, len(perm), BS):            <span class="c"># 一模一样，BS = 256</span>
+        b = perm[i:i + BS]                       <span class="c"># 取出这一批的编号</span>
+        loss, _ = batch_loss(model, W, b, cfg, parts=parts)   <span class="c"># l = loss(net(X, w, b), y)</span>
+        opt.zero_grad(set_to_none=True); loss.backward()       <span class="c"># 清零梯度 + l.sum().backward()</span>
+        nn.utils.clip_grad_norm_(params, 5.0); opt.step()      <span class="c"># 梯度裁剪 + sgd([w, b], ...)</span></pre>
+<p>区别只是换了零件：模型从 linreg 换成 LSTM，损失从平方损失换成 BCE（Safe-DFKT-AG 还加了价值项、护栏、方差惩罚和防刷分惩罚），优化器从手写的 sgd 换成 <code>torch.optim.Adam</code>，另外多了一步“梯度裁剪”，防止梯度太大把参数推飞（第 17 天讲循环网络时会学）。</p></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.2.5</span><h3>练习（原书）</h3></div>
+    <div class="prose"><p><b>练习 1</b>：把权重初始化为 0，还能训练吗？改下面的初始化再训练。（对线性回归可以，因为每个权重的梯度都不同；学到多层感知机时会看到，多层网络全部初始化为 0 就会出问题。）</p></div>
+    <div class="cell"><textarea>w = torch.zeros(2, 1, requires_grad=True)
+b = torch.zeros(1, requires_grad=True)
+for epoch in range(3):
+    for X, y in data_iter(batch_size, features, labels):
+        l = squared_loss(linreg(X, w, b), y)
+        l.sum().backward()
+        sgd([w, b], 0.03, batch_size)
+    with torch.no_grad():
+        print(f'epoch {epoch + 1}, loss {float(squared_loss(linreg(features, w, b), labels).mean()):f}')
+w.reshape(-1), b</textarea></div>
+    <div class="prose"><p><b>练习 5</b>：为什么 <code>squared_loss</code> 里要 reshape？y_hat 的形状是 (10, 1)，y 的形状是 (10,)。不 reshape 直接相减，广播会把它们扩展成 (10, 10)，不报错，但算出来的是 100 个两两相减的差，损失完全错了：</p></div>
+    <div class="cell"><textarea>y_hat = torch.ones(10, 1)
+y = torch.zeros(10)
+(y_hat - y).shape, (y_hat - y.reshape(y_hat.shape)).shape</textarea></div>
+    <p class="note">这是最难发现的一类 bug：程序不报错，只是结果不对。调试时多打印 <code>.shape</code>，就是为了抓这种问题。</p>
+    <div class="prose"><p><b>练习 6</b>：试试不同的学习率，看损失下降得快还是慢。把 <code>lr</code> 改成 0.001、0.1、1 或 3 试试；太大时损失会变成 nan（发散）。</p></div>
+    <div class="cell"><textarea>lr = 0.001
+w = torch.normal(0, 0.01, size=(2,1), requires_grad=True)
+b = torch.zeros(1, requires_grad=True)
+for epoch in range(3):
+    for X, y in data_iter(batch_size, features, labels):
+        l = squared_loss(linreg(X, w, b), y)
+        l.sum().backward()
+        sgd([w, b], lr, batch_size)
+    with torch.no_grad():
+        print(f'lr {lr}, epoch {epoch + 1}, loss {float(squared_loss(linreg(features, w, b), labels).mean()):f}')</textarea></div>
+    <div class="prose"><p><b>练习 7</b>：样本数不能被批量大小整除时，<code>data_iter</code> 会怎样？1000 个样本、批量大小 300：</p></div>
+    <div class="cell"><textarea>[X.shape[0] for X, y in data_iter(300, features, labels)]</textarea></div>
+    <div class="prose"><p>最后一批只有 100 个。因为用了 <code>min(i + batch_size, num_examples)</code>，不会越界。</p></div>
+    <div class="qa">
+      <details><summary><b>练习 2</b>：给电压和电流的关系建模，自动微分能用来学参数吗？</summary><p>能。只要模型是由可求导的运算搭成的（比如欧姆定律 V = I·R，R 是要学的参数），定义平方损失，<code>backward()</code> 就能求出对 R 的梯度，用 SGD 更新。自动微分不关心模型的物理意义，只要计算图里每一步都能求导。</p></details>
+      <details><summary><b>练习 4</b>：计算二阶导数会有什么问题？怎么解决？</summary><p>二阶导数要对“求导这个过程”再求一次导，计算图会变大，花的时间和内存更多；参数很多时，完整的二阶导数矩阵（海森矩阵）有“参数个数的平方”那么多个数，根本存不下。PyTorch 里求二阶导要在第一次求导时写 <code>create_graph=True</code>。实际中常用只算“海森矩阵乘一个向量”这类近似方法。</p></details>
+    </div>
+  </div>
+</section>
+
+<section class="part">
+  <div class="part-h"><div class="eyebrow">今日小结</div><h2>今天学会了吗？</h2></div>
+  <div class="two">
+    <div class="panel stack">
+      <ul class="check-list" data-day="5">
+        <li><label><input type="checkbox" data-k="c1">ŷ = Xw + b：X 是 [n, d]，w 是 [d, 1]，ŷ 是 [n, 1]</label></li>
+        <li><label><input type="checkbox" data-k="c2">我知道小批量、批量大小、学习率、epoch、超参数分别是什么</label></li>
+        <li><label><input type="checkbox" data-k="c3">我知道为什么用张量运算而不是 for 循环</label></li>
+        <li><label><input type="checkbox" data-k="c4">我能说出平方损失和正态分布噪声的关系</label></li>
+        <li><label><input type="checkbox" data-k="c5">我能默写训练循环的四步</label></li>
+        <li><label><input type="checkbox" data-k="c6">我知道形状对不上时广播会悄悄出错，要多打印 shape</label></li>
+      </ul>
+      <span class="small check-msg"></span>
+    </div>
+    <div class="panel stack">
+      <h3>明天（第 6 天）学什么</h3>
+      <p>原书 3.3 线性回归的简洁实现（用 <code>nn.Linear</code>、<code>nn.MSELoss</code>、<code>torch.optim.SGD</code> 和 DataLoader 把今天的代码缩成几行）和 3.4 softmax 回归（从“预测一个数”变成“预测属于哪一类”，交叉熵损失）。你论文 DKT 的输出层和 BCE 损失就在这一部分。</p>
+    </div>
+  </div>
+</section>
+</main>
+
+<main class="wrap day" id="day6" data-day="6" hidden>
+<section class="hero">
+  <div class="eyebrow">第 6 天 · 原书第 3.3 节 + 第 3.4 节</div>
+  <h1>用 PyTorch 的零件重写训练，再从回归走到分类</h1>
+  <p class="lead">昨天手写的数据读取、模型、损失和优化器，PyTorch 都有现成的：<code>DataLoader</code>、<code>nn.Linear</code>、<code>nn.MSELoss</code>、<code>torch.optim.SGD</code>。今天先用它们把训练缩成几行，再学分类：模型不再输出一个数，而是输出“属于每一类的概率”，用 softmax 和交叉熵。你论文的 DKT 输出“答对的概率”，用的就是这一套的两类版本。</p>
+  <div class="plan">
+    <div><b class="k">今天的时间</b>大约 65 分钟。第一部分 25 分钟，第二部分 40 分钟。</div>
+    <div><b class="k">学完你能</b><ul><li>用 nn、optim、DataLoader 写训练循环</li><li>访问和初始化网络参数</li><li>说清 softmax、交叉熵、独热编码</li><li>知道什么是校准，会算 ECE</li></ul></div>
+    <div><b class="k">和你的论文</b><ul><li>DKT 的 sigmoid + BCE 是 softmax + 交叉熵的两类特例</li><li>论文报告的 ECE 就是今天的校准误差</li></ul></div>
+  </div>
+</section>
+
+<section class="part" id="concise">
+  <div class="part-h"><div class="eyebrow">第一部分</div><h2>3.3 线性回归的简洁实现</h2><span class="src">对应原书第 3.3 节，代码全部来自原书 PyTorch 版</span></div>
+  <div class="prose"><p>数据迭代器、损失函数、优化器、神经网络层这些东西太常用，框架都替我们写好了。下面用它们重做昨天的线性回归，每一步对照昨天手写的版本。</p>
+    <div class="row"><button class="btn primary runAll" data-day="6">从头全部运行</button><span class="small muted runAllMsg"></span></div></div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.3.1</span><h3>生成数据集、读取数据集</h3></div>
+    <div class="cell"><textarea>from d2l import torch as d2l
+import numpy as np
+import torch
+from torch.utils import data</textarea></div>
+    <div class="prose"><p>昨天写的 <code>synthetic_data</code> 已经保存进 d2l 包，直接用：</p></div>
+    <div class="cell"><textarea>true_w = d2l.tensor([2, -3.4])
+true_b = 4.2
+features, labels = d2l.synthetic_data(true_w, true_b, 1000)</textarea></div>
+    <div class="prose"><p><code>TensorDataset</code> 把特征和标签配成对，<code>DataLoader</code> 负责打乱和切小批量，代替昨天的 <code>data_iter</code> 函数。<code>is_train=True</code> 时每个 epoch 都重新打乱。</p></div>
+    <div class="cell"><textarea>def load_array(data_arrays, batch_size, is_train=True):  #@save
+    """构造一个PyTorch数据迭代器"""
+    dataset = data.TensorDataset(*data_arrays)
+    return data.DataLoader(dataset, batch_size, shuffle=is_train)</textarea></div>
+    <div class="cell"><textarea>batch_size = 10
+data_iter = load_array((features, labels), batch_size)</textarea></div>
+    <div class="prose"><p><code>iter()</code> 把它变成迭代器，<code>next()</code> 取出第一个小批量。结果是一个列表，里面是 X 和 y 两个张量：</p></div>
+    <div class="cell"><textarea>next(iter(data_iter))</textarea></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.3.2</span><h3>定义模型、初始化参数</h3></div>
+    <div class="prose"><p><code>nn.Sequential</code> 把几层串起来，数据从第一层流到最后一层。这里只有一层全连接层 <code>nn.Linear(2, 1)</code>：输入 2 个特征，输出 1 个数。只有一层其实用不着 Sequential，但以后的模型都是多层的，先熟悉这个写法。</p></div>
+    <div class="cell"><textarea># nn是神经网络的缩写
+from torch import nn
+
+net = nn.Sequential(nn.Linear(2, 1))
+net</textarea></div>
+    <div class="prose"><p><code>net[0]</code> 取出第一层，<code>.weight</code> 和 <code>.bias</code> 是它的参数。注意权重的形状是 [1, 2]，即 [输出数, 输入数]，和昨天的 w [2, 1] 正好是转置关系：<code>nn.Linear</code> 内部算的是 X @ weight.T + bias。</p></div>
+    <div class="cell"><textarea>net[0].weight, net[0].bias</textarea></div>
+    <div class="prose"><p>按昨天的方式初始化：权重从 N(0, 0.01²) 取，偏置设成 0。方法名后面带下划线（<code>normal_</code>、<code>fill_</code>）表示“原地修改”，直接改掉原来的值。</p></div>
+    <div class="cell"><textarea>net[0].weight.data.normal_(0, 0.01)
+net[0].bias.data.fill_(0)</textarea></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.3.3</span><h3>定义损失函数和优化算法</h3></div>
+    <div class="prose"><p><code>nn.MSELoss</code> 是均方误差，默认返回所有样本损失的<b>平均值</b>（昨天手写的版本返回的是每个样本的损失，再自己 <code>.sum()</code>）。</p></div>
+    <div class="cell"><textarea>loss = nn.MSELoss()</textarea></div>
+    <div class="prose"><p><code>torch.optim.SGD</code> 是小批量随机梯度下降，告诉它要更新哪些参数（<code>net.parameters()</code>）和学习率：</p></div>
+    <div class="cell"><textarea>trainer = torch.optim.SGD(net.parameters(), lr=0.03)
+trainer</textarea></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.3.4</span><h3>训练</h3></div>
+    <div class="prose"><p>训练循环和昨天几乎一样，只是把手写的零件换成了框架的：<code>trainer.zero_grad()</code> 清零梯度，<code>l.backward()</code> 求梯度，<code>trainer.step()</code> 更新参数。</p></div>
+    <div class="cell"><textarea>num_epochs = 3
+for epoch in range(num_epochs):
+    for X, y in data_iter:
+        l = loss(net(X) ,y)
+        trainer.zero_grad()
+        l.backward()
+        trainer.step()
+    l = loss(net(features), labels)
+    print(f'epoch {epoch + 1}, loss {l:f}')</textarea></div>
+    <div class="cell"><textarea>w = net[0].weight.data
+print('w的估计误差：', true_w - d2l.reshape(w, true_w.shape))
+b = net[0].bias.data
+print('b的估计误差：', true_b - b)</textarea></div>
+    <div class="panel tblwrap"><table class="t">
+      <thead><tr><th>步骤</th><th>昨天手写（3.2）</th><th>今天用框架（3.3）</th></tr></thead>
+      <tbody>
+        <tr><td>读数据</td><td><code>data_iter(batch_size, features, labels)</code></td><td><code>data.DataLoader(TensorDataset(...), batch_size, shuffle=True)</code></td></tr>
+        <tr><td>模型</td><td><code>linreg(X, w, b)</code></td><td><code>nn.Sequential(nn.Linear(2, 1))</code></td></tr>
+        <tr><td>初始化</td><td><code>torch.normal(0, 0.01, size=(2,1), requires_grad=True)</code></td><td><code>net[0].weight.data.normal_(0, 0.01)</code></td></tr>
+        <tr><td>损失</td><td><code>squared_loss</code>，然后 <code>l.sum()</code></td><td><code>nn.MSELoss()</code>，已经是平均值</td></tr>
+        <tr><td>更新</td><td><code>sgd([w, b], lr, batch_size)</code></td><td><code>trainer.zero_grad(); l.backward(); trainer.step()</code></td></tr>
+      </tbody>
+    </table></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.3.5</span><h3>练习（原书）</h3></div>
+    <div class="prose"><p><b>练习 1</b>：如果把小批量的总损失换成平均损失，学习率要怎么改？昨天手写 sgd 时，损失是总和，所以在更新时除以了批量大小，两者其实等价。如果损失用总和、更新时又不除以批量大小，学习率就要相应除以批量大小，否则步子会大 10 倍。用 <code>reduction='sum'</code> 试试：lr = 0.03 时还能收敛，只是每一步大了 10 倍；把 lr 改成 0.3，就会发散成 nan。</p></div>
+    <div class="cell"><textarea>net = nn.Sequential(nn.Linear(2, 1))
+loss = nn.MSELoss(reduction='sum')
+trainer = torch.optim.SGD(net.parameters(), lr=0.03)
+for epoch in range(3):
+    for X, y in data_iter:
+        l = loss(net(X), y)
+        trainer.zero_grad()
+        l.backward()
+        trainer.step()
+    print(f'epoch {epoch + 1}, loss {nn.MSELoss()(net(features), labels):f}')</textarea></div>
+    <div class="prose"><p><b>练习 2</b>：用 Huber 损失代替平方损失。它在误差小时是平方，误差大时变成直线，所以受离群点影响小。PyTorch 里叫 <code>nn.HuberLoss</code>（原书的公式里 σ 对应 PyTorch 的 <code>nn.SmoothL1Loss(beta=σ)</code>，两者只差一个常数倍）。</p></div>
+    <div class="cell"><textarea>a = torch.tensor([[1.0], [2.0], [4.0]])
+c = torch.tensor([[1.5], [2.0], [1.0]])
+nn.MSELoss(reduction='none')(a, c), nn.HuberLoss(reduction='none')(a, c)</textarea></div>
+    <div class="prose"><p>第三个样本差了 3：平方损失给 9（3²），Huber 只给 2.5，离群点的影响小多了。<b>练习 3</b>：怎么访问梯度？参数的 <code>.grad</code> 就是：</p></div>
+    <div class="cell"><textarea>net = nn.Sequential(nn.Linear(2, 1))
+l = nn.MSELoss()(net(features), labels)
+l.backward()
+net[0].weight.grad, net[0].bias.grad</textarea></div>
+  </div>
+</section>
+
+<section class="part" id="softmax">
+  <div class="part-h"><div class="eyebrow">第二部分</div><h2>3.4 softmax 回归</h2><span class="src">对应原书第 3.4 节。这一节原书没有代码，下面的代码格是本课加的</span></div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.4.1</span><h3>分类问题和独热编码</h3></div>
+    <div class="prose"><p>回归问“有多少”，分类问“是哪一个”：这封邮件是不是垃圾邮件？这张图是猫、鸡还是狗？原书用一个例子：输入是 2×2 的灰度图，4 个像素就是 4 个特征，类别有猫、鸡、狗三种。</p>
+    <p>标签怎么表示？直接写成 1、2、3 会让模型以为类别之间有大小顺序（“狗 = 3 比猫 = 1 大”），这通常没有意义。常用的是<b>独热编码</b>：向量长度等于类别数，属于哪类哪一位就是 1，其他是 0。猫 = (1, 0, 0)，鸡 = (0, 1, 0)，狗 = (0, 0, 1)。第 2 天的 <code>get_dummies</code> 做的就是这件事。</p></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.4.2</span><h3>网络架构</h3></div>
+    <div class="prose"><p>每个类别要一个输出，每个输出都是 4 个输入的加权和再加偏置。所以有 3×4 = 12 个权重和 3 个偏置。写成矩阵：<b>o = Wx + b</b>，W 是 3×4。三个输出 o₁、o₂、o₃ 叫 <b>logit</b>（未规范化的预测，可以是任何实数）。和线性回归一样，这也是一层全连接层，所以 softmax 回归也是单层神经网络。</p>
+    <p>全连接层的参数很多：d 个输入、q 个输出就要 d×q 个权重。你论文 DKT 的输出层是 64 个输入、145 个输出（ASSISTments 的技能数），光这一层就有 64×145 + 145 = 9425 个参数。</p></div>
+    <div class="cell"><textarea>net = nn.Sequential(nn.Linear(4, 3))
+x = torch.tensor([[0.2, 0.9, 0.1, 0.5]])      # 一张 2×2 的图拉成 4 个数
+net(x), net[0].weight.shape, sum(p.numel() for p in net.parameters())</textarea></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.4.3</span><h3>softmax 运算</h3></div>
+    <div class="prose"><p>logit 不能直接当概率：它们可以是负数，加起来也不等于 1，违反第 4 天学的概率公理。<b>softmax</b> 把它们变成概率：先对每个数求 e 的幂（保证是正数），再除以总和（保证加起来是 1）：</p>
+    <p style="font-family:var(--f-mono);font-size:14px">ŷⱼ = exp(oⱼ) / Σₖ exp(oₖ)</p>
+    <p>它不改变大小顺序，所以预测哪一类时，看 logit 最大的那个就行。softmax 回归虽然用了非线性的 softmax，但输出仍由输入的仿射变换决定，所以它还是<b>线性模型</b>。</p></div>
+    <div class="cell"><textarea>o = torch.tensor([[1.0, 2.0, 3.0], [1.0, 1.0, 1.0]])
+exp_o = o.exp()
+exp_o / exp_o.sum(1, keepdim=True)          # 第 2 天学的 keepdim + 广播</textarea></div>
+    <div class="cell"><textarea>torch.softmax(o, dim=1), torch.softmax(o, dim=1).sum(1)</textarea></div>
+    <div class="panel stack" id="smLab">
+      <h4>softmax 调试台</h4>
+      <p class="small muted">拖动三个类别的 logit，看概率怎么变。选一个“真实类别”，下面会算出交叉熵损失和它对 logit 的梯度。“温度”是把 logit 先除以一个数再做 softmax：温度低，最大的那个更突出；温度高，概率更平均。调试台第 5 章生成文字时也有这个温度。</p>
+      <div class="row">
+        <label class="ctrl" for="smO1">猫的 logit <output id="smO1v">1.0</output><input type="range" id="smO1" min="-4" max="6" step="0.1" value="1"></label>
+        <label class="ctrl" for="smO2">鸡的 logit <output id="smO2v">2.0</output><input type="range" id="smO2" min="-4" max="6" step="0.1" value="2"></label>
+        <label class="ctrl" for="smO3">狗的 logit <output id="smO3v">3.0</output><input type="range" id="smO3" min="-4" max="6" step="0.1" value="3"></label>
+      </div>
+      <div class="row">
+        <label class="ctrl" for="smT">温度 <output id="smTv">1.0</output><input type="range" id="smT" min="0.1" max="5" step="0.1" value="1"></label>
+        <label class="ctrl" for="smY">真实类别
+          <select id="smY"><option value="0">猫</option><option value="1">鸡</option><option value="2" selected>狗</option></select></label>
+      </div>
+      <div class="bars" id="smBars"></div>
+      <div class="calc" id="smCalc"></div>
+    </div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.4.4</span><h3>小批量的矢量化</h3></div>
+    <div class="prose"><p>一个小批量 X 的形状是 [n, d]（n 个样本，d 个特征），权重 W 是 [d, q]，偏置 b 是 [1, q]，q 是类别数。<b>O = XW + b</b>，<b>Ŷ = softmax(O)</b>，O 和 Ŷ 都是 [n, q]。softmax 按行做：每一行是一个样本，每行的 q 个数变成这个样本属于各类的概率。</p></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.4.5</span><h3>损失函数：交叉熵</h3></div>
+    <div class="prose"><p>还是用第 5 天的极大似然：让模型给真实标签的概率尽量大，等价于让负对数似然尽量小。对一个样本，如果真实类别是 y，损失就是 <b>l = −log ŷ_y</b>，也就是“模型给正确答案的概率”取对数再取负。这叫<b>交叉熵损失</b>。模型给正确答案 100% 时损失是 0；只给 1% 时损失是 4.6。</p>
+    <p>下面 2 个样本、3 个类别。第 1 个样本真实类别是 0，模型只给了 0.1；第 2 个是类别 2，模型给了 0.5。<code>y_hat[[0, 1], y]</code> 这种写法一次取出每一行“正确类别”那一格：</p></div>
+    <div class="cell"><textarea>y_hat = torch.tensor([[0.1, 0.3, 0.6], [0.3, 0.2, 0.5]])
+y = torch.tensor([0, 2])
+y_hat[[0, 1], y]</textarea></div>
+    <div class="cell"><textarea>-torch.log(y_hat[[0, 1], y])</textarea></div>
+    <div class="prose"><p>PyTorch 的 <code>nn.CrossEntropyLoss</code> 直接吃 logit（不用自己先做 softmax），内部一起算 softmax 和 −log，数值更稳定：</p></div>
+    <div class="cell"><textarea>logits = torch.tensor([[2.0, 1.0, 0.1], [0.5, 2.5, 0.3]], requires_grad=True)
+targets = torch.tensor([0, 1])
+l = nn.CrossEntropyLoss()(logits, targets)
+l</textarea></div>
+    <div class="prose"><p>交叉熵对 logit 的梯度特别简单：<b>softmax(o) − y</b>，也就是“预测的概率减去独热的真实标签”。预测得越准，梯度越小。验证一下（PyTorch 的损失默认对 2 个样本取了平均，所以梯度要除以 2）：</p></div>
+    <div class="cell"><textarea>l.backward()
+logits.grad, (torch.softmax(logits.detach(), dim=1) - torch.tensor([[1.0, 0, 0], [0, 1.0, 0]])) / 2</textarea></div>
+  </div>
+
+  <div class="blk" id="bce"><div class="blk-h"><span class="n">3.4.6</span><h3>两个类别时：sigmoid 和 BCE（你论文用的就是这个）</h3></div>
+    <div class="prose"><p>只有两类（比如“答对”和“答错”）时，只需要一个 logit z：答对的概率 = <b>sigmoid(z) = 1 / (1 + e⁻ᶻ)</b>。它其实就是两类的 softmax：把两个 logit 设成 0 和 z，softmax 出来第二类的概率正好是 sigmoid(z)：</p></div>
+    <div class="cell"><textarea>z = torch.tensor([2.0, -1.0, 0.5])
+two = torch.stack([torch.zeros(3), z], dim=1)
+torch.softmax(two, dim=1)[:, 1], torch.sigmoid(z)</textarea></div>
+    <div class="prose"><p>对应的交叉熵叫<b>二元交叉熵（BCE）</b>：l = −[y·log p + (1 − y)·log(1 − p)]。你论文第 3 节公式 (1) 写的 L_BCE 就是这个，y 是学生下一题的真实对错，p 是 DKT 预测的答对概率。</p></div>
+    <div class="cell"><textarea>p = torch.tensor([0.9, 0.2, 0.6])          # 模型预测的答对概率
+t = torch.tensor([1.0, 0.0, 1.0])          # 实际：对、错、对
+nn.BCELoss()(p, t), -(t * torch.log(p) + (1 - t) * torch.log(1 - p)).mean()</textarea></div>
+    <div class="prose"><p>实际写代码时更常用 <code>BCEWithLogitsLoss</code>，直接吃 logit，内部再做 sigmoid，数值更稳定：</p></div>
+    <div class="cell"><textarea>nn.BCEWithLogitsLoss()(z, t), nn.BCELoss()(torch.sigmoid(z), t)</textarea></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.4.7</span><h3>信息论基础：熵和惊异</h3></div>
+    <div class="prose"><p>原书从信息论的角度解释交叉熵。一个结果发生的概率是 P，看到它时的<b>惊异</b>是 −log P：越罕见的事越让人惊讶。<b>熵</b> H(P) = Σ −P(j) log P(j) 是平均惊异，衡量一个分布有多“不确定”。用以 2 为底的对数，单位是比特。四个结果完全平均时熵最大，是 2 比特；越集中熵越小：</p></div>
+    <div class="cell"><textarea>q = torch.tensor([0.25, 0.25, 0.25, 0.25])
+r = torch.tensor([0.7, 0.1, 0.1, 0.1])
+H = lambda p: -(p * torch.log2(p)).sum()
+H(q), H(r)</textarea></div>
+    <div class="prose"><p><b>交叉熵</b> H(P, Q) = Σ −P(j) log Q(j)：真实分布是 P，你却按自己以为的分布 Q 去预期，得到的平均惊异。当 Q = P 时最小，就等于熵。所以最小化交叉熵，就是让模型的预测分布 Q 尽量接近数据的真实分布 P。上面的交叉熵损失是它在“真实分布是独热向量”时的特例。</p></div>
+  </div>
+
+  <div class="blk" id="calib"><div class="blk-h"><span class="n">3.4.8</span><h3>校准：模型说 70%，是不是真有 70%</h3></div>
+    <div class="prose"><p>原书在讲 softmax 时提到一个性质：在模型输出 0.5 的所有样本里，应该刚好有一半真的属于那一类。这叫<b>校准</b>（calibration）。衡量校准的常用指标是 <b>ECE</b>（期望校准误差）：把预测按置信度分成 10 个区间，每个区间里比较“平均预测概率”和“实际正确率”的差，再按样本数加权平均。你论文表 1 里的 ECE（Safe-DFKT-AG 1.21%，DKT 0.94%）就是这样算的，用的正是 10 个等宽区间。</p></div>
+    <div class="panel stack" id="calLab">
+      <h4>可靠性图</h4>
+      <p class="small muted">下面模拟一个分类器：每个样本有一个真实的答对概率，模型报出的置信度可能偏高（过度自信）或偏低。柱子是每个区间的实际正确率，虚线是“完美校准”。柱子比虚线低，说明模型说得比实际更有把握。</p>
+      <div class="row">
+        <label class="ctrl" for="calK">自信程度 <output id="calKv">1.0（校准良好）</output><input type="range" id="calK" min="0.4" max="3" step="0.1" value="1"></label>
+        <button class="btn" id="calNew">换一批样本</button>
+      </div>
+      <div class="two"><div class="cv" id="calHost"><canvas id="calCv" aria-label="可靠性图：每个置信度区间的实际正确率"></canvas></div><div class="calc" id="calCalc"></div></div>
+      <p class="note">你论文的一个结论是：Safe-DFKT-AG 的校准几乎没有变差（模拟器里 1.64% 对 1.44%，差异不显著），重新校准也只补回了 2.9% 的决策差距。所以教学效果差不是校准的问题。今天学完，你就能看懂这句话里每个词了。</p>
+    </div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.4.9</span><h3>模型预测和评估</h3></div>
+    <div class="prose"><p>训练好以后，给一个新样本，选概率最大的那一类作为预测。预测对的比例叫<b>精度</b>（accuracy）。明天在 Fashion-MNIST 服装图片上，会真正训练一个 softmax 回归并计算精度。</p></div>
+    <div class="cell"><textarea>from torch.nn import functional as F
+F.softmax(o, dim=1).argmax(), o.argmax()</textarea></div>
+  </div>
+</section>
+
+<section class="part">
+  <div class="part-h"><div class="eyebrow">今日小结</div><h2>今天学会了吗？</h2></div>
+  <div class="two">
+    <div class="panel stack">
+      <ul class="check-list" data-day="6">
+        <li><label><input type="checkbox" data-k="c1">我会用 DataLoader、nn.Sequential、nn.Linear、nn.MSELoss、optim.SGD 写训练循环</label></li>
+        <li><label><input type="checkbox" data-k="c2">我知道 nn.Linear 的 weight 形状是 [输出数, 输入数]</label></li>
+        <li><label><input type="checkbox" data-k="c3">我知道独热编码、logit、softmax 分别是什么</label></li>
+        <li><label><input type="checkbox" data-k="c4">交叉熵损失 = −log(模型给正确答案的概率)，梯度是 softmax − y</label></li>
+        <li><label><input type="checkbox" data-k="c5">两类时用 sigmoid + BCE，我论文的 DKT 就是这样</label></li>
+        <li><label><input type="checkbox" data-k="c6">我知道校准和 ECE 是什么</label></li>
+      </ul>
+      <span class="small check-msg"></span>
+    </div>
+    <div class="panel stack">
+      <h3>明天（第 7 天）学什么</h3>
+      <p>原书 3.5 图像分类数据集（Fashion-MNIST）、3.6 softmax 回归的从零实现、3.7 简洁实现。在真实的服装图片上训练第一个分类器，看它的精度怎么一个 epoch 一个 epoch地涨上去。</p>
+    </div>
+  </div>
+</section>
+</main>
+
+<main class="wrap day" id="day7" data-day="7" hidden>
+<section class="hero">
+  <div class="eyebrow">第 7 天 · 原书第 3.5 节 + 第 3.6 节 + 第 3.7 节</div>
+  <h1>第一个图像分类器：认出 10 种衣服</h1>
+  <p class="lead">今天用真实的图片：Fashion-MNIST，28×28 像素的灰度服装照片，分 10 类。先学怎么读取和查看图像数据，再从零写一个 softmax 回归分类器，训练、评估、预测，最后用 PyTorch 的零件重写一遍，并弄清楚为什么要把 softmax 和交叉熵合在一起算。</p>
+  <div class="plan">
+    <div><b class="k">今天的时间</b>大约 80 分钟，分三部分。训练那几格各要几秒钟。</div>
+    <div><b class="k">学完你能</b><ul><li>读取图像数据集，知道图片也是张量</li><li>写出完整的分类训练和评估流程</li><li>算精度，看懂训练曲线</li><li>知道 softmax 的数值溢出问题怎么避免</li></ul></div>
+    <div><b class="k">和你的论文</b><ul><li>“只在训练集上训练，在测试集上评估”就是论文的 80/20 划分</li><li><code>evaluate_accuracy</code> 对应论文算 AUC、ECE 的评估函数</li></ul></div>
+  </div>
+  <p class="note" id="fmStatus">图片数据正在解压……</p>
+</section>
+
+<section class="part" id="fashion">
+  <div class="part-h"><div class="eyebrow">第一部分</div><h2>3.5 图像分类数据集</h2><span class="src">对应原书第 3.5 节，代码来自原书 PyTorch 版</span></div>
+  <div class="prose"><p>MNIST（手写数字）太简单了，原书改用更难一些的 Fashion-MNIST。完整数据集有 6 万张训练图和 1 万张测试图。<b>这个网页内嵌了训练集的前 6000 张和测试集的前 1000 张</b>（每类大约 600 张和 100 张），图片和标签都是原始数据，只是少一些，下面的代码会显示这个数量。</p>
+    <div class="row"><button class="btn primary runAll" data-day="7">从头全部运行</button><span class="small muted runAllMsg"></span></div></div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.5.1</span><h3>读取数据集</h3></div>
+    <div class="cell"><textarea>%matplotlib inline
+from d2l import torch as d2l
+import torch
+import torchvision
+from torchvision import transforms
+from torch.utils import data
+d2l.use_svg_display()</textarea></div>
+    <div class="prose"><p><code>transforms.ToTensor()</code> 把图片变成 32 位浮点张量，并除以 255，让像素值落在 0 到 1 之间。<code>train=True</code> 取训练集，<code>train=False</code> 取测试集。测试集只用来评估，不参与训练。</p></div>
+    <div class="cell"><textarea># 通过ToTensor实例将图像数据从PIL类型变换成32位浮点数格式，
+# 并除以255使得所有像素的数值均在0～1之间
+trans = transforms.ToTensor()
+mnist_train = torchvision.datasets.FashionMNIST(
+    root="../data", train=True, transform=trans, download=True)
+mnist_test = torchvision.datasets.FashionMNIST(
+    root="../data", train=False, transform=trans, download=True)</textarea></div>
+    <div class="cell"><textarea>len(mnist_train), len(mnist_test)</textarea></div>
+    <div class="prose"><p>每张图是 1 个通道（灰度）、高 28、宽 28，所以形状是 [1, 28, 28]。<code>mnist_train[0]</code> 是 (图片, 标签) 这样一对，<code>[0][0]</code> 取出图片：</p></div>
+    <div class="cell"><textarea>mnist_train[0][0].shape</textarea></div>
+    <div class="panel stack" id="pixLab">
+      <h4>一张图就是一个 28×28 的数字表格</h4>
+      <p class="small muted">拖动滑块换一张图。把鼠标放到图上，看那个像素的值（0 是黑，1 是白）。右边那条是把 28×28 拉平成 784 个数以后的样子，softmax 回归吃进去的就是这 784 个数。</p>
+      <div class="row"><label class="ctrl" for="pixI">第几张（训练集） <output id="pixIv">0</output><input type="range" id="pixI" min="0" max="5999" value="0"></label><span class="small" id="pixLab2"></span></div>
+      <div class="pixwrap"><canvas id="pixCv" width="280" height="280" aria-label="放大的 28×28 图片"></canvas><div class="stack" style="flex:1 1 220px;min-width:0"><div class="calc" id="pixCalc">把鼠标放到左边的图上。</div><canvas id="pixStrip" height="40" aria-label="拉平成 784 个数"></canvas><span class="small muted">↑ 拉平后的 784 个像素（每行 28 个首尾相接）</span></div></div>
+    </div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.5.2</span><h3>看看这些图</h3></div>
+    <div class="prose"><p>10 个类别是：T 恤、裤子、套衫、连衣裙、外套、凉鞋、衬衫、运动鞋、包、短靴。标签存的是 0 到 9 的数字，下面的函数把数字换成名字：</p></div>
+    <div class="cell"><textarea>def get_fashion_mnist_labels(labels):  #@save
+    """返回Fashion-MNIST数据集的文本标签"""
+    text_labels = ['t-shirt', 'trouser', 'pullover', 'dress', 'coat',
+                   'sandal', 'shirt', 'sneaker', 'bag', 'ankle boot']
+    return [text_labels[int(i)] for i in labels]</textarea></div>
+    <div class="prose"><p>画图函数：<code>subplots</code> 开一个网格，每格用 <code>imshow</code> 画一张图。网页里的 matplotlib 是简化版，配色仿照 matplotlib 默认的 viridis。</p></div>
+    <div class="cell"><textarea>def show_images(imgs, num_rows, num_cols, titles=None, scale=1.5):  #@save
+    """绘制图像列表"""
+    figsize = (num_cols * scale, num_rows * scale)
+    _, axes = d2l.plt.subplots(num_rows, num_cols, figsize=figsize)
+    axes = axes.flatten()
+    for i, (ax, img) in enumerate(zip(axes, imgs)):
+        if torch.is_tensor(img):
+            # 图片张量
+            ax.imshow(img.numpy())
+        else:
+            # PIL图片
+            ax.imshow(img)
+        ax.axes.get_xaxis().set_visible(False)
+        ax.axes.get_yaxis().set_visible(False)
+        if titles:
+            ax.set_title(titles[i])
+    return axes</textarea></div>
+    <div class="cell"><textarea>X, y = next(iter(data.DataLoader(mnist_train, batch_size=18)))
+show_images(X.reshape(18, 28, 28), 2, 9, titles=get_fashion_mnist_labels(y));</textarea></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.5.3</span><h3>读取小批量，整合成一个函数</h3></div>
+    <div class="prose"><p>用 DataLoader 每次读 256 张，打乱顺序。<code>num_workers=4</code> 表示用 4 个进程并行读（网页里没有多进程，这个参数会被忽略）：</p></div>
+    <div class="cell"><textarea>batch_size = 256
+
+def get_dataloader_workers():  #@save
+    """使用4个进程来读取数据"""
+    return 4
+
+train_iter = data.DataLoader(mnist_train, batch_size, shuffle=True,
+                             num_workers=get_dataloader_workers())</textarea></div>
+    <div class="prose"><p>读完整个训练集要多久？（6000 张、24 个小批量。数据加载太慢会拖慢训练，这是原书练习 1、2 讨论的内容。）</p></div>
+    <div class="cell"><textarea>timer = d2l.Timer()
+for X, y in train_iter:
+    continue
+f'{timer.stop():.2f} sec'</textarea></div>
+    <div class="prose"><p>把读取训练集和测试集的代码整合成 <code>load_data_fashion_mnist</code>，以后各章都用它。<code>resize</code> 参数可以把图片缩放成别的大小，后面讲卷积网络时会用到：</p></div>
+    <div class="cell"><textarea>def load_data_fashion_mnist(batch_size, resize=None):  #@save
+    """下载Fashion-MNIST数据集，然后将其加载到内存中"""
+    trans = [transforms.ToTensor()]
+    if resize:
+        trans.insert(0, transforms.Resize(resize))
+    trans = transforms.Compose(trans)
+    mnist_train = torchvision.datasets.FashionMNIST(
+        root="../data", train=True, transform=trans, download=True)
+    mnist_test = torchvision.datasets.FashionMNIST(
+        root="../data", train=False, transform=trans, download=True)
+    return (data.DataLoader(mnist_train, batch_size, shuffle=True,
+                            num_workers=get_dataloader_workers()),
+            data.DataLoader(mnist_test, batch_size, shuffle=False,
+                            num_workers=get_dataloader_workers()))</textarea></div>
+    <div class="cell"><textarea>train_iter, test_iter = load_data_fashion_mnist(32, resize=64)
+for X, y in train_iter:
+    print(X.shape, X.dtype, y.shape, y.dtype)
+    break</textarea></div>
+    <p class="note">形状 [32, 1, 64, 64] 是 [批量, 通道, 高, 宽]。这是图像数据的标准排法，以后卷积网络的每一层都按这个顺序读形状。</p>
+  </div>
+</section>
+
+<section class="part" id="smscratch">
+  <div class="part-h"><div class="eyebrow">第二部分</div><h2>3.6 softmax 回归的从零开始实现</h2><span class="src">对应原书第 3.6 节，代码来自原书 PyTorch 版</span></div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.6.1</span><h3>初始化参数、定义 softmax 和模型</h3></div>
+    <div class="cell"><textarea>from d2l import torch as d2l
+import torch
+from IPython import display
+
+batch_size = 256
+train_iter, test_iter = d2l.load_data_fashion_mnist(batch_size)</textarea></div>
+    <div class="prose"><p>每张图拉平成 784 个数，输出 10 类，所以权重 W 是 [784, 10]，偏置 b 是 [10]：</p></div>
+    <div class="cell"><textarea>num_inputs = 784
+num_outputs = 10
+
+W = torch.normal(0, 0.01, size=(num_inputs, num_outputs), requires_grad=True)
+b = torch.zeros(num_outputs, requires_grad=True)</textarea></div>
+    <div class="prose"><p>复习第 2 天的按轴求和（<code>d2l.reduce_sum</code> 就是 <code>.sum</code>）：</p></div>
+    <div class="cell"><textarea>X = d2l.tensor([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
+d2l.reduce_sum(X, 0, keepdim=True), d2l.reduce_sum(X, 1, keepdim=True)</textarea></div>
+    <div class="prose"><p>按定义实现 softmax：每个数取 exp，再除以本行的和。</p></div>
+    <div class="cell"><textarea>def softmax(X):
+    X_exp = d2l.exp(X)
+    partition = d2l.reduce_sum(X_exp, 1, keepdim=True)
+    return X_exp / partition  # 这里应用了广播机制</textarea></div>
+    <div class="cell"><textarea>X = d2l.normal(0, 1, (2, 5))
+X_prob = softmax(X)
+X_prob, d2l.reduce_sum(X_prob, 1)</textarea></div>
+    <div class="prose"><p>模型：先把每张图 reshape 成 784 个数，乘 W 加 b，再做 softmax。</p></div>
+    <div class="cell"><textarea>def net(X):
+    return softmax(d2l.matmul(d2l.reshape(X, (-1, W.shape[0])), W) + b)</textarea></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.6.2</span><h3>损失函数和分类精度</h3></div>
+    <div class="prose"><p>昨天学过的写法，取出每个样本“正确类别”的预测概率：</p></div>
+    <div class="cell"><textarea>y = d2l.tensor([0, 2])
+y_hat = d2l.tensor([[0.1, 0.3, 0.6], [0.3, 0.2, 0.5]])
+y_hat[[0, 1], y]</textarea></div>
+    <div class="cell"><textarea>def cross_entropy(y_hat, y):
+    return - d2l.log(y_hat[range(len(y_hat)), y])
+
+cross_entropy(y_hat, y)</textarea></div>
+    <div class="prose"><p><b>精度</b>：预测对的比例。先用 argmax 选出概率最大的类别，再和真实标签比较。上面两个样本，第一个预测成类别 2（错），第二个预测成类别 2（对），精度 0.5：</p></div>
+    <div class="cell"><textarea>def accuracy(y_hat, y):  #@save
+    """计算预测正确的数量"""
+    if len(y_hat.shape) > 1 and y_hat.shape[1] > 1:
+        y_hat = d2l.argmax(y_hat, axis=1)
+    cmp = d2l.astype(y_hat, y.dtype) == y
+    return float(d2l.reduce_sum(d2l.astype(cmp, y.dtype)))</textarea></div>
+    <div class="cell"><textarea>accuracy(y_hat, y) / len(y)</textarea></div>
+    <div class="prose"><p>在整个数据集上评估精度。<code>Accumulator</code> 是一个累加器，边算边加“预测对的个数”和“总个数”。<code>__getitem__</code> 让它可以用 <code>metric[0]</code> 这样的下标访问。</p></div>
+    <div class="cell"><textarea>def evaluate_accuracy(net, data_iter):  #@save
+    """计算在指定数据集上模型的精度"""
+    if isinstance(net, torch.nn.Module):
+        net.eval()  # 将模型设置为评估模式
+    metric = Accumulator(2)  # 正确预测数、预测总数
+    with torch.no_grad():
+        for X, y in data_iter:
+            metric.add(accuracy(net(X), y), d2l.size(y))
+    return metric[0] / metric[1]</textarea></div>
+    <div class="cell"><textarea>class Accumulator:  #@save
+    """在n个变量上累加"""
+    def __init__(self, n):
+        self.data = [0.0] * n
+
+    def add(self, *args):
+        self.data = [a + float(b) for a, b in zip(self.data, args)]
+
+    def reset(self):
+        self.data = [0.0] * len(self.data)
+
+    def __getitem__(self, idx):
+        return self.data[idx]</textarea></div>
+    <div class="prose"><p>还没训练，权重是随机的，精度应该在 0.1 左右（10 类瞎猜）：</p></div>
+    <div class="cell"><textarea>evaluate_accuracy(net, test_iter)</textarea></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.6.3</span><h3>训练</h3></div>
+    <div class="prose"><p>一个 epoch 的训练函数。它兼容两种优化器：PyTorch 自带的（第 6 天）和自己写的（第 5 天的 sgd）。返回这个 epoch 的平均损失和训练精度。</p></div>
+    <div class="cell"><textarea>def train_epoch_ch3(net, train_iter, loss, updater):  #@save
+    """训练模型一个迭代周期（定义见第3章）"""
+    # 将模型设置为训练模式
+    if isinstance(net, torch.nn.Module):
+        net.train()
+    # 训练损失总和、训练准确度总和、样本数
+    metric = Accumulator(3)
+    for X, y in train_iter:
+        # 计算梯度并更新参数
+        y_hat = net(X)
+        l = loss(y_hat, y)
+        if isinstance(updater, torch.optim.Optimizer):
+            # 使用PyTorch内置的优化器和损失函数
+            updater.zero_grad()
+            l.mean().backward()
+            updater.step()
+        else:
+            # 使用定制的优化器和损失函数
+            l.sum().backward()
+            updater(X.shape[0])
+        metric.add(float(l.sum()), accuracy(y_hat, y), y.numel())
+    # 返回训练损失和训练精度
+    return metric[0] / metric[2], metric[1] / metric[2]</textarea></div>
+    <div class="prose"><p><code>Animator</code> 在训练过程中画曲线。原书在 Jupyter 里会一边训练一边刷新这张图；网页里训练完一次画出来。</p></div>
+    <div class="cell"><textarea>class Animator:  #@save
+    """在动画中绘制数据"""
+    def __init__(self, xlabel=None, ylabel=None, legend=None, xlim=None,
+                 ylim=None, xscale='linear', yscale='linear',
+                 fmts=('-', 'm--', 'g-.', 'r:'), nrows=1, ncols=1,
+                 figsize=(3.5, 2.5)):
+        # 增量地绘制多条线
+        if legend is None:
+            legend = []
+        d2l.use_svg_display()
+        self.fig, self.axes = d2l.plt.subplots(nrows, ncols, figsize=figsize)
+        if nrows * ncols == 1:
+            self.axes = [self.axes, ]
+        # 使用lambda函数捕获参数
+        self.config_axes = lambda: d2l.set_axes(
+            self.axes[0], xlabel, ylabel, xlim, ylim, xscale, yscale, legend)
+        self.X, self.Y, self.fmts = None, None, fmts
+
+    def add(self, x, y):
+        # 向图表中添加多个数据点
+        if not hasattr(y, "__len__"):
+            y = [y]
+        n = len(y)
+        if not hasattr(x, "__len__"):
+            x = [x] * n
+        if not self.X:
+            self.X = [[] for _ in range(n)]
+        if not self.Y:
+            self.Y = [[] for _ in range(n)]
+        for i, (a, b) in enumerate(zip(x, y)):
+            if a is not None and b is not None:
+                self.X[i].append(a)
+                self.Y[i].append(b)
+        self.axes[0].cla()
+        for x, y, fmt in zip(self.X, self.Y, self.fmts):
+            self.axes[0].plot(x, y, fmt)
+        self.config_axes()
+        display.display(self.fig)
+        display.clear_output(wait=True)</textarea></div>
+    <div class="prose"><p>完整的训练函数：每个 epoch 训练一遍，再在测试集上评估一次，把三个数画到图上。最后的 <code>assert</code> 检查训练效果是否达标。</p></div>
+    <div class="cell"><textarea>def train_ch3(net, train_iter, test_iter, loss, num_epochs, updater):  #@save
+    """训练模型（定义见第3章）"""
+    animator = Animator(xlabel='epoch', xlim=[1, num_epochs], ylim=[0.3, 0.9],
+                        legend=['train loss', 'train acc', 'test acc'])
+    for epoch in range(num_epochs):
+        train_metrics = train_epoch_ch3(net, train_iter, loss, updater)
+        test_acc = evaluate_accuracy(net, test_iter)
+        animator.add(epoch + 1, train_metrics + (test_acc,))
+    train_loss, train_acc = train_metrics
+    # 原书是 train_loss < 0.5。本页只内嵌了 6000 张训练图（原书 60000 张），
+    # 每个 epoch 的更新次数少 10 倍，10 个 epoch 后损失约 0.59，所以阈值放宽到 0.65
+    assert train_loss < 0.65, train_loss
+    assert train_acc <= 1 and train_acc > 0.7, train_acc
+    assert test_acc <= 1 and test_acc > 0.7, test_acc</textarea></div>
+    <div class="prose"><p>用第 5 天的 <code>sgd</code> 当优化器，学习率 0.1，训练 10 个 epoch：</p></div>
+    <div class="cell"><textarea>lr = 0.1
+
+def updater(batch_size):
+    return d2l.sgd([W, b], lr, batch_size)</textarea></div>
+    <div class="cell" data-manual="训练 10 个 epoch，大约需要 3 到 10 秒，期间页面会暂时卡住"><textarea>num_epochs = 10
+train_ch3(net, train_iter, test_iter, cross_entropy, num_epochs, updater)
+print(f'测试集精度：{evaluate_accuracy(net, test_iter):.3f}')</textarea></div>
+    <p class="note">原书用 6 万张图训练，10 个 epoch 后测试精度大约 0.83。这里只有 6000 张，测试精度大约 0.79。曲线里训练精度（紫色虚线）和测试精度（绿色点划线）很接近，说明还没有过拟合。</p>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.6.4</span><h3>预测，以及模型学到了什么</h3></div>
+    <div class="prose"><p>拿测试集的前 6 张图预测，每张图上面一行是真实标签，下面一行是预测：</p></div>
+    <div class="cell" data-manual="要先运行上面的训练格"><textarea>def predict_ch3(net, test_iter, n=6):  #@save
+    """预测标签（定义见第3章）"""
+    for X, y in test_iter:
+        break
+    trues = d2l.get_fashion_mnist_labels(y)
+    preds = d2l.get_fashion_mnist_labels(d2l.argmax(net(X), axis=1))
+    titles = [true +'\n' + pred for true, pred in zip(trues, preds)]
+    d2l.show_images(
+        d2l.reshape(X[0:n], (n, 28, 28)), 1, n, titles=titles[0:n])
+
+predict_ch3(net, test_iter)</textarea></div>
+    <div class="prose"><p>这一格不在原书里：W 的每一列有 784 个数，对应一个类别。把每列重新排成 28×28 画出来，就是模型给每一类学到的“模板”：亮的地方是“这里有东西就更像这一类”。能隐约看出裤子的两条腿、包的轮廓。</p></div>
+    <div class="cell" data-manual="要先运行上面的训练格"><textarea>d2l.show_images(W.detach().T.reshape(10, 28, 28), 2, 5,
+                titles=d2l.get_fashion_mnist_labels(range(10)));</textarea></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.6.5</span><h3>练习（原书）</h3></div>
+    <div class="prose"><p><b>练习 1、2、3</b>：按定义写的 softmax 和交叉熵有什么问题？试试 exp(50)，以及 log(0)：</p></div>
+    <div class="cell"><textarea>torch.exp(torch.tensor([50.0, 100.0]))</textarea></div>
+    <div class="cell"><textarea>big = torch.tensor([[100.0, 1000.0]])
+softmax(big), torch.softmax(big, dim=1)</textarea></div>
+    <div class="prose"><p>32 位浮点数最大约 3.4×10³⁸，exp(100) 已经超出，变成 inf，inf ÷ inf 就成了 nan。PyTorch 自带的 softmax 先减去每行的最大值再算，不会溢出。交叉熵里还有 log：模型给正确答案的概率如果是 0，log(0) = −inf：</p></div>
+    <div class="cell"><textarea>from torch import nn
+p = torch.tensor([0.0, 0.5])
+torch.log(p), nn.CrossEntropyLoss()(big, torch.tensor([0]))</textarea></div>
+    <div class="prose"><p>解决办法见第三部分：把 softmax 和 log 合在一起算。</p></div>
+    <div class="qa">
+      <details><summary><b>练习 4</b>：返回概率最大的类别总是最好的吗？比如医疗诊断？</summary><p>不一定。第 1 天的毒蘑菇例子说过：要看预期损失，不是只看概率。诊断时把病人误判为健康的代价远大于反过来，即使“有病”的概率只有 30%，也可能应该按有病处理。你的论文讲的也是这件事：预测准（AUC 高）不等于决策好。</p></details>
+      <details><summary><b>练习 5</b>：用 softmax 回归预测下一个词，词太多会有什么问题？</summary><p>词表可能有几万到几十万个词，输出层的参数是 隐藏维度 × 词表大小，非常大；每一步都要对所有词算 exp 再求和，计算量也很大。调试台第 5 章最后一步算 logits 时，形状 [T, V] 里的 V 就是词表大小，GPT-2 的 V 是 50257。</p></details>
+    </div>
+  </div>
+</section>
+
+<section class="part" id="smconcise">
+  <div class="part-h"><div class="eyebrow">第三部分</div><h2>3.7 softmax 回归的简洁实现</h2><span class="src">对应原书第 3.7 节，代码来自原书 PyTorch 版</span></div>
+  <div class="blk">
+    <div class="cell"><textarea>from d2l import torch as d2l
+import torch
+from torch import nn
+
+batch_size = 256
+train_iter, test_iter = d2l.load_data_fashion_mnist(batch_size)</textarea></div>
+    <div class="prose"><p>PyTorch 不会自动把 [256, 1, 28, 28] 拉平，所以在全连接层前面加一个 <code>nn.Flatten()</code>。<code>net.apply(init_weights)</code> 把 <code>init_weights</code> 用到网络的每一层上，只给全连接层的权重重新初始化：</p></div>
+    <div class="cell"><textarea># PyTorch不会隐式地调整输入的形状。因此，
+# 我们在线性层前定义了展平层（flatten），来调整网络输入的形状
+net = nn.Sequential(nn.Flatten(), nn.Linear(784, 10))
+
+def init_weights(m):
+    if type(m) == nn.Linear:
+        nn.init.normal_(m.weight, std=0.01)
+
+net.apply(init_weights);</textarea></div>
+    <div class="callout"><h4>重新审视 softmax 的实现：数值稳定</h4><p>上面看到，按定义算 softmax，exp 可能<b>上溢</b>成 inf。先减去每行的最大值 max(o) 就不会：分子分母同乘 exp(−max) 结果不变，而最大的那个数变成 exp(0) = 1。但减完以后，很小的数 exp 出来可能<b>下溢</b>成 0，log(0) 又是 −inf。办法是把 softmax 和 log 合在一起：log ŷⱼ = (oⱼ − max) − log Σ exp(oₖ − max)，完全不用算出 ŷ 本身。这叫 LogSumExp 技巧。<code>nn.CrossEntropyLoss</code> 就是这样做的，所以要直接把 logit（未经 softmax 的输出）传给它。你论文的代码就是这样写的：<code>experiment.py</code> 第 1255 行用 <code>F.binary_cross_entropy_with_logits(logit, y, ...)</code>，直接把 logit 传进去，而不是先做 sigmoid 再算 BCE。</p></div>
+    <div class="cell"><textarea>loss = nn.CrossEntropyLoss(reduction='none')</textarea></div>
+    <div class="cell"><textarea>trainer = torch.optim.SGD(net.parameters(), lr=0.1)</textarea></div>
+    <div class="cell" data-manual="训练 10 个 epoch，大约需要 3 到 10 秒，期间页面会暂时卡住"><textarea>num_epochs = 10
+d2l.train_ch3(net, train_iter, test_iter, loss, num_epochs, trainer)
+print(f'测试集精度：{d2l.evaluate_accuracy(net, test_iter):.3f}')</textarea></div>
+    <div class="qa">
+      <details><summary><b>练习 1</b>：调整批量大小、epoch 数和学习率，看看结果。</summary><p>把上面训练格里的 <code>num_epochs</code> 改成 5 或 20，或者把 <code>lr</code> 改成 0.01、0.5 再运行（改 lr 要回到上一格重新创建 trainer）。批量大小要在 <code>load_data_fashion_mnist(batch_size)</code> 那一格改。注意 epoch 越多，等待时间越长。</p></details>
+      <details><summary><b>练习 2</b>：epoch 一直增加，为什么测试精度过一阵会下降？怎么办？</summary><p>训练久了，模型开始记住训练集里的细节和噪声，在没见过的测试图上反而变差，这就是第 1 天讲的过拟合。常见对策：提前停止（在验证集表现最好的那个 epoch 停下，你论文选“验证集 BCE 最低的检查点”就是这个做法）、加正则化（权重衰减、暂退法，第 9 天会学）、增加训练数据。</p></details>
+    </div>
+  </div>
+</section>
+
+<section class="part">
+  <div class="part-h"><div class="eyebrow">今日小结</div><h2>今天学会了吗？</h2></div>
+  <div class="two">
+    <div class="panel stack">
+      <ul class="check-list" data-day="7">
+        <li><label><input type="checkbox" data-k="c1">一张灰度图是 [1, 28, 28] 的张量，一批图是 [批量, 通道, 高, 宽]</label></li>
+        <li><label><input type="checkbox" data-k="c2">我会用 DataLoader 读图像数据，知道训练集和测试集的区别</label></li>
+        <li><label><input type="checkbox" data-k="c3">我能说出分类训练的完整流程：前向、损失、反向、更新、评估精度</label></li>
+        <li><label><input type="checkbox" data-k="c4">我能看懂训练曲线里的 train loss、train acc、test acc</label></li>
+        <li><label><input type="checkbox" data-k="c5">我知道 softmax 会溢出，要把 logit 直接交给 CrossEntropyLoss</label></li>
+      </ul>
+      <span class="small check-msg"></span>
+    </div>
+    <div class="panel stack">
+      <h3>第 3 章学完了</h3>
+      <p>线性回归和 softmax 回归都只有一层。下一章（第 8 天起）加入<b>隐藏层</b>和<b>激活函数</b>，变成多层感知机，这才是真正的“深度”学习。你在调试台第 4 章玩过的螺旋分类，就是多层感知机。</p>
+    </div>
+  </div>
+</section>
+</main>
+
+<main class="wrap day" id="day8" data-day="8" hidden>
+<section class="hero">
+  <div class="eyebrow">第 8 天 · 原书第 4.1 节 + 第 4.2 节 + 第 4.3 节 · 论文路线第 1 课</div>
+  <h1>多层感知机：加一层隐藏层，再加一个激活函数</h1>
+  <p class="lead">线性模型只能画直线。在输入和输出之间加一层<b>隐藏层</b>，再给隐藏层套上非线性的<b>激活函数</b>，模型就能表示弯曲的、复杂的关系。这就是多层感知机（MLP），所有深度网络的基本零件。你论文里 SAKT 的前馈网络、simpleKT 和 AKT 的输出头，都是一个小 MLP。</p>
+  <div class="plan">
+    <div><b class="k">今天的时间</b>大约 60 分钟。训练格每个要十几到几十秒。</div>
+    <div><b class="k">学完你能</b><ul><li>说清为什么必须有激活函数</li><li>画出 ReLU、sigmoid、tanh 和它们的导数</li><li>从零写出一个两层 MLP 并训练</li><li>用 nn.Sequential 两行搭出同样的网络</li></ul></div>
+    <div><b class="k">和你的论文</b><ul><li>simpleKT 的 <code>self.out</code> 就是 MLP</li><li>sigmoid 把 logit 变成“答对的概率”</li></ul></div>
+  </div>
+</section>
+
+<section class="part" id="mlp">
+  <div class="part-h"><div class="eyebrow">第一部分</div><h2>4.1 多层感知机</h2><span class="src">对应原书第 4.1 节</span></div>
+  <div class="prose"><div class="row"><button class="btn primary runAll" data-day="8">从头全部运行</button><span class="small muted runAllMsg"></span></div></div>
+
+  <div class="blk"><div class="blk-h"><span class="n">4.1.1</span><h3>线性模型会在哪里出错</h3></div>
+    <div class="prose">
+      <p>线性意味着<b>单调</b>：某个特征变大，输出就一直变大（或一直变小）。原书举了几个例子：</p>
+      <p>收入越高越可能还贷，这是单调的，但不是线性的：收入从 0 涨到 5 万，比从 100 万涨到 105 万影响大得多。这种可以先对收入取对数再用线性模型。体温和死亡风险连单调都不是：高于 37 度越高越危险，低于 37 度越低越危险。这种可以改用“离 37 度多远”做特征。</p>
+      <p>可是判断一张图是猫还是狗呢？第 (13, 17) 个像素变亮，是更像猫还是更像狗？这取决于它周围的像素是什么，没法靠给单个像素一个固定权重来判断，也想不出什么简单的预处理能解决。所以要让模型<b>自己学出</b>一种表示，再在这个表示上做线性预测。隐藏层就是干这个的。</p>
+    </div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">4.1.2</span><h3>隐藏层，以及为什么一定要激活函数</h3></div>
+    <div class="neuron" aria-label="单隐藏层多层感知机：4 个输入，5 个隐藏单元，3 个输出">
+      <div class="col"><span>x₁</span><span>x₂</span><span>x₃</span><span>x₄</span><b>输入层（4）</b></div>
+      <div class="lines" aria-hidden="true">全连接，权重 W⁽¹⁾ [4, 5]</div>
+      <div class="col"><span>h₁</span><span>h₂</span><span>h₃</span><span>h₄</span><span>h₅</span><b>隐藏层（5）+ 激活函数</b></div>
+      <div class="lines" aria-hidden="true">全连接，权重 W⁽²⁾ [5, 3]</div>
+      <div class="col"><span class="out">o₁</span><span class="out">o₂</span><span class="out">o₃</span><b>输出层（3）</b></div>
+    </div>
+    <div class="prose"><p>这是原书的例子：4 个输入、5 个隐藏单元、3 个输出。输入层不做计算，所以这是一个 2 层的网络，两层都是全连接层。写成矩阵：H = X W⁽¹⁾ + b⁽¹⁾，O = H W⁽²⁾ + b⁽²⁾。</p>
+    <p>但是这样加一层<b>没有任何用处</b>：线性函数套线性函数还是线性函数。把两层合并，W = W⁽¹⁾W⁽²⁾、b = b⁽¹⁾W⁽²⁾ + b⁽²⁾，就是一个等价的单层模型。用数字验证一下：</p></div>
+    <div class="cell"><textarea>import torch
+
+X = torch.tensor([[1.0, 2.0]])
+W_1 = torch.tensor([[0.5, 0.0], [1.0, 1.0]]); b_1 = torch.tensor([1.0, -1.0])
+W_2 = torch.tensor([[2.0], [1.0]]); b_2 = torch.tensor([0.5])
+h = X @ W_1 + b_1               # 隐藏层，没有激活函数
+o = h @ W_2 + b_2
+o, X @ (W_1 @ W_2) + (b_1 @ W_2 + b_2)   # 两层合并成一层，结果一样</textarea></div>
+    <div class="prose"><p>关键在于给隐藏层的每个单元套一个<b>非线性的激活函数</b> σ：H = σ(X W⁽¹⁾ + b⁽¹⁾)。有了它，多层就没法合并成一层了。再多叠几层，H⁽¹⁾ = σ(XW⁽¹⁾ + b⁽¹⁾)，H⁽²⁾ = σ(H⁽¹⁾W⁽²⁾ + b⁽²⁾)……模型就能表示越来越复杂的函数。</p>
+    <p>理论上，只要隐藏单元足够多，单隐藏层的 MLP 能以任意精度逼近任何连续函数，这叫<b>通用近似定理</b>。但原书提醒：能表示不代表容易学到，实际中用更深而不是更宽的网络往往效果更好。</p></div>
+    <div class="panel stack" id="uaLab">
+      <h4>用 ReLU 拼出一条曲线</h4>
+      <p class="small muted">每个隐藏单元算 ReLU(x − kᵢ)，是一条在 kᵢ 处折一下的折线。输出层把它们加权求和，就拼出一条折线去逼近蓝色的目标曲线。权重用最小二乘直接求出。增加隐藏单元，看折线怎么越来越贴近。浅色线是每个隐藏单元乘上权重后的贡献。</p>
+      <div class="row"><label class="ctrl" for="uaH">隐藏单元个数 <output id="uaHv">4</output><input type="range" id="uaH" min="1" max="40" value="4"></label>
+        <label class="ctrl" for="uaF">目标函数 <select id="uaF"><option value="0">sin(2x) + 0.3x</option><option value="1">|x| − 1</option><option value="2">台阶</option></select></label></div>
+      <div class="two"><div class="cv" id="uaHost"><canvas id="uaCv" aria-label="目标曲线和 ReLU 拼成的折线"></canvas></div><div class="calc" id="uaCalc"></div></div>
+    </div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">4.1.3</span><h3>激活函数</h3></div>
+    <div class="prose"><p><b>ReLU</b>（修正线性单元）最常用：ReLU(x) = max(x, 0)，负数变 0，正数不变。它的导数在 x &gt; 0 时是 1，x &lt; 0 时是 0。梯度要么原样通过，要么被挡住，所以不容易出现梯度消失，训练表现好。</p></div>
+    <div class="cell"><textarea>%matplotlib inline
+from d2l import torch as d2l
+import torch</textarea></div>
+    <div class="cell"><textarea>x = torch.arange(-8.0, 8.0, 0.1, requires_grad=True)
+y = torch.relu(x)
+d2l.plot(x.detach(), y.detach(), 'x', 'relu(x)', figsize=(5, 2.5))</textarea></div>
+    <div class="prose"><p>用第 3 天学的自动微分画出导数。<code>y</code> 是向量，所以 backward 要传一个全 1 的梯度（等价于对 <code>y.sum()</code> 求导）；<code>retain_graph=True</code> 保留计算图，后面还要用。</p></div>
+    <div class="cell"><textarea>y.backward(torch.ones_like(x), retain_graph=True)
+d2l.plot(x.detach(), x.grad, 'x', 'grad of relu', figsize=(5, 2.5))</textarea></div>
+    <div class="prose"><p><b>sigmoid</b> 把任何实数压到 (0, 1)：sigmoid(x) = 1 / (1 + e⁻ˣ)。它曾经是隐藏层的标准选择，现在多用在输出层表示概率，比如第 6 天的二元分类，以及你论文里 DKT 输出“答对的概率”。</p></div>
+    <div class="cell"><textarea>y = torch.sigmoid(x)
+d2l.plot(x.detach(), y.detach(), 'x', 'sigmoid(x)', figsize=(5, 2.5))</textarea></div>
+    <div class="prose"><p>sigmoid 的导数是 sigmoid(x)(1 − sigmoid(x))，最大只有 0.25（在 x = 0 处），x 离 0 远时几乎是 0。很多层都用 sigmoid 时，梯度一层层乘下去会越来越小，这就是<b>梯度消失</b>，第 10 天会细讲。</p></div>
+    <div class="cell"><textarea># 清除以前的梯度
+x.grad.data.zero_()
+y.backward(torch.ones_like(x),retain_graph=True)
+d2l.plot(x.detach(), x.grad, 'x', 'grad of sigmoid', figsize=(5, 2.5))</textarea></div>
+    <div class="prose"><p><b>tanh</b>（双曲正切）把输入压到 (−1, 1)，形状像 sigmoid，但关于原点对称。导数是 1 − tanh²(x)，最大是 1。LSTM 内部就用 tanh 和 sigmoid（第 14 天）。</p></div>
+    <div class="cell"><textarea>y = torch.tanh(x)
+d2l.plot(x.detach(), y.detach(), 'x', 'tanh(x)', figsize=(5, 2.5))</textarea></div>
+    <div class="cell"><textarea># 清除以前的梯度
+x.grad.data.zero_()
+y.backward(torch.ones_like(x),retain_graph=True)
+d2l.plot(x.detach(), x.grad, 'x', 'grad of tanh', figsize=(5, 2.5))</textarea></div>
+    <div class="panel stack" id="actLab">
+      <h4>三个激活函数在同一个 x 上</h4>
+      <div class="row"><label class="ctrl" for="actX">x <output id="actXv">0.0</output><input type="range" id="actX" min="-8" max="8" step="0.1" value="0"></label></div>
+      <div class="calc" id="actCalc"></div>
+    </div>
+  </div>
+</section>
+
+<section class="part" id="mlpscratch">
+  <div class="part-h"><div class="eyebrow">第二部分</div><h2>4.2 多层感知机的从零开始实现</h2><span class="src">对应原书第 4.2 节，代码来自原书 PyTorch 版</span></div>
+  <div class="blk">
+    <div class="prose"><p>还是用 Fashion-MNIST，和第 7 天的 softmax 回归比一比。<b>这里有一处和原书不同</b>：原书 <code>batch_size = 256</code>，本页改成 64。原因是网页只有 6000 张训练图（原书 6 万张），批量 256 时每个 epoch 只更新 24 次，10 个 epoch 学不到位（我在真 PyTorch 上试过，训练损失停在 0.66 左右）；改成 64 后每个 epoch 更新 94 次，结果和原书接近（训练损失约 0.45，测试精度约 0.83）。</p></div>
+    <div class="cell"><textarea>from d2l import torch as d2l
+import torch
+from torch import nn
+
+batch_size = 64   # 原书是 256，原因见上面的说明
+train_iter, test_iter = d2l.load_data_fashion_mnist(batch_size)</textarea></div>
+    <div class="prose"><p>784 个输入、10 个输出、256 个隐藏单元。原书说层宽通常取 2 的若干次幂，因为硬件分配和寻址内存的方式，这样计算往往更快。每层一个权重矩阵、一个偏置。<code>nn.Parameter</code> 把张量包装成“模型参数”。</p></div>
+    <div class="cell"><textarea>num_inputs, num_outputs, num_hiddens = 784, 10, 256
+
+W1 = nn.Parameter(torch.randn(
+    num_inputs, num_hiddens, requires_grad=True) * 0.01)
+b1 = nn.Parameter(torch.zeros(num_hiddens, requires_grad=True))
+W2 = nn.Parameter(torch.randn(
+    num_hiddens, num_outputs, requires_grad=True) * 0.01)
+b2 = nn.Parameter(torch.zeros(num_outputs, requires_grad=True))
+
+params = [W1, b1, W2, b2]</textarea></div>
+    <div class="prose"><p>自己实现 ReLU：<code>torch.max</code> 给两个张量时是逐元素取较大的那个，和全 0 比，负数就变成 0。</p></div>
+    <div class="cell"><textarea>def relu(X):
+    a = torch.zeros_like(X)
+    return torch.max(X, a)</textarea></div>
+    <div class="cell"><textarea>relu(torch.tensor([[-1.0, 2.0], [0.5, -3.0]]))</textarea></div>
+    <div class="prose"><p>模型：先把图拉平成 784 个数，过隐藏层和 ReLU，再过输出层。输出是 logit，softmax 交给损失函数去做（第 7 天讲的数值稳定）。</p></div>
+    <div class="cell"><textarea>def net(X):
+    X = d2l.reshape(X, (-1, num_inputs))
+    H = relu(X@W1 + b1)  # 这里“@”代表矩阵乘法
+    return (H@W2 + b2)</textarea></div>
+    <div class="cell"><textarea>loss = nn.CrossEntropyLoss(reduction='none')</textarea></div>
+    <div class="prose"><p>训练过程和 softmax 回归一模一样，直接用 <code>d2l.train_ch3</code>：</p></div>
+    <div class="cell" data-manual="训练 10 个 epoch，计算量是第 7 天的约 25 倍，大约需要 10 到 40 秒，期间页面会暂时卡住"><textarea>num_epochs, lr = 10, 0.1
+updater = torch.optim.SGD(params, lr=lr)
+d2l.train_ch3(net, train_iter, test_iter, loss, num_epochs, updater)
+print(f'测试集精度：{d2l.evaluate_accuracy(net, test_iter):.3f}')</textarea></div>
+    <div class="cell" data-manual="要先运行上面的训练格"><textarea>d2l.predict_ch3(net, test_iter)</textarea></div>
+    <p class="note">和第 7 天的 softmax 回归（测试精度约 0.79）比，多了一层隐藏层，精度提高到 0.83 左右。参数从 7850 个增加到 203530 个，主要在 W1 [784, 256] 上。</p>
+    <div class="qa">
+      <details><summary><b>练习 1、2、3（原书）</b>：改隐藏单元数、加隐藏层、改学习率，效果怎样？</summary><p>把上面 <code>num_hiddens</code> 改成 64 或 512 再从参数那格开始重新运行（512 会慢一倍）。加一层隐藏层：多定义一组 W3、b3，<code>net</code> 里多写一行 <code>H2 = relu(H@W3 + b3)</code>，<code>params</code> 里也加上。学习率试 0.01、0.5。原书练习 5、6 问为什么同时调多个超参数很难：组合数量是各自取值数的乘积，每个组合都要完整训练一遍。常见的聪明办法是先粗后细、随机搜索（比网格搜索更省），以及用验证集而不是测试集来挑。</p></details>
+    </div>
+  </div>
+</section>
+
+<section class="part" id="mlpconcise">
+  <div class="part-h"><div class="eyebrow">第三部分</div><h2>4.3 多层感知机的简洁实现</h2><span class="src">对应原书第 4.3 节，代码来自原书 PyTorch 版</span></div>
+  <div class="blk">
+    <div class="prose"><p>和第 7 天的 softmax 回归简洁实现比，只多了两样：一个 256 单元的隐藏层，一个 ReLU。</p></div>
+    <div class="cell"><textarea>net = nn.Sequential(nn.Flatten(),
+                    nn.Linear(784, 256),
+                    nn.ReLU(),
+                    nn.Linear(256, 10))
+
+def init_weights(m):
+    if type(m) == nn.Linear:
+        nn.init.normal_(m.weight, std=0.01)
+
+net.apply(init_weights);</textarea></div>
+    <div class="cell"><textarea>net, sum(p.numel() for p in net.parameters())</textarea></div>
+    <div class="cell"><textarea>batch_size, lr, num_epochs = 64, 0.1, 10   # 原书 batch_size 是 256
+loss = nn.CrossEntropyLoss(reduction='none')
+trainer = torch.optim.SGD(net.parameters(), lr=lr)</textarea></div>
+    <div class="cell" data-manual="训练 10 个 epoch，大约需要 10 到 40 秒，期间页面会暂时卡住"><textarea>train_iter, test_iter = d2l.load_data_fashion_mnist(batch_size)
+d2l.train_ch3(net, train_iter, test_iter, loss, num_epochs, trainer)
+print(f'测试集精度：{d2l.evaluate_accuracy(net, test_iter):.3f}')</textarea></div>
+    <div class="callout"><h4>对照你的论文：simpleKT 的输出头就是一个 MLP</h4>
+      <p>下面两行摘自你论文的 <code>experiment.py</code>（第 1150 行 SAKT 的前馈网络、第 1189 行 simpleKT 的输出头），结构和上面几乎一样，只是在 ReLU 后面多了 <code>nn.Dropout(0.2)</code>（明天学）：</p>
+      <pre class="code">self.ffn = nn.Sequential(nn.Linear(d, d), nn.ReLU(), nn.Dropout(0.2), nn.Linear(d, d))        <span class="c"># SAKT</span>
+self.out = nn.Sequential(nn.Linear(2 * d, d), nn.ReLU(), nn.Dropout(0.2), nn.Linear(d, 1))    <span class="c"># simpleKT</span></pre>
+      <p>simpleKT 的输出头输入是 2d = 128 个数（知识状态和题目嵌入拼在一起），隐藏层 64 个单元，最后输出 1 个 logit，再用 sigmoid 变成答对的概率。下面造一个同样形状的网络：</p></div>
+    <div class="cell"><textarea>d = 64
+out = nn.Sequential(nn.Linear(2 * d, d), nn.ReLU(), nn.Linear(d, 1))
+state = torch.randn(5, 2 * d)        # 5 道题，每道题 128 个数
+logit = out(state)
+logit.shape, torch.sigmoid(logit).reshape(-1)</textarea></div>
+    <div class="qa">
+      <details><summary><b>练习（原书）</b>：换不同的激活函数、不同的初始化方案，哪个效果好？</summary><p>把 <code>nn.ReLU()</code> 换成 <code>nn.Sigmoid()</code> 或 <code>nn.Tanh()</code>，重新运行网络定义和训练。用 sigmoid 时开头几个 epoch 学得明显更慢，这和上面看到的“sigmoid 导数最大只有 0.25”有关。初始化方面，可以把 <code>std=0.01</code> 改成 1 试试，训练会变得很不稳定；第 10 天会讲为什么、以及怎样选初始化的尺度。</p></details>
+    </div>
+  </div>
+</section>
+
+<section class="part">
+  <div class="part-h"><div class="eyebrow">今日小结</div><h2>今天学会了吗？</h2></div>
+  <div class="two">
+    <div class="panel stack">
+      <ul class="check-list" data-day="8">
+        <li><label><input type="checkbox" data-k="c1">没有激活函数，多层线性层等价于一层</label></li>
+        <li><label><input type="checkbox" data-k="c2">我能画出 ReLU、sigmoid、tanh 和它们的导数</label></li>
+        <li><label><input type="checkbox" data-k="c3">我知道 sigmoid 导数最大 0.25，叠多了会梯度消失</label></li>
+        <li><label><input type="checkbox" data-k="c4">我能从零写出 W1、b1、W2、b2 的两层 MLP</label></li>
+        <li><label><input type="checkbox" data-k="c5">我能看懂论文里 <code>nn.Sequential(nn.Linear, nn.ReLU, nn.Dropout, nn.Linear)</code></label></li>
+      </ul>
+      <span class="small check-msg"></span>
+    </div>
+    <div class="panel stack">
+      <h3>明天（第 9 天）学什么</h3>
+      <p>原书 4.4 模型选择、欠拟合和过拟合，4.5 权重衰减，4.6 暂退法。你论文里的三样东西：<code>nn.Dropout(0.2)</code>、对策略头加的 ρ‖g‖² 正则（就是权重衰减）、以及“按验证集 BCE 选检查点”，明天都会讲到。</p>
+    </div>
+  </div>
+</section>
+</main>
+
+<div class="wrap"><section class="part road-sec" id="road">
+  <div class="part-h"><div class="eyebrow">课程表</div><h2>按你的论文排的学习路线</h2><span class="src">第 1 到 7 天是基础，按原书顺序。从第 8 天起只挑你论文用到的章节：多层感知机、正则化、自定义模型、循环网络和 LSTM（DKT）、注意力和 Transformer（SAKT、AKT、simpleKT）、Adam，最后是两个书里没有的论文专题。卷积、计算机视觉、NLP 应用等和论文关系不大的章节放到最后选学。</span></div>
+  <div class="road" id="roadList"></div>
+</section></div>
+
+<footer><div class="wrap">内容改编自《动手学深度学习》第二版（阿斯顿·张、李沐、扎卡里·C. 立顿、亚历山大·J. 斯莫拉），原书以 Apache 2.0 许可证开源：<a href="https://zh.d2l.ai/" target="_blank" rel="noopener">zh.d2l.ai</a>。页面里的 torch 是在浏览器中运行的简化实现，只覆盖课程用到的函数；要运行完整的 PyTorch，需要在电脑上安装 Python 和 PyTorch。</div></footer>

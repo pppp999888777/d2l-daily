@@ -1,0 +1,15 @@
+CELLS = [
+"%matplotlib inline\nfrom d2l import torch as d2l\nimport torch\nfrom torch.distributions import multinomial",
+"fair_probs = torch.ones([6]) / 6\nfair_probs",
+"multinomial.Multinomial(1, fair_probs).sample().shape, multinomial.Multinomial(1, fair_probs).sample().sum()",
+"multinomial.Multinomial(10, fair_probs).sample().sum()",
+"counts = multinomial.Multinomial(10, fair_probs).sample((500,))\ncum_counts = counts.cumsum(dim=0)\nestimates = cum_counts / cum_counts.sum(dim=1, keepdims=True)\ncounts.shape, cum_counts.shape, estimates.shape, estimates[-1].sum()",
+"x = torch.arange(1.0, 7.0)\np = torch.ones(6) / 6\nE = (x * p).sum()\nVar = ((x - E) ** 2 * p).sum()\nE, Var, Var.sqrt(), (x ** 2 * p).sum() - E ** 2",
+"P_H = torch.tensor([0.9985, 0.0015])        # P(H=0), P(H=1)\nP_D1_given_H = torch.tensor([0.01, 1.0])    # P(D1=1 | H=0), P(D1=1 | H=1)\nP_D1 = (P_D1_given_H * P_H).sum()           # 边际化\nP_H1_given_D1 = P_D1_given_H[1] * P_H[1] / P_D1   # 贝叶斯定理\nP_D1, P_H1_given_D1",
+"P_D2_given_H = torch.tensor([0.03, 0.98])\nboth = P_D1_given_H * P_D2_given_H          # 条件独立：两个条件概率相乘\nP_both = (both * P_H).sum()\nboth, P_both, both[1] * P_H[1] / P_both",
+"p_L = 0.7          # 先验：学生本来就会的概率 p0\nguess, slip = 0.3, 0.2\np_correct = p_L * (1 - slip) + (1 - p_L) * guess\nposterior = p_L * (1 - slip) / p_correct\nprint(f'答对的概率 {p_correct:.3f}，答对之后“已经会了”的概率 {posterior:.3f}')",
+"def bkt_update(p_L, correct, guess=0.3, slip=0.2, learn=0.12):\n    if correct:\n        post = p_L * (1 - slip) / (p_L * (1 - slip) + (1 - p_L) * guess)\n    else:\n        post = p_L * slip / (p_L * slip + (1 - p_L) * (1 - guess))\n    return post + (1 - post) * learn\n\np = 0.7\nfor y in [1, 0, 0, 1, 1]:\n    p = bkt_update(p, y)\n    print(y, round(p, 4))",
+"import torch\nprint(dir(torch.distributions))",
+"help(torch.ones)",
+"torch.ones(4)",
+]

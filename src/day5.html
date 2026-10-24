@@ -1,0 +1,306 @@
+<main class="wrap day" id="day5" data-day="5" hidden>
+<section class="hero">
+  <div class="eyebrow">第 5 天 · 原书第 3.1 节 + 第 3.2 节</div>
+  <h1>线性回归：从零写出第一个训练循环</h1>
+  <p class="lead">前四天学的张量、矩阵乘法、梯度和自动微分，今天全部用上。先理解线性回归的模型、损失和小批量随机梯度下降，再不借助任何高级工具，只用张量和 <code>backward()</code> 从头实现：造数据、分小批量、定义模型和损失、写优化器、训练。这套流程以后每一章都会重复出现，你论文的训练代码也是这个结构。</p>
+  <div class="plan">
+    <div><b class="k">今天的时间</b>大约 70 分钟。第一部分 30 分钟，第二部分 40 分钟。</div>
+    <div><b class="k">学完你能</b><ul><li>写出 ŷ = Xw + b，说出每个量的形状</li><li>解释小批量、批量大小、学习率、epoch</li><li>从零写出完整的训练循环</li><li>知道为什么要 reshape</li></ul></div>
+    <div><b class="k">和你的论文</b><ul><li>训练循环结构完全一样</li><li>批量大小 256、15 个 epoch 就是这里的超参数</li></ul></div>
+  </div>
+</section>
+
+<section class="part" id="linreg">
+  <div class="part-h"><div class="eyebrow">第一部分</div><h2>3.1 线性回归</h2><span class="src">对应原书第 3.1 节</span></div>
+  <div class="prose">
+    <p>线性回归有两个假设：一是输出 y 可以写成输入特征 x 的加权和；二是观测里的噪声比较“正常”，服从正态分布。原书的例子是按房子的面积和房龄估计房价。</p>
+    <div class="row"><button class="btn primary runAll" data-day="5">从头全部运行</button><span class="small muted runAllMsg"></span></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.1.1</span><h3>线性模型</h3></div>
+    <div class="prose"><p>价格 = w<sub>面积</sub> × 面积 + w<sub>房龄</sub> × 房龄 + b。w 叫<b>权重</b>，决定每个特征的影响有多大；b 叫<b>偏置</b>，是所有特征都为 0 时的预测值。有 d 个特征时写成点积 <b>ŷ = wᵀx + b</b>。把 n 个样本摞成矩阵 X（每行一个样本，每列一个特征），一次算出所有预测：<b>ŷ = Xw + b</b>，这里加 b 用的是第 1 天学的广播。</p></div>
+    <div class="panel stack" id="houseLab">
+      <h4>拧一拧权重和偏置</h4>
+      <div class="row">
+        <label class="ctrl" for="hsWa">w<sub>面积</sub>（每平方英尺多少美元） <output id="hsWav">150</output><input type="range" id="hsWa" min="0" max="400" step="5" value="150"></label>
+        <label class="ctrl" for="hsWg">w<sub>房龄</sub>（每老一年多少美元） <output id="hsWgv">-1000</output><input type="range" id="hsWg" min="-5000" max="1000" step="100" value="-1000"></label>
+        <label class="ctrl" for="hsB">b（美元） <output id="hsBv">20000</output><input type="range" id="hsB" min="-50000" max="100000" step="1000" value="20000"></label>
+      </div>
+      <div class="calc" id="hsCalc"></div>
+      <p class="small muted">表里的 4 套房子是编的示例数据。权重是负数表示这个特征越大价格越低，比如房龄。</p>
+    </div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.1.2</span><h3>损失函数和解析解</h3></div>
+    <div class="prose"><p>回归最常用的损失是<b>平方误差</b>：l = ½(ŷ − y)²。前面乘 ½ 只是为了求导后系数刚好是 1。在整个训练集上取平均，就是要最小化的 L(w, b)。</p>
+    <p>线性回归比较特殊，最优解可以用一个公式直接算出来，叫<b>解析解</b>：把 b 并进 w（给 X 加一列全 1），w* = (XᵀX)⁻¹Xᵀy。下面用 6 个样本验证：数据是按 w = [2, −3.4]、b = 4.2 造的，解析解正好算回这三个数。</p></div>
+    <div class="cell"><textarea>import torch
+
+Xf = torch.tensor([[1., 2.], [2., 1.], [3., 5.], [4., 3.], [5., 8.], [6., 1.]])
+yf = Xf @ torch.tensor([2.0, -3.4]) + 4.2
+X1 = torch.cat((Xf, torch.ones(6, 1)), dim=1)      # 加一列全 1，用来代替 b
+w_star = torch.linalg.inv(X1.T @ X1) @ X1.T @ yf
+X1.shape, w_star</textarea></div>
+    <div class="prose"><p>但绝大多数深度学习模型没有解析解，只能一步一步地优化。</p></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.1.3</span><h3>小批量随机梯度下降</h3></div>
+    <div class="prose"><p>梯度下降每更新一次都要算整个数据集的梯度，数据一多就太慢。实际做法是每次随机抽一小批样本（叫一个<b>小批量</b>），只用它们算梯度来更新参数，这叫<b>小批量随机梯度下降</b>：</p>
+    <p style="font-family:var(--f-mono);font-size:14px">(w, b) ← (w, b) − (η / |B|) · Σ<sub>i∈B</sub> ∂l⁽ⁱ⁾(w, b)</p>
+    <p>|B| 是每批的样本数，叫<b>批量大小</b>；η 是<b>学习率</b>。这两个是人手动设定、训练中不会更新的参数，叫<b>超参数</b>。所有样本都用过一遍叫一个 <b>epoch</b>（迭代周期）。调超参数要看模型在单独的<b>验证集</b>上的表现。你论文代码里的 <code>BS = 256</code>、15 个 epoch、DKT 的学习率 2e-3，说的就是这些。</p></div>
+    <div class="panel stack" id="sgdLab">
+      <h4>批量大小怎么影响下山的路</h4>
+      <p class="small muted">数据和下面 3.2 节一样：1000 个样本，真实 w = [2, −3.4]，b = 4.2。图上是 w₁、w₂ 两个参数的损失等高线（b 固定在真实值时），叉号是最低点。选不同的批量大小训练，看参数走出的路径。批量越小，每一步越“抖”，但一个 epoch 里更新的次数越多。</p>
+      <div class="row">
+        <label class="ctrl" for="sgB">批量大小
+          <select id="sgB"><option>1</option><option selected>10</option><option>100</option><option value="1000">1000（全部数据）</option></select></label>
+        <label class="ctrl" for="sgLr">学习率 <output id="sgLrv">0.030</output><input type="range" id="sgLr" min="-3" max="0" step="0.05" value="-1.52"></label>
+        <label class="ctrl" for="sgE">epoch 数 <output id="sgEv">1</output><input type="range" id="sgE" min="1" max="5" value="1"></label>
+        <button class="btn primary" id="sgRun">训练</button><button class="btn" id="sgReset">参数归零</button>
+      </div>
+      <div class="two"><div class="cv" id="sgHost"><canvas id="sgCv" aria-label="参数在损失等高线上的路径"></canvas></div><div class="stack"><div class="cv"><canvas id="sgLoss" aria-label="每一步之后的训练损失"></canvas></div><div class="calc" id="sgCalc"></div></div></div>
+    </div>
+    <div class="prose"><p>训练完的模型拿来估计新房子的价格，叫<b>预测</b>。很多人也叫“推断”，原书提醒在统计学里“推断”指的是估计参数，跟统计学家交流时容易误会。</p></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.1.4</span><h3>矢量化加速</h3></div>
+    <div class="prose"><p>训练时要同时处理一整个小批量，应该用张量运算一次算完，而不是在 Python 里写 for 循环一个一个算。先导入包，定义两个长 10000 的全 1 向量：</p></div>
+    <div class="cell"><textarea>%matplotlib inline
+from d2l import torch as d2l
+import math
+import torch
+import numpy as np
+import time
+
+n = 10000
+a = d2l.ones([n])
+b = d2l.ones([n])</textarea></div>
+    <div class="prose"><p>原书写了一个计时器类。<code>class</code> 定义一种新的对象，<code>__init__</code> 在创建时自动运行，<code>self</code> 指这个对象自己。这个类以后保存在 d2l 包里，可以直接用 <code>d2l.Timer()</code>。</p></div>
+    <div class="cell"><textarea>class Timer:  #@save
+    """记录多次运行时间"""
+    def __init__(self):
+        self.times = []
+        self.start()
+
+    def start(self):
+        """启动计时器"""
+        self.tik = time.time()
+
+    def stop(self):
+        """停止计时器并将时间记录在列表中"""
+        self.times.append(time.time() - self.tik)
+        return self.times[-1]
+
+    def avg(self):
+        """返回平均时间"""
+        return sum(self.times) / len(self.times)
+
+    def sum(self):
+        """返回时间总和"""
+        return sum(self.times)
+
+    def cumsum(self):
+        """返回累计时间"""
+        return np.array(self.times).cumsum().tolist()</textarea></div>
+    <div class="prose"><p>用 for 循环一个一个加：</p></div>
+    <div class="cell"><textarea>c = d2l.zeros(n)
+timer = Timer()
+for i in range(n):
+    c[i] = a[i] + b[i]
+f'{timer.stop():.5f} sec'</textarea></div>
+    <div class="prose"><p>用 <code>+</code> 一次加完：</p></div>
+    <div class="cell"><textarea>timer.start()
+d = a + b
+f'{timer.stop():.5f} sec'</textarea></div>
+    <p class="note">第二种快得多，通常快几个数量级。这个网页里的张量是用 JavaScript 模拟的，具体时间和真 PyTorch 不一样，但快慢的差距一样明显。</p>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.1.5</span><h3>正态分布与平方损失</h3></div>
+    <div class="prose"><p>正态分布（高斯分布）的概率密度是 p(x) = 1/√(2πσ²) · exp(−(x − μ)²/(2σ²))，μ 是均值，σ 是标准差。</p></div>
+    <div class="cell"><textarea>def normal(x, mu, sigma):
+    p = 1 / math.sqrt(2 * math.pi * sigma**2)
+    return p * np.exp(-0.5 / sigma**2 * (x - mu)**2)</textarea></div>
+    <div class="cell"><textarea># 再次使用numpy进行可视化
+x = np.arange(-7, 7, 0.01)
+# 均值和标准差对
+params = [(0, 1), (0, 2), (3, 1)]
+d2l.plot(x, [normal(x, mu, sigma) for mu, sigma in params], xlabel='x',
+         ylabel='p(x)', figsize=(4.5, 2.5),
+         legend=[f'mean {mu}, std {sigma}' for mu, sigma in params])</textarea></div>
+    <div class="prose"><p>改均值是把曲线左右平移，加大标准差会让曲线变矮变宽。</p>
+    <p>为什么线性回归用平方损失？假设观测 y = wᵀx + b + ε，噪声 ε 服从均值为 0 的正态分布。那么“看到这批数据的概率”（<b>似然</b>）是每个样本概率的乘积。让似然最大，等价于让负对数似然最小；把正态分布的公式代进去，去掉和 w、b 无关的常数，剩下的正好是平方误差之和。也就是说，<b>在高斯噪声假设下，最小化平方损失就是极大似然估计</b>。你论文的 DKT 预测对错用的交叉熵 BCE，也是这样从“伯努利分布的负对数似然”推出来的，第 6 天学 softmax 时会再讲。</p></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.1.6</span><h3>线性回归就是一个单层神经网络</h3></div>
+    <div class="neuron" aria-label="线性回归画成神经网络：d 个输入都连到一个输出">
+      <div class="col"><span>x₁</span><span>x₂</span><span>⋮</span><span>x<sub>d</sub></span><b>输入层（d 个特征）</b></div>
+      <div class="lines" aria-hidden="true">每条连线是一个权重 wᵢ</div>
+      <div class="col"><span class="out">o₁</span><b>输出层（1 个神经元）</b></div>
+    </div>
+    <div class="prose"><p>每个输入都连到每个输出，这种层叫<b>全连接层</b>（也叫稠密层）。数层数时不算输入层，所以线性回归是 1 层的神经网络。原书也讲了它和生物神经元的相似之处：树突接收输入，按突触权重加权，在细胞核里求和。不过原书提醒，现在深度学习的灵感主要来自数学、统计和计算机科学，就像飞机受鸟启发，但航空工程不靠鸟类学。</p></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.1.7</span><h3>练习（原书第 1 题）</h3></div>
+    <div class="prose"><p>有一组数 x₁ … xₙ，找一个常数 b 让 Σ(xᵢ − b)² 最小。对 b 求导并令它等于 0：−2Σ(xᵢ − b) = 0，得到 b = 平均值。验证一下：用平均值时平方和最小，换成别的数都更大。</p></div>
+    <div class="cell"><textarea>xs = torch.tensor([1.0, 2.0, 3.0, 10.0])
+xs.mean(), ((xs - xs.mean()) ** 2).sum(), ((xs - 2.0) ** 2).sum()</textarea></div>
+    <div class="qa"><details><summary>这和正态分布有什么关系？</summary><p>如果假设这些数来自均值为 b 的正态分布，b 的极大似然估计就是样本平均值，这和上面 3.1.5 讲的“平方损失 = 高斯噪声下的极大似然”是同一件事。</p></details></div>
+  </div>
+</section>
+
+<section class="part" id="scratch">
+  <div class="part-h"><div class="eyebrow">第二部分</div><h2>3.2 线性回归的从零开始实现</h2><span class="src">对应原书第 3.2 节，代码全部来自原书 PyTorch 版</span></div>
+  <div class="prose"><p>只用张量和自动微分，从头实现整个方法：数据流水线、模型、损失函数和小批量随机梯度下降优化器。现在的框架能自动完成这些，但自己写一遍才知道每一步在干什么。</p></div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.2.1</span><h3>生成数据集</h3></div>
+    <div class="cell"><textarea>%matplotlib inline
+from d2l import torch as d2l
+import torch
+import random</textarea></div>
+    <div class="prose"><p>按 y = Xw + b + ε 造 1000 个样本，每个样本 2 个特征，都从标准正态分布里取。真实参数 w = [2, −3.4]，b = 4.2，噪声 ε 的标准差是 0.01。我们要做的，就是只看数据把这三个数找回来。</p></div>
+    <div class="cell"><textarea>def synthetic_data(w, b, num_examples):  #@save
+    """生成y=Xw+b+噪声"""
+    X = d2l.normal(0, 1, (num_examples, len(w)))
+    y = d2l.matmul(X, w) + b
+    y += d2l.normal(0, 0.01, y.shape)
+    return X, d2l.reshape(y, (-1, 1))</textarea></div>
+    <div class="cell"><textarea>true_w = d2l.tensor([2, -3.4])
+true_b = 4.2
+features, labels = synthetic_data(true_w, true_b, 1000)</textarea></div>
+    <div class="prose"><p><code>features</code> 的每一行是一个样本的 2 个特征，<code>labels</code> 的每一行是它的标签：</p></div>
+    <div class="cell"><textarea>print('features:', features[0],'\nlabel:', labels[0])</textarea></div>
+    <div class="prose"><p>画出第二个特征和标签的散点图，能看出明显的线性关系（斜率约为 −3.4）：</p></div>
+    <div class="cell"><textarea>d2l.set_figsize()
+d2l.plt.scatter(d2l.numpy(features[:, 1]), d2l.numpy(labels), 1);</textarea></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.2.2</span><h3>读取数据集</h3></div>
+    <div class="prose"><p>训练时每次取一小批。<code>data_iter</code> 先把样本编号打乱，再按 <code>batch_size</code> 一段一段切出来。<code>yield</code> 让这个函数变成<b>生成器</b>：每次被 for 循环要一个小批量，就交出一个，下次从停下的地方接着来。</p></div>
+    <div class="cell"><textarea>def data_iter(batch_size, features, labels):
+    num_examples = len(features)
+    indices = list(range(num_examples))
+    # 这些样本是随机读取的，没有特定的顺序
+    random.shuffle(indices)
+    for i in range(0, num_examples, batch_size):
+        batch_indices = d2l.tensor(
+            indices[i: min(i + batch_size, num_examples)])
+        yield features[batch_indices], labels[batch_indices]</textarea></div>
+    <div class="prose"><p>读第一个小批量看看。X 的形状是 [批量大小, 特征数] = [10, 2]，y 是 [10, 1]：</p></div>
+    <div class="cell"><textarea>batch_size = 10
+
+for X, y in data_iter(batch_size, features, labels):
+    print(X, '\n', y)
+    break</textarea></div>
+    <p class="note">这个写法适合教学，但效率不高：要把全部数据放进内存，还要大量随机读取。框架自带的 DataLoader 快得多，第 6 天会用到。你论文的代码没用 DataLoader，用的正是这里的思路：<code>perm = rng.permutation(tr)</code> 打乱训练集的编号，再 <code>for i in range(0, len(perm), BS)</code> 每次切出 256 个。</p>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.2.3</span><h3>初始化模型参数、定义模型、损失和优化算法</h3></div>
+    <div class="prose"><p>权重从均值 0、标准差 0.01 的正态分布里随机取，偏置设为 0。两个都要 <code>requires_grad=True</code>，因为要对它们求梯度。</p></div>
+    <div class="cell"><textarea>w = torch.normal(0, 0.01, size=(2,1), requires_grad=True)
+b = torch.zeros(1, requires_grad=True)</textarea></div>
+    <div class="prose"><p>模型：Xw + b。X 是 [批量, 2]，w 是 [2, 1]，结果 [批量, 1]，再广播加上 b。</p></div>
+    <div class="cell"><textarea>def linreg(X, w, b):  #@save
+    """线性回归模型"""
+    return d2l.matmul(X, w) + b</textarea></div>
+    <div class="prose"><p>平方损失。把 y 的形状改成和 y_hat 一样，原因见下面的练习 5。</p></div>
+    <div class="cell"><textarea>def squared_loss(y_hat, y):  #@save
+    """均方损失"""
+    return (y_hat - d2l.reshape(y, y_hat.shape)) ** 2 / 2</textarea></div>
+    <div class="prose"><p>优化器：在 <code>no_grad</code> 里按梯度更新每个参数，再把梯度清零（第 3 天学的两个要点）。损失是一批样本的总和，所以除以批量大小，让步长不受批量大小影响。</p></div>
+    <div class="cell"><textarea>def sgd(params, lr, batch_size):  #@save
+    """小批量随机梯度下降"""
+    with torch.no_grad():
+        for param in params:
+            param -= lr * param.grad / batch_size
+            param.grad.zero_()</textarea></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.2.4</span><h3>训练</h3></div>
+    <div class="prose"><p>这段代码是整本书最重要的结构，后面几乎每一章都会再写一遍：<b>取一个小批量 → 算预测和损失 → backward 求梯度 → 优化器更新参数</b>。每个 epoch 结束后，在整个数据集上算一次损失。</p></div>
+    <div class="cell"><textarea>lr = 0.03
+num_epochs = 3
+net = linreg
+loss = squared_loss</textarea></div>
+    <div class="cell"><textarea>for epoch in range(num_epochs):
+    for X, y in data_iter(batch_size, features, labels):
+        l = loss(net(X, w, b), y)  # X和y的小批量损失
+        # 因为l形状是(batch_size,1)，而不是一个标量。l中的所有元素被加到一起，
+        # 并以此计算关于[w,b]的梯度
+        l.sum().backward()
+        sgd([w, b], lr, batch_size)  # 使用参数的梯度更新参数
+    with torch.no_grad():
+        train_l = loss(net(features, w, b), labels)
+        print(f'epoch {epoch + 1}, loss {float(train_l.mean()):f}')</textarea></div>
+    <div class="prose"><p>数据是自己造的，所以知道真实参数，可以比一比学到的参数差多少：</p></div>
+    <div class="cell"><textarea>print(f'w的估计误差: {true_w - d2l.reshape(w, true_w.shape)}')
+print(f'b的估计误差: {true_b - b}')</textarea></div>
+    <div class="callout"><h4>对照你的论文</h4><p>下面是你论文实验代码 <code>experiment.py</code> 里 <code>train_kt</code> 函数的训练循环（第 1355 到 1364 行，省略了几行记录日志和做检查的代码）。和上面逐行对照：</p>
+<pre class="code">for ep in range(epochs):                         <span class="c"># for epoch in range(num_epochs)</span>
+    model.train(); perm = rng.permutation(tr)    <span class="c"># data_iter 里的 random.shuffle(indices)</span>
+    for i in range(0, len(perm), BS):            <span class="c"># 一模一样，BS = 256</span>
+        b = perm[i:i + BS]                       <span class="c"># 取出这一批的编号</span>
+        loss, _ = batch_loss(model, W, b, cfg, parts=parts)   <span class="c"># l = loss(net(X, w, b), y)</span>
+        opt.zero_grad(set_to_none=True); loss.backward()       <span class="c"># 清零梯度 + l.sum().backward()</span>
+        nn.utils.clip_grad_norm_(params, 5.0); opt.step()      <span class="c"># 梯度裁剪 + sgd([w, b], ...)</span></pre>
+<p>区别只是换了零件：模型从 linreg 换成 LSTM，损失从平方损失换成 BCE（Safe-DFKT-AG 还加了价值项、护栏、方差惩罚和防刷分惩罚），优化器从手写的 sgd 换成 <code>torch.optim.Adam</code>，另外多了一步“梯度裁剪”，防止梯度太大把参数推飞（第 17 天讲循环网络时会学）。</p></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.2.5</span><h3>练习（原书）</h3></div>
+    <div class="prose"><p><b>练习 1</b>：把权重初始化为 0，还能训练吗？改下面的初始化再训练。（对线性回归可以，因为每个权重的梯度都不同；学到多层感知机时会看到，多层网络全部初始化为 0 就会出问题。）</p></div>
+    <div class="cell"><textarea>w = torch.zeros(2, 1, requires_grad=True)
+b = torch.zeros(1, requires_grad=True)
+for epoch in range(3):
+    for X, y in data_iter(batch_size, features, labels):
+        l = squared_loss(linreg(X, w, b), y)
+        l.sum().backward()
+        sgd([w, b], 0.03, batch_size)
+    with torch.no_grad():
+        print(f'epoch {epoch + 1}, loss {float(squared_loss(linreg(features, w, b), labels).mean()):f}')
+w.reshape(-1), b</textarea></div>
+    <div class="prose"><p><b>练习 5</b>：为什么 <code>squared_loss</code> 里要 reshape？y_hat 的形状是 (10, 1)，y 的形状是 (10,)。不 reshape 直接相减，广播会把它们扩展成 (10, 10)，不报错，但算出来的是 100 个两两相减的差，损失完全错了：</p></div>
+    <div class="cell"><textarea>y_hat = torch.ones(10, 1)
+y = torch.zeros(10)
+(y_hat - y).shape, (y_hat - y.reshape(y_hat.shape)).shape</textarea></div>
+    <p class="note">这是最难发现的一类 bug：程序不报错，只是结果不对。调试时多打印 <code>.shape</code>，就是为了抓这种问题。</p>
+    <div class="prose"><p><b>练习 6</b>：试试不同的学习率，看损失下降得快还是慢。把 <code>lr</code> 改成 0.001、0.1、1 或 3 试试；太大时损失会变成 nan（发散）。</p></div>
+    <div class="cell"><textarea>lr = 0.001
+w = torch.normal(0, 0.01, size=(2,1), requires_grad=True)
+b = torch.zeros(1, requires_grad=True)
+for epoch in range(3):
+    for X, y in data_iter(batch_size, features, labels):
+        l = squared_loss(linreg(X, w, b), y)
+        l.sum().backward()
+        sgd([w, b], lr, batch_size)
+    with torch.no_grad():
+        print(f'lr {lr}, epoch {epoch + 1}, loss {float(squared_loss(linreg(features, w, b), labels).mean()):f}')</textarea></div>
+    <div class="prose"><p><b>练习 7</b>：样本数不能被批量大小整除时，<code>data_iter</code> 会怎样？1000 个样本、批量大小 300：</p></div>
+    <div class="cell"><textarea>[X.shape[0] for X, y in data_iter(300, features, labels)]</textarea></div>
+    <div class="prose"><p>最后一批只有 100 个。因为用了 <code>min(i + batch_size, num_examples)</code>，不会越界。</p></div>
+    <div class="qa">
+      <details><summary><b>练习 2</b>：给电压和电流的关系建模，自动微分能用来学参数吗？</summary><p>能。只要模型是由可求导的运算搭成的（比如欧姆定律 V = I·R，R 是要学的参数），定义平方损失，<code>backward()</code> 就能求出对 R 的梯度，用 SGD 更新。自动微分不关心模型的物理意义，只要计算图里每一步都能求导。</p></details>
+      <details><summary><b>练习 4</b>：计算二阶导数会有什么问题？怎么解决？</summary><p>二阶导数要对“求导这个过程”再求一次导，计算图会变大，花的时间和内存更多；参数很多时，完整的二阶导数矩阵（海森矩阵）有“参数个数的平方”那么多个数，根本存不下。PyTorch 里求二阶导要在第一次求导时写 <code>create_graph=True</code>。实际中常用只算“海森矩阵乘一个向量”这类近似方法。</p></details>
+    </div>
+  </div>
+</section>
+
+<section class="part">
+  <div class="part-h"><div class="eyebrow">今日小结</div><h2>今天学会了吗？</h2></div>
+  <div class="two">
+    <div class="panel stack">
+      <ul class="check-list" data-day="5">
+        <li><label><input type="checkbox" data-k="c1">ŷ = Xw + b：X 是 [n, d]，w 是 [d, 1]，ŷ 是 [n, 1]</label></li>
+        <li><label><input type="checkbox" data-k="c2">我知道小批量、批量大小、学习率、epoch、超参数分别是什么</label></li>
+        <li><label><input type="checkbox" data-k="c3">我知道为什么用张量运算而不是 for 循环</label></li>
+        <li><label><input type="checkbox" data-k="c4">我能说出平方损失和正态分布噪声的关系</label></li>
+        <li><label><input type="checkbox" data-k="c5">我能默写训练循环的四步</label></li>
+        <li><label><input type="checkbox" data-k="c6">我知道形状对不上时广播会悄悄出错，要多打印 shape</label></li>
+      </ul>
+      <span class="small check-msg"></span>
+    </div>
+    <div class="panel stack">
+      <h3>明天（第 6 天）学什么</h3>
+      <p>原书 3.3 线性回归的简洁实现（用 <code>nn.Linear</code>、<code>nn.MSELoss</code>、<code>torch.optim.SGD</code> 和 DataLoader 把今天的代码缩成几行）和 3.4 softmax 回归（从“预测一个数”变成“预测属于哪一类”，交叉熵损失）。你论文 DKT 的输出层和 BCE 损失就在这一部分。</p>
+    </div>
+  </div>
+</section>
+</main>

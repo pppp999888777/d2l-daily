@@ -1,0 +1,366 @@
+<main class="wrap day" id="day7" data-day="7" hidden>
+<section class="hero">
+  <div class="eyebrow">第 7 天 · 原书第 3.5 节 + 第 3.6 节 + 第 3.7 节</div>
+  <h1>第一个图像分类器：认出 10 种衣服</h1>
+  <p class="lead">今天用真实的图片：Fashion-MNIST，28×28 像素的灰度服装照片，分 10 类。先学怎么读取和查看图像数据，再从零写一个 softmax 回归分类器，训练、评估、预测，最后用 PyTorch 的零件重写一遍，并弄清楚为什么要把 softmax 和交叉熵合在一起算。</p>
+  <div class="plan">
+    <div><b class="k">今天的时间</b>大约 80 分钟，分三部分。训练那几格各要几秒钟。</div>
+    <div><b class="k">学完你能</b><ul><li>读取图像数据集，知道图片也是张量</li><li>写出完整的分类训练和评估流程</li><li>算精度，看懂训练曲线</li><li>知道 softmax 的数值溢出问题怎么避免</li></ul></div>
+    <div><b class="k">和你的论文</b><ul><li>“只在训练集上训练，在测试集上评估”就是论文的 80/20 划分</li><li><code>evaluate_accuracy</code> 对应论文算 AUC、ECE 的评估函数</li></ul></div>
+  </div>
+  <p class="note" id="fmStatus">图片数据正在解压……</p>
+</section>
+
+<section class="part" id="fashion">
+  <div class="part-h"><div class="eyebrow">第一部分</div><h2>3.5 图像分类数据集</h2><span class="src">对应原书第 3.5 节，代码来自原书 PyTorch 版</span></div>
+  <div class="prose"><p>MNIST（手写数字）太简单了，原书改用更难一些的 Fashion-MNIST。完整数据集有 6 万张训练图和 1 万张测试图。<b>这个网页内嵌了训练集的前 6000 张和测试集的前 1000 张</b>（每类大约 600 张和 100 张），图片和标签都是原始数据，只是少一些，下面的代码会显示这个数量。</p>
+    <div class="row"><button class="btn primary runAll" data-day="7">从头全部运行</button><span class="small muted runAllMsg"></span></div></div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.5.1</span><h3>读取数据集</h3></div>
+    <div class="cell"><textarea>%matplotlib inline
+from d2l import torch as d2l
+import torch
+import torchvision
+from torchvision import transforms
+from torch.utils import data
+d2l.use_svg_display()</textarea></div>
+    <div class="prose"><p><code>transforms.ToTensor()</code> 把图片变成 32 位浮点张量，并除以 255，让像素值落在 0 到 1 之间。<code>train=True</code> 取训练集，<code>train=False</code> 取测试集。测试集只用来评估，不参与训练。</p></div>
+    <div class="cell"><textarea># 通过ToTensor实例将图像数据从PIL类型变换成32位浮点数格式，
+# 并除以255使得所有像素的数值均在0～1之间
+trans = transforms.ToTensor()
+mnist_train = torchvision.datasets.FashionMNIST(
+    root="../data", train=True, transform=trans, download=True)
+mnist_test = torchvision.datasets.FashionMNIST(
+    root="../data", train=False, transform=trans, download=True)</textarea></div>
+    <div class="cell"><textarea>len(mnist_train), len(mnist_test)</textarea></div>
+    <div class="prose"><p>每张图是 1 个通道（灰度）、高 28、宽 28，所以形状是 [1, 28, 28]。<code>mnist_train[0]</code> 是 (图片, 标签) 这样一对，<code>[0][0]</code> 取出图片：</p></div>
+    <div class="cell"><textarea>mnist_train[0][0].shape</textarea></div>
+    <div class="panel stack" id="pixLab">
+      <h4>一张图就是一个 28×28 的数字表格</h4>
+      <p class="small muted">拖动滑块换一张图。把鼠标放到图上，看那个像素的值（0 是黑，1 是白）。右边那条是把 28×28 拉平成 784 个数以后的样子，softmax 回归吃进去的就是这 784 个数。</p>
+      <div class="row"><label class="ctrl" for="pixI">第几张（训练集） <output id="pixIv">0</output><input type="range" id="pixI" min="0" max="5999" value="0"></label><span class="small" id="pixLab2"></span></div>
+      <div class="pixwrap"><canvas id="pixCv" width="280" height="280" aria-label="放大的 28×28 图片"></canvas><div class="stack" style="flex:1 1 220px;min-width:0"><div class="calc" id="pixCalc">把鼠标放到左边的图上。</div><canvas id="pixStrip" height="40" aria-label="拉平成 784 个数"></canvas><span class="small muted">↑ 拉平后的 784 个像素（每行 28 个首尾相接）</span></div></div>
+    </div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.5.2</span><h3>看看这些图</h3></div>
+    <div class="prose"><p>10 个类别是：T 恤、裤子、套衫、连衣裙、外套、凉鞋、衬衫、运动鞋、包、短靴。标签存的是 0 到 9 的数字，下面的函数把数字换成名字：</p></div>
+    <div class="cell"><textarea>def get_fashion_mnist_labels(labels):  #@save
+    """返回Fashion-MNIST数据集的文本标签"""
+    text_labels = ['t-shirt', 'trouser', 'pullover', 'dress', 'coat',
+                   'sandal', 'shirt', 'sneaker', 'bag', 'ankle boot']
+    return [text_labels[int(i)] for i in labels]</textarea></div>
+    <div class="prose"><p>画图函数：<code>subplots</code> 开一个网格，每格用 <code>imshow</code> 画一张图。网页里的 matplotlib 是简化版，配色仿照 matplotlib 默认的 viridis。</p></div>
+    <div class="cell"><textarea>def show_images(imgs, num_rows, num_cols, titles=None, scale=1.5):  #@save
+    """绘制图像列表"""
+    figsize = (num_cols * scale, num_rows * scale)
+    _, axes = d2l.plt.subplots(num_rows, num_cols, figsize=figsize)
+    axes = axes.flatten()
+    for i, (ax, img) in enumerate(zip(axes, imgs)):
+        if torch.is_tensor(img):
+            # 图片张量
+            ax.imshow(img.numpy())
+        else:
+            # PIL图片
+            ax.imshow(img)
+        ax.axes.get_xaxis().set_visible(False)
+        ax.axes.get_yaxis().set_visible(False)
+        if titles:
+            ax.set_title(titles[i])
+    return axes</textarea></div>
+    <div class="cell"><textarea>X, y = next(iter(data.DataLoader(mnist_train, batch_size=18)))
+show_images(X.reshape(18, 28, 28), 2, 9, titles=get_fashion_mnist_labels(y));</textarea></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.5.3</span><h3>读取小批量，整合成一个函数</h3></div>
+    <div class="prose"><p>用 DataLoader 每次读 256 张，打乱顺序。<code>num_workers=4</code> 表示用 4 个进程并行读（网页里没有多进程，这个参数会被忽略）：</p></div>
+    <div class="cell"><textarea>batch_size = 256
+
+def get_dataloader_workers():  #@save
+    """使用4个进程来读取数据"""
+    return 4
+
+train_iter = data.DataLoader(mnist_train, batch_size, shuffle=True,
+                             num_workers=get_dataloader_workers())</textarea></div>
+    <div class="prose"><p>读完整个训练集要多久？（6000 张、24 个小批量。数据加载太慢会拖慢训练，这是原书练习 1、2 讨论的内容。）</p></div>
+    <div class="cell"><textarea>timer = d2l.Timer()
+for X, y in train_iter:
+    continue
+f'{timer.stop():.2f} sec'</textarea></div>
+    <div class="prose"><p>把读取训练集和测试集的代码整合成 <code>load_data_fashion_mnist</code>，以后各章都用它。<code>resize</code> 参数可以把图片缩放成别的大小，后面讲卷积网络时会用到：</p></div>
+    <div class="cell"><textarea>def load_data_fashion_mnist(batch_size, resize=None):  #@save
+    """下载Fashion-MNIST数据集，然后将其加载到内存中"""
+    trans = [transforms.ToTensor()]
+    if resize:
+        trans.insert(0, transforms.Resize(resize))
+    trans = transforms.Compose(trans)
+    mnist_train = torchvision.datasets.FashionMNIST(
+        root="../data", train=True, transform=trans, download=True)
+    mnist_test = torchvision.datasets.FashionMNIST(
+        root="../data", train=False, transform=trans, download=True)
+    return (data.DataLoader(mnist_train, batch_size, shuffle=True,
+                            num_workers=get_dataloader_workers()),
+            data.DataLoader(mnist_test, batch_size, shuffle=False,
+                            num_workers=get_dataloader_workers()))</textarea></div>
+    <div class="cell"><textarea>train_iter, test_iter = load_data_fashion_mnist(32, resize=64)
+for X, y in train_iter:
+    print(X.shape, X.dtype, y.shape, y.dtype)
+    break</textarea></div>
+    <p class="note">形状 [32, 1, 64, 64] 是 [批量, 通道, 高, 宽]。这是图像数据的标准排法，以后卷积网络的每一层都按这个顺序读形状。</p>
+  </div>
+</section>
+
+<section class="part" id="smscratch">
+  <div class="part-h"><div class="eyebrow">第二部分</div><h2>3.6 softmax 回归的从零开始实现</h2><span class="src">对应原书第 3.6 节，代码来自原书 PyTorch 版</span></div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.6.1</span><h3>初始化参数、定义 softmax 和模型</h3></div>
+    <div class="cell"><textarea>from d2l import torch as d2l
+import torch
+from IPython import display
+
+batch_size = 256
+train_iter, test_iter = d2l.load_data_fashion_mnist(batch_size)</textarea></div>
+    <div class="prose"><p>每张图拉平成 784 个数，输出 10 类，所以权重 W 是 [784, 10]，偏置 b 是 [10]：</p></div>
+    <div class="cell"><textarea>num_inputs = 784
+num_outputs = 10
+
+W = torch.normal(0, 0.01, size=(num_inputs, num_outputs), requires_grad=True)
+b = torch.zeros(num_outputs, requires_grad=True)</textarea></div>
+    <div class="prose"><p>复习第 2 天的按轴求和（<code>d2l.reduce_sum</code> 就是 <code>.sum</code>）：</p></div>
+    <div class="cell"><textarea>X = d2l.tensor([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
+d2l.reduce_sum(X, 0, keepdim=True), d2l.reduce_sum(X, 1, keepdim=True)</textarea></div>
+    <div class="prose"><p>按定义实现 softmax：每个数取 exp，再除以本行的和。</p></div>
+    <div class="cell"><textarea>def softmax(X):
+    X_exp = d2l.exp(X)
+    partition = d2l.reduce_sum(X_exp, 1, keepdim=True)
+    return X_exp / partition  # 这里应用了广播机制</textarea></div>
+    <div class="cell"><textarea>X = d2l.normal(0, 1, (2, 5))
+X_prob = softmax(X)
+X_prob, d2l.reduce_sum(X_prob, 1)</textarea></div>
+    <div class="prose"><p>模型：先把每张图 reshape 成 784 个数，乘 W 加 b，再做 softmax。</p></div>
+    <div class="cell"><textarea>def net(X):
+    return softmax(d2l.matmul(d2l.reshape(X, (-1, W.shape[0])), W) + b)</textarea></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.6.2</span><h3>损失函数和分类精度</h3></div>
+    <div class="prose"><p>昨天学过的写法，取出每个样本“正确类别”的预测概率：</p></div>
+    <div class="cell"><textarea>y = d2l.tensor([0, 2])
+y_hat = d2l.tensor([[0.1, 0.3, 0.6], [0.3, 0.2, 0.5]])
+y_hat[[0, 1], y]</textarea></div>
+    <div class="cell"><textarea>def cross_entropy(y_hat, y):
+    return - d2l.log(y_hat[range(len(y_hat)), y])
+
+cross_entropy(y_hat, y)</textarea></div>
+    <div class="prose"><p><b>精度</b>：预测对的比例。先用 argmax 选出概率最大的类别，再和真实标签比较。上面两个样本，第一个预测成类别 2（错），第二个预测成类别 2（对），精度 0.5：</p></div>
+    <div class="cell"><textarea>def accuracy(y_hat, y):  #@save
+    """计算预测正确的数量"""
+    if len(y_hat.shape) > 1 and y_hat.shape[1] > 1:
+        y_hat = d2l.argmax(y_hat, axis=1)
+    cmp = d2l.astype(y_hat, y.dtype) == y
+    return float(d2l.reduce_sum(d2l.astype(cmp, y.dtype)))</textarea></div>
+    <div class="cell"><textarea>accuracy(y_hat, y) / len(y)</textarea></div>
+    <div class="prose"><p>在整个数据集上评估精度。<code>Accumulator</code> 是一个累加器，边算边加“预测对的个数”和“总个数”。<code>__getitem__</code> 让它可以用 <code>metric[0]</code> 这样的下标访问。</p></div>
+    <div class="cell"><textarea>def evaluate_accuracy(net, data_iter):  #@save
+    """计算在指定数据集上模型的精度"""
+    if isinstance(net, torch.nn.Module):
+        net.eval()  # 将模型设置为评估模式
+    metric = Accumulator(2)  # 正确预测数、预测总数
+    with torch.no_grad():
+        for X, y in data_iter:
+            metric.add(accuracy(net(X), y), d2l.size(y))
+    return metric[0] / metric[1]</textarea></div>
+    <div class="cell"><textarea>class Accumulator:  #@save
+    """在n个变量上累加"""
+    def __init__(self, n):
+        self.data = [0.0] * n
+
+    def add(self, *args):
+        self.data = [a + float(b) for a, b in zip(self.data, args)]
+
+    def reset(self):
+        self.data = [0.0] * len(self.data)
+
+    def __getitem__(self, idx):
+        return self.data[idx]</textarea></div>
+    <div class="prose"><p>还没训练，权重是随机的，精度应该在 0.1 左右（10 类瞎猜）：</p></div>
+    <div class="cell"><textarea>evaluate_accuracy(net, test_iter)</textarea></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.6.3</span><h3>训练</h3></div>
+    <div class="prose"><p>一个 epoch 的训练函数。它兼容两种优化器：PyTorch 自带的（第 6 天）和自己写的（第 5 天的 sgd）。返回这个 epoch 的平均损失和训练精度。</p></div>
+    <div class="cell"><textarea>def train_epoch_ch3(net, train_iter, loss, updater):  #@save
+    """训练模型一个迭代周期（定义见第3章）"""
+    # 将模型设置为训练模式
+    if isinstance(net, torch.nn.Module):
+        net.train()
+    # 训练损失总和、训练准确度总和、样本数
+    metric = Accumulator(3)
+    for X, y in train_iter:
+        # 计算梯度并更新参数
+        y_hat = net(X)
+        l = loss(y_hat, y)
+        if isinstance(updater, torch.optim.Optimizer):
+            # 使用PyTorch内置的优化器和损失函数
+            updater.zero_grad()
+            l.mean().backward()
+            updater.step()
+        else:
+            # 使用定制的优化器和损失函数
+            l.sum().backward()
+            updater(X.shape[0])
+        metric.add(float(l.sum()), accuracy(y_hat, y), y.numel())
+    # 返回训练损失和训练精度
+    return metric[0] / metric[2], metric[1] / metric[2]</textarea></div>
+    <div class="prose"><p><code>Animator</code> 在训练过程中画曲线。原书在 Jupyter 里会一边训练一边刷新这张图；网页里训练完一次画出来。</p></div>
+    <div class="cell"><textarea>class Animator:  #@save
+    """在动画中绘制数据"""
+    def __init__(self, xlabel=None, ylabel=None, legend=None, xlim=None,
+                 ylim=None, xscale='linear', yscale='linear',
+                 fmts=('-', 'm--', 'g-.', 'r:'), nrows=1, ncols=1,
+                 figsize=(3.5, 2.5)):
+        # 增量地绘制多条线
+        if legend is None:
+            legend = []
+        d2l.use_svg_display()
+        self.fig, self.axes = d2l.plt.subplots(nrows, ncols, figsize=figsize)
+        if nrows * ncols == 1:
+            self.axes = [self.axes, ]
+        # 使用lambda函数捕获参数
+        self.config_axes = lambda: d2l.set_axes(
+            self.axes[0], xlabel, ylabel, xlim, ylim, xscale, yscale, legend)
+        self.X, self.Y, self.fmts = None, None, fmts
+
+    def add(self, x, y):
+        # 向图表中添加多个数据点
+        if not hasattr(y, "__len__"):
+            y = [y]
+        n = len(y)
+        if not hasattr(x, "__len__"):
+            x = [x] * n
+        if not self.X:
+            self.X = [[] for _ in range(n)]
+        if not self.Y:
+            self.Y = [[] for _ in range(n)]
+        for i, (a, b) in enumerate(zip(x, y)):
+            if a is not None and b is not None:
+                self.X[i].append(a)
+                self.Y[i].append(b)
+        self.axes[0].cla()
+        for x, y, fmt in zip(self.X, self.Y, self.fmts):
+            self.axes[0].plot(x, y, fmt)
+        self.config_axes()
+        display.display(self.fig)
+        display.clear_output(wait=True)</textarea></div>
+    <div class="prose"><p>完整的训练函数：每个 epoch 训练一遍，再在测试集上评估一次，把三个数画到图上。最后的 <code>assert</code> 检查训练效果是否达标。</p></div>
+    <div class="cell"><textarea>def train_ch3(net, train_iter, test_iter, loss, num_epochs, updater):  #@save
+    """训练模型（定义见第3章）"""
+    animator = Animator(xlabel='epoch', xlim=[1, num_epochs], ylim=[0.3, 0.9],
+                        legend=['train loss', 'train acc', 'test acc'])
+    for epoch in range(num_epochs):
+        train_metrics = train_epoch_ch3(net, train_iter, loss, updater)
+        test_acc = evaluate_accuracy(net, test_iter)
+        animator.add(epoch + 1, train_metrics + (test_acc,))
+    train_loss, train_acc = train_metrics
+    # 原书是 train_loss < 0.5。本页只内嵌了 6000 张训练图（原书 60000 张），
+    # 每个 epoch 的更新次数少 10 倍，10 个 epoch 后损失约 0.59，所以阈值放宽到 0.65
+    assert train_loss < 0.65, train_loss
+    assert train_acc <= 1 and train_acc > 0.7, train_acc
+    assert test_acc <= 1 and test_acc > 0.7, test_acc</textarea></div>
+    <div class="prose"><p>用第 5 天的 <code>sgd</code> 当优化器，学习率 0.1，训练 10 个 epoch：</p></div>
+    <div class="cell"><textarea>lr = 0.1
+
+def updater(batch_size):
+    return d2l.sgd([W, b], lr, batch_size)</textarea></div>
+    <div class="cell" data-manual="训练 10 个 epoch，大约需要 3 到 10 秒，期间页面会暂时卡住"><textarea>num_epochs = 10
+train_ch3(net, train_iter, test_iter, cross_entropy, num_epochs, updater)
+print(f'测试集精度：{evaluate_accuracy(net, test_iter):.3f}')</textarea></div>
+    <p class="note">原书用 6 万张图训练，10 个 epoch 后测试精度大约 0.83。这里只有 6000 张，测试精度大约 0.79。曲线里训练精度（紫色虚线）和测试精度（绿色点划线）很接近，说明还没有过拟合。</p>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.6.4</span><h3>预测，以及模型学到了什么</h3></div>
+    <div class="prose"><p>拿测试集的前 6 张图预测，每张图上面一行是真实标签，下面一行是预测：</p></div>
+    <div class="cell" data-manual="要先运行上面的训练格"><textarea>def predict_ch3(net, test_iter, n=6):  #@save
+    """预测标签（定义见第3章）"""
+    for X, y in test_iter:
+        break
+    trues = d2l.get_fashion_mnist_labels(y)
+    preds = d2l.get_fashion_mnist_labels(d2l.argmax(net(X), axis=1))
+    titles = [true +'\n' + pred for true, pred in zip(trues, preds)]
+    d2l.show_images(
+        d2l.reshape(X[0:n], (n, 28, 28)), 1, n, titles=titles[0:n])
+
+predict_ch3(net, test_iter)</textarea></div>
+    <div class="prose"><p>这一格不在原书里：W 的每一列有 784 个数，对应一个类别。把每列重新排成 28×28 画出来，就是模型给每一类学到的“模板”：亮的地方是“这里有东西就更像这一类”。能隐约看出裤子的两条腿、包的轮廓。</p></div>
+    <div class="cell" data-manual="要先运行上面的训练格"><textarea>d2l.show_images(W.detach().T.reshape(10, 28, 28), 2, 5,
+                titles=d2l.get_fashion_mnist_labels(range(10)));</textarea></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.6.5</span><h3>练习（原书）</h3></div>
+    <div class="prose"><p><b>练习 1、2、3</b>：按定义写的 softmax 和交叉熵有什么问题？试试 exp(50)，以及 log(0)：</p></div>
+    <div class="cell"><textarea>torch.exp(torch.tensor([50.0, 100.0]))</textarea></div>
+    <div class="cell"><textarea>big = torch.tensor([[100.0, 1000.0]])
+softmax(big), torch.softmax(big, dim=1)</textarea></div>
+    <div class="prose"><p>32 位浮点数最大约 3.4×10³⁸，exp(100) 已经超出，变成 inf，inf ÷ inf 就成了 nan。PyTorch 自带的 softmax 先减去每行的最大值再算，不会溢出。交叉熵里还有 log：模型给正确答案的概率如果是 0，log(0) = −inf：</p></div>
+    <div class="cell"><textarea>from torch import nn
+p = torch.tensor([0.0, 0.5])
+torch.log(p), nn.CrossEntropyLoss()(big, torch.tensor([0]))</textarea></div>
+    <div class="prose"><p>解决办法见第三部分：把 softmax 和 log 合在一起算。</p></div>
+    <div class="qa">
+      <details><summary><b>练习 4</b>：返回概率最大的类别总是最好的吗？比如医疗诊断？</summary><p>不一定。第 1 天的毒蘑菇例子说过：要看预期损失，不是只看概率。诊断时把病人误判为健康的代价远大于反过来，即使“有病”的概率只有 30%，也可能应该按有病处理。你的论文讲的也是这件事：预测准（AUC 高）不等于决策好。</p></details>
+      <details><summary><b>练习 5</b>：用 softmax 回归预测下一个词，词太多会有什么问题？</summary><p>词表可能有几万到几十万个词，输出层的参数是 隐藏维度 × 词表大小，非常大；每一步都要对所有词算 exp 再求和，计算量也很大。调试台第 5 章最后一步算 logits 时，形状 [T, V] 里的 V 就是词表大小，GPT-2 的 V 是 50257。</p></details>
+    </div>
+  </div>
+</section>
+
+<section class="part" id="smconcise">
+  <div class="part-h"><div class="eyebrow">第三部分</div><h2>3.7 softmax 回归的简洁实现</h2><span class="src">对应原书第 3.7 节，代码来自原书 PyTorch 版</span></div>
+  <div class="blk">
+    <div class="cell"><textarea>from d2l import torch as d2l
+import torch
+from torch import nn
+
+batch_size = 256
+train_iter, test_iter = d2l.load_data_fashion_mnist(batch_size)</textarea></div>
+    <div class="prose"><p>PyTorch 不会自动把 [256, 1, 28, 28] 拉平，所以在全连接层前面加一个 <code>nn.Flatten()</code>。<code>net.apply(init_weights)</code> 把 <code>init_weights</code> 用到网络的每一层上，只给全连接层的权重重新初始化：</p></div>
+    <div class="cell"><textarea># PyTorch不会隐式地调整输入的形状。因此，
+# 我们在线性层前定义了展平层（flatten），来调整网络输入的形状
+net = nn.Sequential(nn.Flatten(), nn.Linear(784, 10))
+
+def init_weights(m):
+    if type(m) == nn.Linear:
+        nn.init.normal_(m.weight, std=0.01)
+
+net.apply(init_weights);</textarea></div>
+    <div class="callout"><h4>重新审视 softmax 的实现：数值稳定</h4><p>上面看到，按定义算 softmax，exp 可能<b>上溢</b>成 inf。先减去每行的最大值 max(o) 就不会：分子分母同乘 exp(−max) 结果不变，而最大的那个数变成 exp(0) = 1。但减完以后，很小的数 exp 出来可能<b>下溢</b>成 0，log(0) 又是 −inf。办法是把 softmax 和 log 合在一起：log ŷⱼ = (oⱼ − max) − log Σ exp(oₖ − max)，完全不用算出 ŷ 本身。这叫 LogSumExp 技巧。<code>nn.CrossEntropyLoss</code> 就是这样做的，所以要直接把 logit（未经 softmax 的输出）传给它。你论文的代码就是这样写的：<code>experiment.py</code> 第 1255 行用 <code>F.binary_cross_entropy_with_logits(logit, y, ...)</code>，直接把 logit 传进去，而不是先做 sigmoid 再算 BCE。</p></div>
+    <div class="cell"><textarea>loss = nn.CrossEntropyLoss(reduction='none')</textarea></div>
+    <div class="cell"><textarea>trainer = torch.optim.SGD(net.parameters(), lr=0.1)</textarea></div>
+    <div class="cell" data-manual="训练 10 个 epoch，大约需要 3 到 10 秒，期间页面会暂时卡住"><textarea>num_epochs = 10
+d2l.train_ch3(net, train_iter, test_iter, loss, num_epochs, trainer)
+print(f'测试集精度：{d2l.evaluate_accuracy(net, test_iter):.3f}')</textarea></div>
+    <div class="qa">
+      <details><summary><b>练习 1</b>：调整批量大小、epoch 数和学习率，看看结果。</summary><p>把上面训练格里的 <code>num_epochs</code> 改成 5 或 20，或者把 <code>lr</code> 改成 0.01、0.5 再运行（改 lr 要回到上一格重新创建 trainer）。批量大小要在 <code>load_data_fashion_mnist(batch_size)</code> 那一格改。注意 epoch 越多，等待时间越长。</p></details>
+      <details><summary><b>练习 2</b>：epoch 一直增加，为什么测试精度过一阵会下降？怎么办？</summary><p>训练久了，模型开始记住训练集里的细节和噪声，在没见过的测试图上反而变差，这就是第 1 天讲的过拟合。常见对策：提前停止（在验证集表现最好的那个 epoch 停下，你论文选“验证集 BCE 最低的检查点”就是这个做法）、加正则化（权重衰减、暂退法，第 9 天会学）、增加训练数据。</p></details>
+    </div>
+  </div>
+</section>
+
+<section class="part">
+  <div class="part-h"><div class="eyebrow">今日小结</div><h2>今天学会了吗？</h2></div>
+  <div class="two">
+    <div class="panel stack">
+      <ul class="check-list" data-day="7">
+        <li><label><input type="checkbox" data-k="c1">一张灰度图是 [1, 28, 28] 的张量，一批图是 [批量, 通道, 高, 宽]</label></li>
+        <li><label><input type="checkbox" data-k="c2">我会用 DataLoader 读图像数据，知道训练集和测试集的区别</label></li>
+        <li><label><input type="checkbox" data-k="c3">我能说出分类训练的完整流程：前向、损失、反向、更新、评估精度</label></li>
+        <li><label><input type="checkbox" data-k="c4">我能看懂训练曲线里的 train loss、train acc、test acc</label></li>
+        <li><label><input type="checkbox" data-k="c5">我知道 softmax 会溢出，要把 logit 直接交给 CrossEntropyLoss</label></li>
+      </ul>
+      <span class="small check-msg"></span>
+    </div>
+    <div class="panel stack">
+      <h3>第 3 章学完了</h3>
+      <p>线性回归和 softmax 回归都只有一层。下一章（第 8 天起）加入<b>隐藏层</b>和<b>激活函数</b>，变成多层感知机，这才是真正的“深度”学习。你在调试台第 4 章玩过的螺旋分类，就是多层感知机。</p>
+    </div>
+  </div>
+</section>
+</main>

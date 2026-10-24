@@ -1,0 +1,401 @@
+// ============ 页面逻辑 ============
+const $=s=>document.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const store={get(k,d){try{const v=localStorage.getItem('d2l:'+k);return v==null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem('d2l:'+k,JSON.stringify(v))}catch(e){}}};
+function colors(){const cs=getComputedStyle(document.documentElement),g=n=>cs.getPropertyValue(n).trim();const o={};for(const k of['bg','surface','sunk','ink','muted','line','accent','pos','neg'])o[k]=g('--'+k);return o}
+function fitCanvas(cv,W,H){const r=window.devicePixelRatio||1;cv.width=Math.round(W*r);cv.height=Math.round(H*r);cv.style.width=W+'px';cv.style.height=H+'px';const c=cv.getContext('2d');c.setTransform(r,0,0,r,0,0);return c}
+const MONO='11px "JetBrains Mono",ui-monospace,monospace';
+const bodyFont=px=>`${px}px ${getComputedStyle(document.body).fontFamily}`;
+const DAYS=['1','2','3','4','5','6','7','8'];
+
+// ---------- 张量图示 ----------
+function cellText(v,dtype){if(dtype==='bool')return v?'T':'F';if(dtype==='int64')return String(v);if(!Number.isFinite(v))return String(v);return Number.isInteger(v)?String(v):(Math.abs(v)>=100?v.toFixed(0):v.toFixed(2))}
+function cellStyle(v,dtype,mx){if(dtype==='bool')return v?'background:color-mix(in srgb,var(--accent) 38%,var(--surface))':'';if(!Number.isFinite(v)||!mx||v===0)return'';
+  const t=Math.round(Math.min(1,Math.abs(v)/mx)**0.8*55);return`background:color-mix(in srgb,var(${v>0?'--pos':'--neg'}) ${t}%,var(--surface))`}
+const GROUPC=['--accent','--pos','--neg'];
+function gridHTML(shape,data,dtype,cls=()=>'',mxOverride,styleFn){const nd=shape.length,st=MT.strides(shape);let mx=mxOverride;if(mx==null){mx=0;for(const v of data)if(Number.isFinite(v)&&Math.abs(v)>mx)mx=Math.abs(v)}
+  const td=off=>`<td class="${cls(off)}" style="${styleFn?styleFn(off):cellStyle(data[off],dtype,mx)}" title="${esc(cellText(data[off],dtype))}">${esc(cellText(data[off],dtype))}</td>`;
+  const mat=(rows,cols,base,rs,colStride,showIdx)=>{let h='<table class="tm">';if(showIdx){h+='<tr><td class="i"></td>';for(let j=0;j<cols;j++)h+=`<td class="i">${j}</td>`;h+='</tr>'}
+    for(let i=0;i<rows;i++){h+='<tr>'+(showIdx?`<td class="i">${i}</td>`:'');for(let j=0;j<cols;j++)h+=td(base+i*rs+j*colStride);h+='</tr>'}return h+'</table>'};
+  if(nd===0)return`<div class="tg">${mat(1,1,0,0,0,false)}<span class="ax">0 维（标量）</span></div>`;
+  if(nd===1)return`<div class="tg"><span class="ax">轴 0 →（长度 ${shape[0]}）</span>${mat(1,shape[0],0,0,1,true)}</div>`;
+  if(nd===2)return`<div class="tg"><span class="ax">轴 1（列）→　　轴 0（行）↓</span>${mat(shape[0],shape[1],0,st[0],1,true)}</div>`;
+  let h=`<div class="tg"><span class="ax">轴 0 有 ${shape[0]} 块；每块里 轴 1（行）↓ 轴 2（列）→</span><div class="grid3">`;
+  for(let b=0;b<shape[0];b++)h+=`<div class="tg"><span class="ax">第 ${b} 块</span>${mat(shape[1],shape[2],b*st[0],st[1],1,false)}</div>`;return h+'</div></div>'}
+const shapeStr=s=>'('+s.join(', ')+(s.length===1?',':'')+')';
+function labelHTML(T,title){return`<span class="lab">${title?esc(title)+' · ':''}形状 <b>${shapeStr(T.shape)}</b> · ${T.data.length} 个元素 · ${T.dtype}${T.requires_grad?' · 需要梯度':''}</span>`}
+function expandedHTML(S,out,mx){const n=out.reduce((a,b)=>a*b,1),k=out.length-S.shape.length,sst=MT.strides(S.shape),data=new Float64Array(n),copied=new Uint8Array(n),idx=new Array(out.length).fill(0);
+  for(let f=0;f<n;f++){let off=0,cp=false;for(let d=0;d<out.length;d++){if(d<k){if(idx[d]>0)cp=true;continue}const sd=S.shape[d-k];if(sd===1){if(idx[d]>0)cp=true}else off+=idx[d]*sst[d-k]}data[f]=S.data[off];copied[f]=cp?1:0;
+    for(let d=out.length-1;d>=0;d--){if(++idx[d]<out[d])break;idx[d]=0}}
+  return gridHTML(out,data,S.dtype,off=>copied[off]?'cp':'',mx)}
+function vizTensor(T,title){if(T.data.length>240||T.shape.length>3)return`<div class="item">${labelHTML(T,title)}<span class="small muted">元素太多，不画表格。形状 ${shapeStr(T.shape)} 的意思是：${T.shape.map((d,i)=>`轴 ${i} 长 ${d}`).join('，')}。</span></div>`;
+  const m=T.meta;
+  if(m&&m.kind==='bcast'){const mx=Math.max(...[...m.a.data,...m.b.data,...T.data].filter(Number.isFinite).map(Math.abs),0);
+    return`<div class="item"><span class="lab">${esc(title||'')} 广播：${shapeStr(m.a.shape)} 和 ${shapeStr(m.b.shape)} 都扩展成 ${shapeStr(T.shape)}，虚线格是复制出来的</span><div class="vz">
+      <div class="item">${expandedHTML(m.a,T.shape,mx)}<span class="lab">左边 ${shapeStr(m.a.shape)} → ${shapeStr(T.shape)}</span></div><span class="op">${esc(m.op)}</span>
+      <div class="item">${expandedHTML(m.b,T.shape,mx)}<span class="lab">右边 ${shapeStr(m.b.shape)} → ${shapeStr(T.shape)}</span></div><span class="op">=</span>
+      <div class="item">${gridHTML(T.shape,T.data,T.dtype,()=>'',mx)}${labelHTML(T)}</div></div></div>`}
+  if(m&&m.kind==='index')return`<div class="item"><span class="lab">${esc(title||'')} 从原张量 ${shapeStr(m.src.shape)} 里选出粗框的格子</span><div class="vz">
+      <div class="item">${gridHTML(m.src.shape,m.src.data,m.src.dtype,off=>m.mask[off]?'sel':'dim')}<span class="lab">原张量</span></div><span class="op">→</span>
+      <div class="item">${gridHTML(T.shape,T.data,T.dtype)}${labelHTML(T)}</div></div></div>`;
+  if(m&&m.kind==='reduce'&&m.src.shape.length===2&&m.dims.length===1){const S=m.src,ax=m.dims[0],[R,Cn]=S.shape;const grp=off=>ax===0?off%Cn:Math.floor(off/Cn);
+    const sty=off=>`background:color-mix(in srgb,var(${GROUPC[grp(off)%3]}) ${18+(grp(off)%2)*14}%,var(--surface))`;const nm={sum:'求和',mean:'求平均',max:'取最大',min:'取最小'}[m.op];
+    const outSty=i=>`background:color-mix(in srgb,var(${GROUPC[i%3]}) ${18+(i%2)*14}%,var(--surface))`;
+    return`<div class="item"><span class="lab">${esc(title||'')} 沿轴 ${ax}${nm}：${ax===0?'每一列上下':'每一行左右'}的格子合成一个数，同色的格子归到一起。轴 ${ax} 的长度 ${S.shape[ax]} 从形状里${m.keep?'变成 1':'消失'}</span><div class="vz">
+      <div class="item">${gridHTML(S.shape,S.data,S.dtype,()=>'',null,sty)}<span class="lab">原张量 ${shapeStr(S.shape)}</span></div><span class="op">→</span>
+      <div class="item">${gridHTML(T.shape,T.data,T.dtype,()=>'',null,off=>outSty(off))}${labelHTML(T)}</div></div></div>`}
+  if(m&&m.kind==='mm'){const A=m.a,Bm=m.b;return`<div class="item"><span class="lab">${esc(title||'')} 矩阵乘法：左边的每一行和右边的每一列做点积。${shapeStr(A.shape)} @ ${shapeStr(Bm.shape)} → ${shapeStr(T.shape)}</span><div class="vz">
+      <div class="item">${gridHTML(A.shape,A.data,A.dtype)}<span class="lab">左 ${shapeStr(A.shape)}</span></div><span class="op">@</span><div class="item">${gridHTML(Bm.shape,Bm.data,Bm.dtype)}<span class="lab">右 ${shapeStr(Bm.shape)}</span></div><span class="op">=</span>
+      <div class="item">${gridHTML(T.shape,T.data,T.dtype)}${labelHTML(T)}</div></div></div>`}
+  if(m&&m.kind==='cat'){const p0=m.parts[0],dim=m.dim;const st=MT.strides(T.shape);const inFirst=off=>{const i=Math.floor(off/st[0]),j=off%st[0];return dim===0?i<p0.shape[0]:j<p0.shape[1]};
+    return`<div class="item">${gridHTML(T.shape,T.data,T.dtype,off=>inFirst(off)?'':'p1')}${labelHTML(T,title)}<span class="legend"><span>没下划线的来自第 1 个张量</span><span><i style="background:var(--accent)"></i>带蓝色下划线的来自第 2 个</span><span>沿 dim=${dim}（轴 ${dim}）拼接</span></span></div>`}
+  if(m&&m.kind==='assign')return`<div class="item">${gridHTML(T.shape,T.data,T.dtype,off=>m.mask[off]?'chg':'')}${labelHTML(T,title)}<span class="legend"><span><i style="background:var(--pos)"></i>橙色框是刚被改写的格子</span></span></div>`;
+  return`<div class="item">${gridHTML(T.shape,T.data,T.dtype)}${labelHTML(T,title)}</div>`}
+// 计算图：从结果往回追到叶子
+function graphHTML(T,env){if(!T.grad_fn)return'';const names=new Map();for(const[k,v]of Object.entries(env.vars))if(MT.isT(v)&&!names.has(v))names.set(v,k);
+  const seen=new Set();let count=0;
+  const node=(t,depth)=>{if(count++>24)return'<li class="muted">……</li>';const nm=names.get(t);const sh=shapeStr(t.shape);
+    if(!t.grad_fn){if(t.requires_grad)return`<li><span class="gn leaf">${esc(nm||'叶子')}</span> 叶子节点，需要梯度，形状 ${sh}${t.grad?`，现在的 .grad = <code>${esc(MT.repr(t.grad).replace(/^tensor\(|\)$/g,''))}</code>`:''}</li>`;
+      return`<li><span class="gn const">${esc(nm||(t.weak?'常数 '+cellText(t.data[0],t.dtype):'常数张量'))}</span> 不需要梯度${t.weak?'':'，形状 '+sh}</li>`}
+    if(seen.has(t))return`<li><span class="gn">${esc(nm||'中间结果')}</span>（上面已画过）</li>`;seen.add(t);
+    return`<li><span class="gn op">${esc(nm||'中间结果')}</span> = <code>${esc(t.grad_fn.name)}</code> 算出来的，形状 ${sh}${t.grad_fn.freed?'，<span class="muted">这张图已经反向传播过</span>':''}<ul>${t.grad_fn.inputs.filter(MT.isT).map(i=>node(i,depth+1)).join('')}</ul></li>`};
+  return`<div class="graph"><span class="lab">计算图：从结果往下追，<code>backward()</code> 时梯度沿着这条路往回传到叶子节点</span><ul>${node(T,0)}</ul></div>`}
+function vizValue(v,env){if(!v)return'';if(MT.isT(v))return`<div class="vz">${vizTensor(v)}</div>`+graphHTML(v,env);
+  if(v.t==='tuple'&&v.items.some(MT.isT))return`<div class="vz">${v.items.map((x,i)=>MT.isT(x)?vizTensor(x,`第 ${i+1} 个`):`<div class="item"><span class="lab">第 ${i+1} 个</span><code>${esc(MT.repr(x).slice(0,200))}</code></div>`).join('')}</div>`;
+  if(v.t==='size')return`<div class="vz"><div class="item"><span class="lab">形状里有 ${v.dims.length} 个数，就是 ${v.dims.length} 个轴：${v.dims.map((d,i)=>`轴 ${i} 长 ${d}`).join('，')||'0 维（标量）'}</span></div></div>`;return''}
+
+// ---------- 画图（d2l.plot / plt.plot） ----------
+const SERIESC=['--accent','--pos','--neg','--muted'];
+function drawPlot(cv,fig){const C=colors(),cs=getComputedStyle(document.documentElement);const W=Math.max(260,Math.min(560,cv.parentElement.clientWidth||520)),H=Math.round(W*0.62),ctx=fitCanvas(cv,W,H);
+  const pl=50,pr=12,pt=fig.legend?30:12,pb=36;const xs=fig.series.flatMap(s=>s.x).filter(Number.isFinite),ys=[...fig.series.flatMap(s=>s.y),...fig.hlines].filter(Number.isFinite);if(!xs.length)return;
+  let x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys);if(x1===x0)x1=x0+1;if(y1===y0){y1+=1;y0-=1}const py=(y1-y0)*.06;y0-=py;y1+=py;if(fig.xlim){[x0,x1]=fig.xlim}if(fig.ylim){[y0,y1]=fig.ylim}
+  const nice=(lo,hi,n)=>{const sp=hi-lo,st0=sp/n,mg=10**Math.floor(Math.log10(st0)),e=st0/mg,st=(e>=7.5?10:e>=3.5?5:e>=1.5?2:1)*mg;const t=[];for(let v=Math.ceil(lo/st)*st;v<=hi+st*1e-9;v+=st)t.push(+v.toFixed(10));return t};
+  const sx=x=>pl+(x-x0)/(x1-x0)*(W-pl-pr),sy=y=>pt+(y1-y)/(y1-y0)*(H-pt-pb);
+  ctx.font=MONO;ctx.fillStyle=C.muted;ctx.strokeStyle=C.line;ctx.lineWidth=1;ctx.textAlign='right';ctx.textBaseline='middle';
+  for(const t of nice(y0,y1,4)){const y=Math.round(sy(t))+.5;ctx.beginPath();ctx.moveTo(pl,y);ctx.lineTo(W-pr,y);ctx.stroke();ctx.fillText(String(+t.toPrecision(6)),pl-6,y)}
+  ctx.textAlign='center';ctx.textBaseline='top';for(const t of nice(x0,x1,5)){const x=Math.round(sx(t))+.5;ctx.fillText(String(+t.toPrecision(6)),x,H-pb+6)}
+  ctx.font=bodyFont(12);ctx.fillStyle=C.ink;if(fig.xlabel)ctx.fillText(fig.xlabel,(pl+W-pr)/2,H-16);if(fig.ylabel){ctx.save();ctx.translate(13,(pt+H-pb)/2);ctx.rotate(-Math.PI/2);ctx.textBaseline='middle';ctx.fillText(fig.ylabel,0,0);ctx.restore()}
+  for(const h of fig.hlines){ctx.strokeStyle=C.ink;ctx.setLineDash([5,4]);ctx.beginPath();ctx.moveTo(pl,sy(h));ctx.lineTo(W-pr,sy(h));ctx.stroke();ctx.setLineDash([])}
+  ctx.save();ctx.beginPath();ctx.rect(pl,pt,W-pl-pr,H-pt-pb);ctx.clip();
+  fig.series.forEach((s,i)=>{const col=s.color?cs.getPropertyValue(s.color).trim():cs.getPropertyValue(SERIESC[i%4]).trim();if(s.scatter){ctx.fillStyle=col;ctx.globalAlpha=.7;s.x.forEach((x,k)=>{ctx.beginPath();ctx.arc(sx(x),sy(s.y[k]),1.8,0,7);ctx.fill()});ctx.globalAlpha=1;return}ctx.strokeStyle=col;ctx.lineWidth=2;ctx.setLineDash(s.dash||(i===1?[6,4]:i===2?[2,3]:[]));ctx.beginPath();s.x.forEach((x,k)=>{const X=sx(x),Y=sy(s.y[k]);k?ctx.lineTo(X,Y):ctx.moveTo(X,Y)});ctx.stroke();ctx.setLineDash([]);if(s.x.length<=30){ctx.fillStyle=col;s.x.forEach((x,k)=>{ctx.beginPath();ctx.arc(sx(x),sy(s.y[k]),2.5,0,7);ctx.fill()})}});ctx.restore();
+  if(fig.legend){let lx=pl;ctx.font=bodyFont(12);ctx.textAlign='left';ctx.textBaseline='middle';fig.series.forEach((s,i)=>{if(!s.label)return;const col=s.color?cs.getPropertyValue(s.color).trim():cs.getPropertyValue(SERIESC[i%4]).trim();ctx.strokeStyle=col;ctx.lineWidth=2;ctx.setLineDash(s.dash||(i===1?[6,4]:i===2?[2,3]:[]));ctx.beginPath();ctx.moveTo(lx,12);ctx.lineTo(lx+18,12);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle=C.ink;ctx.fillText(s.label,lx+22,12);lx+=ctx.measureText(s.label).width+44})}
+  cv._fig=fig}
+
+// ---------- 代码格 ----------
+const ENVS={},EXEC={},RAN={};
+const dayOf=el=>el.closest('main.day').dataset.day;
+const envOf=day=>ENVS[day]||(ENVS[day]=MT.newEnv());
+const HINTS={NameError:'这个名字还没定义。通常是上面的格子还没运行：点这一天开头的“从头全部运行”，或者先运行定义它的那个格子。',
+  SyntaxError:'写法有问题。检查括号是否成对、是不是用了中文标点、冒号后面有没有换行缩进。',IndentationError:'缩进不对。同一个代码块里的行要对齐，冒号后面的下一行要多缩进 4 个空格。',
+  RuntimeError:'运算本身出错了，最常见的原因是形状对不上。先打印两边的 .shape 看看。',IndexError:'下标超出范围了。下标从 0 开始，长度为 n 的轴最大下标是 n-1。',
+  TypeError:'类型不对，比如该给数字的地方给了文字。看报错说的是哪种类型。',AttributeError:'这个对象没有这个属性或方法，检查一下拼写。',ValueError:'值不合适，看看错误信息里说的是哪个值。',
+  KeyError:'没有这个名字的列或键，检查一下拼写和大小写。',ModuleNotFoundError:'这个网页只装了课程用到的几个包：torch、numpy、pandas、os、math、random、d2l。'};
+const CHECKS={
+  h24:env=>{const h=env.vars.h;if(!h||!MT.isT(h))return['bad','还没有名为 h 的张量。'];if(h.shape.join()==='24,64')return['ok',`完成。h 的形状是 [24, 64]，一共 ${h.data.length} 个数。换一种方法再做一次试试。`];return['bad',`h 现在的形状是 [${h.shape.join(', ')}]，目标是 [24, 64]。`]},
+  z100:env=>{const o=env.vars.one;if(!o||!MT.isT(o))return['bad','还没有名为 one 的张量。'];if(o.shape.join()==='100,64')return['ok','对，取出一个学生得到 [100, 64]。再试试 z[0, -1] 或 z[0][-1]，取第 1 个学生最后一步，形状是 [64]。'];if(o.shape.join()==='64')return['ok','对，这是第 1 个学生最后一步的 64 个数，形状 [64]。'];return['bad',`one 的形状是 [${o.shape.join(', ')}]。取第 1 个学生用 z[0]。`]},
+  clean:env=>{const c=env.vars.clean;if(!c||c.t!=='df')return['bad','还没有名为 clean 的表格。'];if(c.cols.includes('Alley'))return['bad',`clean 里还有 Alley 列。现在的列是 ${c.cols.join('、')}。用 data.drop(columns=[worst])。`];return['ok',`完成。删掉了缺失最多的 Alley，剩下 ${c.cols.join('、')}。`]},
+  T42:env=>{const T=env.vars.T;if(!T||!MT.isT(T))return['bad','还没有名为 T 的张量。'];if(T.shape.join()!=='4,2')return['bad',`T 的形状是 [${T.shape.join(', ')}]，应该是 [4, 2]。先做完练习 1。`];if([...T.data].some(Number.isNaN))return['bad','T 里还有 nan，先补缺失值。'];return['ok','完成。4 套房子、每套 2 个数（房间数和价格），没有缺失值。']}};
+function renderResult(cell,r,env){const out=cell.querySelector('.out'),viz=cell.querySelector('.viz');
+  if(r.ok){out.className='out';out.textContent=r.text;out.hidden=!r.text;viz.innerHTML=vizValue(r.value,env)}
+  else{out.className='out err';out.textContent=r.text;const tip=document.createElement('span');tip.className='tip';tip.textContent=HINTS[r.errType]||'';if(tip.textContent)out.appendChild(tip);out.hidden=false;viz.innerHTML=''}
+  for(const fig of r.plots||[]){const wrap=document.createElement('div');wrap.className='plot';viz.appendChild(wrap);if(fig.kind==='fig'){renderFig(wrap,fig);continue}const cv=document.createElement('canvas');cv.setAttribute('aria-label','代码画出的图');wrap.appendChild(cv);drawPlot(cv,fig)}
+  viz.hidden=!viz.innerHTML}
+function runCellEl(cell){const day=dayOf(cell),env=envOf(day),ta=cell.querySelector('textarea');const r=MT.runCell(ta.value,env);EXEC[day]=(EXEC[day]||0)+1;
+  cell.querySelector('.cnt').textContent=`[${EXEC[day]}]`;cell.classList.remove('stale');renderResult(cell,r,env);
+  const ck=cell.dataset.check;if(ck){const box=cell.querySelector('.check');const[k,msg]=r.ok?CHECKS[ck](env):['bad','先让代码不报错。'];box.innerHTML=`<span class="${k}">${k==='ok'?'✓ ':'· '}</span>${esc(msg)}`;box.hidden=false}
+  return r.ok}
+function autoSize(ta){if(!ta.offsetParent)return;ta.style.height='auto';ta.style.height=ta.scrollHeight+2+'px'}
+function setupCells(){$$('.cell').forEach((cell,i)=>{const ta=cell.querySelector('textarea');ta.id='cell'+i;ta.spellcheck=false;ta.setAttribute('aria-label',`代码格 ${i+1}`);cell.dataset.orig=ta.value;ta.rows=Math.max(1,ta.value.split('\n').length);
+  const bar=document.createElement('div');bar.className='bar';bar.innerHTML=`<span class="cnt">[ ]</span><span class="hint">Ctrl/⌘ + Enter 运行</span><span class="sp"></span><button class="btn sm" data-a="reset">还原</button><button class="btn sm primary" data-a="run">运行</button>`;
+  cell.insertBefore(bar,ta);const out=document.createElement('pre');out.className='out';out.hidden=true;const viz=document.createElement('div');viz.className='viz';viz.hidden=true;cell.append(out,viz);
+  if(cell.dataset.check){const c=document.createElement('div');c.className='check';c.hidden=true;cell.append(c)}
+  bar.querySelector('[data-a=run]').onclick=()=>{if(cell.dataset.manual){const out=cell.querySelector('.out');out.className='out';out.textContent='正在运行，请稍等……';out.hidden=false;cell.querySelector('.viz').hidden=true;setTimeout(()=>runCellEl(cell),40)}else runCellEl(cell)};
+  bar.querySelector('[data-a=reset]').onclick=()=>{ta.value=cell.dataset.orig;autoSize(ta);cell.classList.add('stale')};
+  ta.addEventListener('input',()=>{autoSize(ta);cell.classList.add('stale')});
+  ta.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();runCellEl(cell)}
+    else if(e.key==='Tab'&&!e.shiftKey){e.preventDefault();const s=ta.selectionStart;ta.setRangeText('    ',s,ta.selectionEnd,'end');autoSize(ta)}})})}
+function runAll(day){ENVS[day]=MT.newEnv();EXEC[day]=0;MT.resetFS();let errs=0;const main=$('#day'+day);
+  $$('.cell',main).forEach(c=>{if(c.dataset.manual){const out=c.querySelector('.out');out.className='out';out.textContent='';const t=document.createElement('span');t.className='tip';t.textContent=`这一格要手动运行：${c.dataset.manual}。准备好了点这一格右上角的“运行”。`;out.appendChild(t);out.hidden=false;return}if(!runCellEl(c))errs++});RAN[day]=true;
+  const expected={'1':0,'2':5,'3':3,'4':0,'5':0,'6':0,'7':0,'8':0}[day]||0;
+  $$('.runAllMsg',main).forEach(m=>m.textContent=errs>expected?`运行完了，有 ${errs} 个格子报错，往下找红字。`:expected?`全部运行完了。其中 ${expected} 个格子是故意报错的，用来练习读报错。`:'全部运行完了，没有报错。')}
+document.addEventListener('click',e=>{const b=e.target.closest('.runAll');if(b)runAll(b.dataset.day)});
+
+// ---------- 第 1 天：修水管 ----------
+const kn={b:0,w:0,steps:0,stage:0};
+function kData(){return $('#kThird').checked?[[3,350],[2,250],[4,480]]:[[3,350],[2,250]]}
+function kRender(){const D=kData(),b=kn.b,w=kn.w;$('#kB').value=Math.round(b);$('#kW').value=Math.round(w);$('#kBv').textContent=b.toFixed(1);$('#kWv').textContent=w.toFixed(1);
+  let L=0;const rows=D.map(([h,y])=>{const p=b+w*h,e=p-y;L+=e*e;return`<tr><td class="num">${h} 小时</td><td class="num">${y}</td><td class="num">${p.toFixed(1)}</td><td class="num">${e>=0?'+':''}${e.toFixed(1)}</td></tr>`});L/=D.length;
+  $('#kTbl').innerHTML=`<thead><tr><th>账单（特征）</th><th>实际金额（标签）</th><th>模型猜的 b + w×小时</th><th>差多少</th></tr></thead><tbody>${rows.join('')}</tbody>`;
+  $$('#kSteps li').forEach((li,i)=>li.classList.toggle('on',i===kn.stage));
+  $('#kCalc').textContent=`模型：金额 = ${b.toFixed(1)} + ${w.toFixed(1)} × 小时\n平方误差（平均）= ${L.toFixed(2)}\n已训练 ${kn.steps} 步${L<0.5&&!$('#kThird').checked?'\n\n找到了：上门费约 50 美元，每小时约 100 美元，和书里的答案一样。':''}${$('#kThird').checked&&kn.steps>500?'\n\n三张账单不可能全猜对，现在已经是误差最小的那条线了。':''}`}
+function kTrain(n){const D=kData(),lr=0.07;for(let s=0;s<n;s++){let gb=0,gw=0;for(const[h,y]of D){const e=kn.b+kn.w*h-y;gb+=2*e;gw+=2*e*h}kn.b-=lr*gb/D.length;kn.w-=lr*gw/D.length;kn.steps++}}
+$('#kTrain').onclick=()=>{kn.stage=1;kRender();setTimeout(()=>{kn.stage=2;kTrain(200);kRender();setTimeout(()=>{kn.stage=3;kRender()},350)},250)};
+$('#kReset').onclick=()=>{kn.b=0;kn.w=0;kn.steps=0;kn.stage=0;kRender()};
+$('#kB').oninput=()=>{kn.b=+$('#kB').value;kRender()};$('#kW').oninput=()=>{kn.w=+$('#kW').value;kRender()};$('#kThird').onchange=kRender;
+function imRender(){const w=parseInt($('#imW').value)||0,h=parseInt($('#imH').value)||0,c=parseInt($('#imC').value)||0;
+  $('#imOut').textContent=`${w} × ${h} × ${c} = ${(w*h*c).toLocaleString()} 个数\n在 PyTorch 里：torch.zeros((${h}, ${w}, ${c})).shape → torch.Size([${h}, ${w}, ${c}])`}
+['#imW','#imH','#imC'].forEach(s=>$(s).addEventListener('input',imRender));
+
+// ---------- 第 1 天：过拟合 ----------
+let ofSeed=3;const of={};
+function lcg(s){return()=>{s=(s*1664525+1013904223)>>>0;return s/4294967296}}
+function ofData(){const r=lcg(ofSeed*7919+11),g=()=>{let u=0;while(!u)u=r();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*r())};const f=x=>Math.sin(Math.PI*x);
+  of.tr=Array.from({length:10},(_,i)=>{const x=-0.95+i*1.9/9+(r()-.5)*.08;return[x,f(x)+g()*.22]});of.te=Array.from({length:10},()=>{const x=r()*1.9-.95;return[x,f(x)+g()*.22]});of.errs=[];for(let d=0;d<=9;d++){const c=fit(d);of.errs.push([mse(c,of.tr),mse(c,of.te)])}}
+function fit(d){const n=d+1,A=Array.from({length:n},()=>new Float64Array(n+1));for(const[x,y]of of.tr){const p=[];for(let i=0;i<n;i++)p.push(x**i);for(let i=0;i<n;i++){for(let j=0;j<n;j++)A[i][j]+=p[i]*p[j];A[i][n]+=p[i]*y}}
+  for(let i=0;i<n;i++)A[i][i]+=1e-9;for(let i=0;i<n;i++){let m=i;for(let k=i+1;k<n;k++)if(Math.abs(A[k][i])>Math.abs(A[m][i]))m=k;[A[i],A[m]]=[A[m],A[i]];for(let k=0;k<n;k++){if(k===i)continue;const f=A[k][i]/A[i][i];for(let j=i;j<=n;j++)A[k][j]-=f*A[i][j]}}return A.map((r,i)=>r[n]/r[i])}
+const poly=(c,x)=>c.reduce((s,a,i)=>s+a*x**i,0),mse=(c,P)=>P.reduce((s,[x,y])=>s+(poly(c,x)-y)**2,0)/P.length;
+function ofRender(){const host=$('#ofHost');if(!host.offsetParent)return;const d=+$('#ofDeg').value;$('#ofDegv').textContent=d;const c=fit(d),C=colors();
+  const W=Math.max(260,host.clientWidth),H=Math.round(Math.min(300,W*.68)),ctx=fitCanvas($('#ofCv'),W,H);const sx=x=>(x+1.05)/2.1*W,sy=y=>H/2-y*H/2/1.9;
+  ctx.strokeStyle=C.line;ctx.beginPath();ctx.moveTo(0,sy(0));ctx.lineTo(W,sy(0));ctx.stroke();
+  ctx.save();ctx.beginPath();ctx.rect(0,0,W,H);ctx.clip();ctx.strokeStyle=C.accent;ctx.lineWidth=2.2;ctx.beginPath();for(let i=0;i<=300;i++){const x=-1.05+2.1*i/300,y=Math.max(-5,Math.min(5,poly(c,x)));i?ctx.lineTo(sx(x),sy(y)):ctx.moveTo(sx(x),sy(y))}ctx.stroke();ctx.restore();
+  for(const[x,y]of of.te){ctx.beginPath();ctx.arc(sx(x),sy(y),4.5,0,7);ctx.strokeStyle=C.neg;ctx.lineWidth=2;ctx.stroke()}
+  for(const[x,y]of of.tr){ctx.beginPath();ctx.arc(sx(x),sy(y),4.5,0,7);ctx.fillStyle=C.pos;ctx.fill()}
+  ctx.font=bodyFont(12);ctx.fillStyle=C.ink;ctx.fillText('● 训练点',8,16);ctx.fillText('○ 测试点',8,32);
+  const cv2=$('#ofErr'),W2=Math.max(240,cv2.parentElement.clientWidth),H2=200,c2=fitCanvas(cv2,W2,H2),pl=44,pr=74,pt=10,pb=26;
+  const E=of.errs.map(([a,b])=>[Math.log10(Math.max(a,1e-4)),Math.log10(Math.max(b,1e-4))]);let lo=Math.floor(Math.min(...E.flat())),hi=Math.ceil(Math.max(...E.flat()));if(hi===lo)hi++;
+  const X=i=>pl+i/9*(W2-pl-pr),Y=v=>pt+(hi-v)/(hi-lo)*(H2-pt-pb);c2.font=MONO;c2.fillStyle=C.muted;c2.strokeStyle=C.line;c2.textAlign='right';c2.textBaseline='middle';
+  for(let k=lo;k<=hi;k++){c2.beginPath();c2.moveTo(pl,Y(k));c2.lineTo(W2-pr,Y(k));c2.stroke();c2.fillText(k>=0?String(10**k):(10**k).toFixed(-k),pl-5,Y(k))}
+  c2.textAlign='center';c2.textBaseline='top';for(let i=0;i<=9;i++)c2.fillText(i,X(i),H2-pb+5);
+  c2.strokeStyle=C.ink;c2.globalAlpha=.25;c2.beginPath();c2.moveTo(X(d),pt);c2.lineTo(X(d),H2-pb);c2.stroke();c2.globalAlpha=1;
+  const line=(j,col,name)=>{c2.strokeStyle=col;c2.lineWidth=2;c2.beginPath();E.forEach((e,i)=>i?c2.lineTo(X(i),Y(e[j])):c2.moveTo(X(i),Y(e[j])));c2.stroke();E.forEach((e,i)=>{c2.beginPath();c2.arc(X(i),Y(e[j]),i===d?5:3,0,7);c2.fillStyle=col;c2.fill()});c2.fillStyle=C.ink;c2.font=bodyFont(11.5);c2.textAlign='left';c2.textBaseline='middle';c2.fillText(name,W2-pr+8,Y(E[9][j])+(j?6:-6))};
+  line(0,C.pos,'训练误差');line(1,C.neg,'测试误差');
+  const[a,b]=of.errs[d];$('#ofCalc').textContent=`复杂度 ${d}（${d+1} 个参数）\n训练误差 ${a.toFixed(4)}\n测试误差 ${b.toFixed(4)}\n${d>=8?'训练误差很小、测试误差大：过拟合':d<=1?'两个误差都大：欠拟合':'两个误差都比较小：刚刚好'}`}
+$('#ofDeg').oninput=ofRender;$('#ofNew').onclick=()=>{ofSeed++;ofData();ofRender()};
+
+// ---------- 第 1 天：问题类型 & 毒蘑菇 & 猜形状 ----------
+const KINDS=['回归','分类','标记','推荐','序列学习','无监督学习','强化学习'];
+const KQ=[['预测一套房子能卖多少钱','回归','问的是“多少钱”，标签是一个数值。'],['识别手写数字是 0 到 9 中的哪一个','分类','问的是“哪一个”，有 10 个类别。'],['一张图里有猫、公鸡、狗和驴，把它们全都标出来','标记','一张图可以同时有好几个标签，书里叫标记问题（多标签分类）。'],
+  ['根据你的购买记录，给你推荐可能喜欢的商品','推荐','书里专门讲了推荐系统，它要给每个用户排出一个列表。'],['把一句英语翻译成法语','序列学习','输入和输出都是长度不定的序列。'],['没有任何标签，让电脑把顾客自动分成几群','无监督学习','没有标签，让机器自己找结构，这是聚类。'],
+  ['让程序下围棋，赢了得分、输了扣分，自己摸索怎么下','强化学习','和环境互动、靠奖励学习。'],['预测未来 6 小时的降雨量','回归','书里原例子：问的是“多少”。'],
+  ['你的论文：看学生做题记录，猜他下一题会不会做对','分类','对或错两类，是二分类。因为输入是一串做题记录，它同时也是序列学习。'],['你的论文：根据学生情况决定下一题出什么','强化学习','这是做决策、看长期效果，论文里用的离线评估方法就来自强化学习。']];
+function kqRender(){const ans=store.get('kq',{});$('#kQuiz').innerHTML=KQ.map(([q,a,why],i)=>{const pick=ans[i];return`<div class="q"><div>${i+1}. ${esc(q)}</div><div class="opts">${KINDS.map(k=>`<button class="btn sm${pick!=null&&k===a?' right':''}${pick===k&&k!==a?' wrong':''}" data-i="${i}" data-k="${k}">${k}</button>`).join('')}</div>${pick!=null?`<div class="fb">${pick===a?'<span class="ok">对。</span>':`<span class="bad">不对，是${a}。</span>`}${esc(why)}</div>`:''}</div>`}).join('');
+  $$('#kQuiz button').forEach(b=>b.onclick=()=>{const a=store.get('kq',{});a[b.dataset.i]=b.dataset.k;store.set('kq',a);kqRender()});
+  const got=Object.entries(ans).filter(([i,k])=>KQ[i]&&KQ[i][1]===k).length;$('#kScore').innerHTML=`答对 ${got} / ${KQ.length}　<button class="btn sm" id="kqReset">重做</button>`;$('#kqReset').onclick=()=>{store.set('kq',{});kqRender()}}
+function muRender(){const p=+$('#muP').value,e=+$('#muC').value,C=e>=4?Infinity:Math.round(10**e);$('#muPv').textContent=p.toFixed(2);$('#muCv').textContent=C===Infinity?'∞（书里的设定）':C.toLocaleString();
+  const eat=p===0?0:p*C,drop=(1-p)*1;const th=C===Infinity?0:1/(C+1);
+  $('#muOut').textContent=`吃掉的预期损失 = ${p.toFixed(2)} × ${C===Infinity?'∞':C} + ${(1-p).toFixed(2)} × 0 = ${eat===Infinity?'∞':eat.toFixed(2)}\n扔掉的预期损失 = ${p.toFixed(2)} × 0 + ${(1-p).toFixed(2)} × 1 = ${drop.toFixed(2)}\n\n决定：${eat<drop?'吃':'扔掉'}\n\n${C===Infinity?'代价无穷大时，只要有一点点可能有毒就该扔。':`只有“有毒”概率低于 1/(${C}+1) ≈ ${th.toPrecision(2)} 时才值得吃。`}\n模型最可能的答案是“${p<0.5?'无毒':'有毒'}”，但该做的决定是“${eat<drop?'吃':'扔'}”。`}
+['#muP','#muC'].forEach(s=>$(s).addEventListener('input',muRender));
+const SQ=['torch.zeros((2, 3, 4))','torch.arange(12).reshape(-1, 6)','X = torch.arange(12).reshape(3, 4)\nX[1:3]','X = torch.arange(12).reshape(3, 4)\ntorch.cat((X, X), dim=1)','torch.arange(3).reshape(3, 1) + torch.arange(2).reshape(1, 2)','X = torch.arange(12).reshape(3, 4)\nX.sum(dim=0)','torch.zeros((256, 100, 64))[0, -1]'];
+function sqTruth(code){const env=MT.newEnv();MT.runCell('import torch',env);const r=MT.runCell(code,env);return r.value&&MT.isT(r.value)?{shape:r.value.shape,text:r.text}:null}
+function sqRender(){$('#shapeQuiz').innerHTML=SQ.map((code,i)=>`<div class="q"><pre class="calc" style="margin:0">${esc(code)}</pre><div class="row"><label class="small muted" for="sq${i}">结果的形状</label><input type="text" id="sq${i}" placeholder="例如 (3, 4)" size="14"><button class="btn sm primary" data-i="${i}">检查</button></div><div class="fb" id="sqf${i}"></div></div>`).join('');
+  $$('#shapeQuiz button').forEach(b=>b.onclick=()=>{const i=+b.dataset.i,t=sqTruth(SQ[i]),guess=($('#sq'+i).value.match(/\d+/g)||[]).map(Number);const ok=guess.join()===t.shape.join();
+    $('#sqf'+i).innerHTML=`${ok?'<span class="ok">对。</span>':`<span class="bad">实际是 ${shapeStr(t.shape)}。</span>`}运行结果：<pre class="calc" style="margin-top:6px">${esc(t.text)}</pre>`})}
+
+// ---------- 第 2 天：点积和夹角 ----------
+function dotRender(){const host=$('#dotHost');if(!host.offsetParent)return;const C=colors(),A=+$('#dotA').value,Bd=+$('#dotB').value;$('#dotAv').textContent=A+'°';$('#dotBv').textContent=Bd+'°';
+  const W=Math.max(220,Math.min(320,host.clientWidth)),H=W,ctx=fitCanvas($('#dotCv'),W,H),cx=W/2,cy=H/2,R=W*0.38;
+  ctx.strokeStyle=C.line;ctx.beginPath();ctx.arc(cx,cy,R,0,7);ctx.stroke();ctx.beginPath();ctx.moveTo(cx-R-10,cy);ctx.lineTo(cx+R+10,cy);ctx.moveTo(cx,cy-R-10);ctx.lineTo(cx,cy+R+10);ctx.stroke();
+  const vec=(deg,col,lab)=>{const r=deg*Math.PI/180,x=cx+R*Math.cos(r),y=cy-R*Math.sin(r);ctx.strokeStyle=col;ctx.fillStyle=col;ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(x,y);ctx.stroke();ctx.beginPath();ctx.arc(x,y,5,0,7);ctx.fill();ctx.font=bodyFont(13);ctx.fillStyle=C.ink;ctx.fillText(lab,x+(Math.cos(r)>0?8:-18),y-(Math.sin(r)>0?8:-14))};
+  vec(A,C.accent,'a');vec(Bd,C.pos,'b');
+  const ra=A*Math.PI/180,rb=Bd*Math.PI/180,a=[Math.cos(ra),Math.sin(ra)],b=[Math.cos(rb),Math.sin(rb)],dot=a[0]*b[0]+a[1]*b[1];let ang=Math.abs(A-Bd)%360;if(ang>180)ang=360-ang;
+  $('#dotCalc').textContent=`a = (${a[0].toFixed(2)}, ${a[1].toFixed(2)})\nb = (${b[0].toFixed(2)}, ${b[1].toFixed(2)})\n点积 = ${a[0].toFixed(2)}×${b[0].toFixed(2)} + ${a[1].toFixed(2)}×${b[1].toFixed(2)}\n     = ${dot.toFixed(3)}\n夹角 ${ang.toFixed(0)}°，cos ${ang.toFixed(0)}° = ${Math.cos(ang*Math.PI/180).toFixed(3)}\n${dot>0.9?'方向几乎一样':dot>0.2?'方向比较像':dot>-0.2?'差不多垂直，互不相关':dot>-0.9?'方向比较相反':'方向几乎相反'}`}
+['#dotA','#dotB'].forEach(s=>$(s).addEventListener('input',dotRender));
+// ---------- 第 2 天：L1 和 L2 ----------
+const nv={x:3,y:-4};
+function normRender(){const host=$('#normHost');if(!host.offsetParent)return;const C=colors(),W=Math.max(220,Math.min(320,host.clientWidth)),H=W,ctx=fitCanvas($('#normCv'),W,H),u=W/12,cx=W/2,cy=H/2;
+  ctx.strokeStyle=C.line;ctx.lineWidth=1;for(let i=-6;i<=6;i++){ctx.beginPath();ctx.moveTo(cx+i*u,0);ctx.lineTo(cx+i*u,H);ctx.stroke();ctx.beginPath();ctx.moveTo(0,cy+i*u);ctx.lineTo(W,cy+i*u);ctx.stroke()}
+  ctx.strokeStyle=C.muted;ctx.beginPath();ctx.moveTo(0,cy);ctx.lineTo(W,cy);ctx.moveTo(cx,0);ctx.lineTo(cx,H);ctx.stroke();
+  const px=cx+nv.x*u,py=cy-nv.y*u;ctx.strokeStyle=C.pos;ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(px,cy);ctx.lineTo(px,py);ctx.stroke();
+  ctx.strokeStyle=C.accent;ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(px,py);ctx.stroke();ctx.fillStyle=C.accent;ctx.beginPath();ctx.arc(px,py,5,0,7);ctx.fill();
+  const l2=Math.hypot(nv.x,nv.y),l1=Math.abs(nv.x)+Math.abs(nv.y);
+  $('#normCalc').textContent=`u = (${nv.x}, ${nv.y})\n\nL2 = √(${nv.x}² + ${nv.y}²) = √${nv.x*nv.x+nv.y*nv.y} = ${l2.toFixed(3)}\nL1 = |${nv.x}| + |${nv.y}| = ${l1}\n\ntorch.norm(u)       → tensor(${l2.toFixed(4)})\ntorch.abs(u).sum()  → tensor(${l1}.)\n\nL1 总是 ≥ L2，只有向量落在坐标轴上时两者相等。`}
+$('#normCv').addEventListener('click',e=>{const cv=$('#normCv'),r=cv.getBoundingClientRect(),u=r.width/12;nv.x=Math.round((e.clientX-r.left-r.width/2)/u);nv.y=Math.round(-(e.clientY-r.top-r.height/2)/u);normRender()});
+
+// ---------- 第 3 天：割线和切线 ----------
+const fq=x=>3*x*x-4*x;
+function secRender(){const host=$('#secHost');if(!host.offsetParent)return;const C=colors(),x0=+$('#secX').value,h=10**+$('#secH').value;$('#secXv').textContent=x0.toFixed(1);$('#secHv').textContent=h<0.01?h.toExponential(1):h.toFixed(3);
+  const W=Math.max(260,host.clientWidth),H=Math.round(Math.min(300,W*.7)),ctx=fitCanvas($('#secCv'),W,H),X0=-0.5,X1=3.5,Y0=-3,Y1=18;const sx=x=>(x-X0)/(X1-X0)*W,sy=y=>H-(y-Y0)/(Y1-Y0)*H;
+  ctx.strokeStyle=C.line;ctx.beginPath();ctx.moveTo(0,sy(0));ctx.lineTo(W,sy(0));ctx.moveTo(sx(0),0);ctx.lineTo(sx(0),H);ctx.stroke();
+  ctx.strokeStyle=C.accent;ctx.lineWidth=2.4;ctx.beginPath();for(let i=0;i<=200;i++){const x=X0+(X1-X0)*i/200;i?ctx.lineTo(sx(x),sy(fq(x))):ctx.moveTo(sx(x),sy(fq(x)))}ctx.stroke();
+  const slope=6*x0-4,sec=(fq(x0+h)-fq(x0))/h;const line=(m,col,dash)=>{ctx.strokeStyle=col;ctx.lineWidth=2;ctx.setLineDash(dash);ctx.beginPath();ctx.moveTo(sx(X0),sy(fq(x0)+m*(X0-x0)));ctx.lineTo(sx(X1),sy(fq(x0)+m*(X1-x0)));ctx.stroke();ctx.setLineDash([])};
+  line(slope,C.ink,[5,4]);line(sec,C.neg,[]);
+  for(const[x,col]of[[x0,C.pos],[x0+h,C.neg]]){ctx.fillStyle=col;ctx.beginPath();ctx.arc(sx(x),sy(fq(x)),5,0,7);ctx.fill()}
+  $('#secCalc').textContent=`f(x) = 3x² − 4x\n割线斜率 = (f(${x0.toFixed(1)} + h) − f(${x0.toFixed(1)})) / h\n         = ${sec.toFixed(5)}\n切线斜率 f'(${x0.toFixed(1)}) = 6×${x0.toFixed(1)} − 4 = ${slope.toFixed(5)}\n两者相差 ${(sec-slope).toFixed(5)}，正好是 3h`}
+['#secX','#secH'].forEach(s=>$(s).addEventListener('input',secRender));
+// ---------- 第 3 天：梯度下降 ----------
+const gd={p:[2.6,1.6],path:[[2.6,1.6]]};const gf=(a,b)=>a*a+3*b*b,gg=(a,b)=>[2*a,6*b];
+function gradRender(){const host=$('#gradHost');if(!host.offsetParent)return;const C=colors(),cs=getComputedStyle(document.documentElement);const W=Math.max(240,Math.min(360,host.clientWidth)),H=W,ctx=fitCanvas($('#gradCv'),W,H),L=3.2;
+  const sx=x=>(x+L)/(2*L)*W,sy=y=>(L-y)/(2*L)*H;const N=48,cw=W/N;
+  for(let i=0;i<N;i++)for(let j=0;j<N;j++){const x=-L+(i+.5)*2*L/N,y=L-(j+.5)*2*L/N,v=Math.min(1,gf(x,y)/30);ctx.fillStyle=`color-mix(in srgb, ${cs.getPropertyValue('--accent').trim()} ${Math.round(v*70)}%, ${C.surface})`;ctx.fillRect(i*cw,j*cw,cw+1,cw+1)}
+  ctx.strokeStyle=C.surface;ctx.globalAlpha=.6;for(const lv of[1,3,6,10,15,21,28]){ctx.beginPath();for(let k=0;k<=80;k++){const t=k/80*2*Math.PI,x=Math.sqrt(lv)*Math.cos(t),y=Math.sqrt(lv/3)*Math.sin(t);k?ctx.lineTo(sx(x),sy(y)):ctx.moveTo(sx(x),sy(y))}ctx.stroke()}ctx.globalAlpha=1;
+  ctx.strokeStyle=C.pos;ctx.lineWidth=2;ctx.beginPath();gd.path.forEach(([a,b],i)=>i?ctx.lineTo(sx(a),sy(b)):ctx.moveTo(sx(a),sy(b)));ctx.stroke();
+  const[a,b]=gd.p,[ga,gb]=gg(a,b);const n=Math.hypot(ga,gb)||1,len=Math.min(60,20+n*4);ctx.strokeStyle=C.ink;ctx.fillStyle=C.ink;ctx.lineWidth=2.5;const ex=sx(a)-ga/n*len,ey=sy(b)+gb/n*len;ctx.beginPath();ctx.moveTo(sx(a),sy(b));ctx.lineTo(ex,ey);ctx.stroke();
+  const ang=Math.atan2(ey-sy(b),ex-sx(a));ctx.beginPath();ctx.moveTo(ex,ey);ctx.lineTo(ex-9*Math.cos(ang-0.4),ey-9*Math.sin(ang-0.4));ctx.lineTo(ex-9*Math.cos(ang+0.4),ey-9*Math.sin(ang+0.4));ctx.closePath();ctx.fill();
+  ctx.fillStyle=C.pos;ctx.beginPath();ctx.arc(sx(a),sy(b),6,0,7);ctx.fill();ctx.strokeStyle=C.surface;ctx.lineWidth=2;ctx.stroke();
+  const lr=+$('#gradLr').value;$('#gradLrv').textContent=lr.toFixed(2);
+  $('#gradCalc').textContent=`第 ${gd.path.length-1} 步\n位置 (x₁, x₂) = (${a.toFixed(3)}, ${b.toFixed(3)})\nf = x₁² + 3x₂² = ${gf(a,b).toFixed(4)}\n梯度 ∇f = (2x₁, 6x₂) = (${ga.toFixed(3)}, ${gb.toFixed(3)})\n下一步 = 位置 − ${lr} × 梯度\n       = (${(a-lr*ga).toFixed(3)}, ${(b-lr*gb).toFixed(3)})${Math.abs(b)>50?'\n\n发散了：学习率太大，降低后点“回到起点”。':''}`}
+function gradStep(n){const lr=+$('#gradLr').value;for(let i=0;i<n;i++){const[a,b]=gd.p,[ga,gb]=gg(a,b);gd.p=[a-lr*ga,b-lr*gb];if(Math.abs(gd.p[1])>1e6)break;gd.path.push(gd.p)}gradRender()}
+$('#gradStep').onclick=()=>gradStep(1);$('#gradRun').onclick=()=>gradStep(10);$('#gradReset').onclick=()=>{gd.p=gd.path[0];gd.path=[gd.p];gradRender()};$('#gradLr').oninput=gradRender;
+$('#gradCv').addEventListener('click',e=>{const cv=$('#gradCv'),r=cv.getBoundingClientRect(),L=3.2;const x=(e.clientX-r.left)/r.width*2*L-L,y=L-(e.clientY-r.top)/r.height*2*L;gd.p=[x,y];gd.path=[gd.p];gradRender()});
+
+
+// ---------- 第 4 天：灌铅骰子 ----------
+const dice={counts:[0,0,0,0,0,0],n:0};
+function diceProbs(){const w=+$('#diceW').value,o=(1-w)/5;return[o,o,o,o,o,w]}
+function diceRoll(k){const p=diceProbs();for(let t=0;t<k;t++){let u=Math.random(),i=0;for(;i<5;i++){u-=p[i];if(u<=0)break}dice.counts[i]++;dice.n++}diceRender()}
+function diceRender(){const host=$('#diceHost');if(!host.offsetParent)return;const C=colors(),p=diceProbs();$('#diceWv').textContent=p[5].toFixed(3);
+  const W=Math.max(240,Math.min(420,host.clientWidth)),H=220,ctx=fitCanvas($('#diceCv'),W,H),pl=36,pb=24,pt=10,bw=(W-pl-10)/6;const top=Math.max(0.4,...p.map(x=>x*1.3),...dice.counts.map(c=>dice.n?c/dice.n*1.1:0));const sy=v=>pt+(1-v/top)*(H-pt-pb);
+  ctx.font=MONO;ctx.fillStyle=C.muted;ctx.strokeStyle=C.line;ctx.textAlign='right';ctx.textBaseline='middle';for(const t of[0,0.1,0.2,0.3,0.4,0.5,0.6].filter(t=>t<=top)){ctx.beginPath();ctx.moveTo(pl,sy(t));ctx.lineTo(W-10,sy(t));ctx.stroke();ctx.fillText(t.toFixed(1),pl-5,sy(t))}
+  for(let i=0;i<6;i++){const x=pl+i*bw+bw*.18,w=bw*.64,f=dice.n?dice.counts[i]/dice.n:0;ctx.fillStyle=i===5?C.pos:C.accent;ctx.beginPath();ctx.roundRect?ctx.roundRect(x,sy(f),w,sy(0)-sy(f),[4,4,0,0]):ctx.rect(x,sy(f),w,sy(0)-sy(f));ctx.fill();
+    ctx.strokeStyle=C.ink;ctx.setLineDash([4,3]);ctx.beginPath();ctx.moveTo(x-4,sy(p[i]));ctx.lineTo(x+w+4,sy(p[i]));ctx.stroke();ctx.setLineDash([]);ctx.fillStyle=C.muted;ctx.textAlign='center';ctx.textBaseline='top';ctx.fillText(String(i+1),x+w/2,H-pb+6)}
+  const est=dice.counts.map(c=>dice.n?c/dice.n:0);
+  $('#diceCalc').textContent=`已经掷了 ${dice.n} 次\n\n点数  次数   估计概率   真实概率\n`+est.map((e,i)=>`  ${i+1}   ${String(dice.counts[i]).padStart(5)}    ${e.toFixed(3)}      ${p[i].toFixed(3)}`).join('\n')+`\n\n${dice.n<100?'次数太少，估计值波动很大。':dice.n<2000?'估计值开始靠近真实概率了。':'掷得够多了，估计值和真实概率很接近。'}`}
+$$('[data-roll]').forEach(b=>b.onclick=()=>diceRoll(+b.dataset.roll));$('#diceReset').onclick=()=>{dice.counts=[0,0,0,0,0,0];dice.n=0;diceRender()};$('#diceW').oninput=()=>{dice.counts=[0,0,0,0,0,0];dice.n=0;diceRender()};
+
+// ---------- 第 4 天：一万个人的贝叶斯 ----------
+function bayesRender(){const prev=10**+$('#byP').value,sens=+$('#byS').value,fpr=+$('#byF').value;$('#byPv').textContent=(prev*100).toPrecision(2)+'%';$('#bySv').textContent=Math.round(sens*100)+'%';$('#byFv').textContent=(fpr*100).toFixed(1)+'%';
+  const N=10000,sick=N*prev,healthy=N-sick,tp=sick*sens,fp=healthy*fpr,post=tp/(tp+fp||1);
+  $('#byBar').innerHTML=`<div class="popbar"><i class="tp" style="width:${(post*100).toFixed(2)}%"></i><i class="fp" style="flex:1"></i></div><div class="legend"><span><i style="background:var(--pos)"></i>真的感染：${tp.toFixed(1)} 人</span><span><i style="background:var(--muted)"></i>误报的健康人：${fp.toFixed(1)} 人</span></div>`;
+  $('#byCalc').textContent=`一万个人里：感染 ${sick.toFixed(1)} 人，健康 ${healthy.toFixed(1)} 人\n感染者里查出阳性：${sick.toFixed(1)} × ${sens.toFixed(2)} = ${tp.toFixed(1)} 人\n健康人里误报阳性：${healthy.toFixed(1)} × ${fpr.toFixed(3)} = ${fp.toFixed(1)} 人\n\nP(感染 | 阳性) = ${tp.toFixed(1)} ÷ (${tp.toFixed(1)} + ${fp.toFixed(1)}) = ${(post*100).toFixed(2)}%\n\n${prev<0.01?'病越罕见，阳性结果里误报的比例越大。':'病一旦常见起来，阳性结果就可信多了。'}`}
+['#byP','#byS','#byF'].forEach(s=>$(s).addEventListener('input',bayesRender));
+
+// ---------- 第 4 天：BKT 更新 ----------
+const bk={obs:[]};
+function bkParams(){const v=k=>+$(k).value;return{p0:v('#bkP0'),g:v('#bkG'),s:v('#bkS'),l:v('#bkL')}}
+function bkTrace(){const{p0,g,s,l}=bkParams();const ps=[p0],steps=[];let p=p0;for(const y of bk.obs){const pc=p*(1-s)+(1-p)*g;const post=y?p*(1-s)/pc:p*s/(1-pc);const nx=post+(1-post)*l;steps.push({p,pc,post,nx,y});p=nx;ps.push(p)}return{ps,steps}}
+function bktRender(){const host=$('#bktHost');if(!host.offsetParent)return;const C=colors(),P=bkParams();['P0','G','S','L'].forEach(k=>$('#bk'+k+'v').textContent=(+$('#bk'+k).value).toFixed(2));
+  const{ps,steps}=bkTrace();const W=Math.max(240,Math.min(460,host.clientWidth)),H=200,ctx=fitCanvas($('#bktCv'),W,H),pl=36,pr=12,pt=10,pb=24;const n=Math.max(8,ps.length-1);const sx=i=>pl+i/n*(W-pl-pr),sy=v=>pt+(1-v)*(H-pt-pb);
+  ctx.font=MONO;ctx.fillStyle=C.muted;ctx.strokeStyle=C.line;ctx.textAlign='right';ctx.textBaseline='middle';for(const t of[0,0.25,0.5,0.75,1]){ctx.beginPath();ctx.moveTo(pl,sy(t));ctx.lineTo(W-pr,sy(t));ctx.stroke();ctx.fillText(t.toFixed(2),pl-5,sy(t))}
+  ctx.textAlign='center';ctx.textBaseline='top';for(let i=0;i<=n;i+=Math.max(1,Math.ceil(n/8)))ctx.fillText(i,sx(i),H-pb+6);
+  ctx.strokeStyle=C.accent;ctx.lineWidth=2;ctx.beginPath();ps.forEach((v,i)=>i?ctx.lineTo(sx(i),sy(v)):ctx.moveTo(sx(i),sy(v)));ctx.stroke();
+  ps.forEach((v,i)=>{ctx.beginPath();ctx.arc(sx(i),sy(v),4.5,0,7);ctx.fillStyle=i===0?C.muted:(bk.obs[i-1]?C.neg:C.pos);ctx.fill();ctx.strokeStyle=C.surface;ctx.lineWidth=2;ctx.stroke()});
+  $('#bkSeq').textContent=bk.obs.length?'记录：'+bk.obs.map(y=>y?'对':'错').join(' '):'还没有答题记录';
+  const last=steps[steps.length-1];
+  $('#bktCalc').textContent=last?`第 ${steps.length} 题${last.y?'答对':'答错'}\n答题前 P(会) = ${last.p.toFixed(3)}\n预测这题答对的概率 = ${last.p.toFixed(3)}×${(1-P.s).toFixed(2)} + ${(1-last.p).toFixed(3)}×${P.g.toFixed(2)} = ${last.pc.toFixed(3)}\n\n看到${last.y?'答对':'答错'}后（贝叶斯定理）：\nP(会 | ${last.y?'对':'错'}) = ${last.post.toFixed(3)}\n再加上这次可能学会（learn = ${P.l.toFixed(2)}）：\n${last.post.toFixed(3)} + (1 − ${last.post.toFixed(3)}) × ${P.l.toFixed(2)} = ${last.nx.toFixed(3)}\n\n蓝点 = 答对后，橙点 = 答错后`:`现在 P(会) = p0 = ${P.p0.toFixed(2)}\n模型预测下一题答对的概率 = ${(P.p0*(1-P.s)+(1-P.p0)*P.g).toFixed(3)}\n点“答对”或“答错”开始。`}
+$('#bkYes').onclick=()=>{bk.obs.push(1);bktRender()};$('#bkNo').onclick=()=>{bk.obs.push(0);bktRender()};$('#bkReset').onclick=()=>{bk.obs=[];bktRender()};['#bkP0','#bkG','#bkS','#bkL'].forEach(s=>$(s).addEventListener('input',bktRender));
+
+// ---------- 第 5 天：房价模型 ----------
+const HOUSES=[[1400,10],[2000,3],[850,40],[3100,15]];
+function houseRender(){const wa=+$('#hsWa').value,wg=+$('#hsWg').value,b=+$('#hsB').value;$('#hsWav').textContent=wa;$('#hsWgv').textContent=wg;$('#hsBv').textContent=b;
+  const fmtUSD=v=>(v<0?'-':'')+'$'+Math.abs(Math.round(v)).toLocaleString();
+  $('#hsCalc').textContent=`ŷ = Xw + b，X 的形状 (4, 2)，w 的形状 (2,)，ŷ 的形状 (4,)\n\n面积   房龄   预测价格 = ${wa}×面积 + (${wg})×房龄 + ${b}\n`+HOUSES.map(([ar,ag])=>`${String(ar).padStart(5)}  ${String(ag).padStart(4)}   ${fmtUSD(wa*ar+wg*ag+b).padStart(10)}`).join('\n')}
+['#hsWa','#hsWg','#hsB'].forEach(s=>$(s).addEventListener('input',houseRender));
+
+// ---------- 第 5 天：小批量 SGD ----------
+const sgd={};
+function sgdData(){let s=7;const r=()=>{s=(s*1664525+1013904223)>>>0;return s/4294967296},g=()=>{let u=0;while(!u)u=r();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*r())};
+  sgd.X=[];sgd.y=[];for(let i=0;i<1000;i++){const a=g(),b=g();sgd.X.push([a,b]);sgd.y.push(2*a-3.4*b+4.2+0.01*g())}sgd.rng=r;
+  let s11=0,s12=0,s22=0;for(const[a,b]of sgd.X){s11+=a*a;s12+=a*b;s22+=b*b}sgd.C=[s11/1000,s12/1000,s22/1000];sgdReset()}
+function sgdFullLoss(w1,w2,b){let L=0;for(let i=0;i<1000;i++){const e=sgd.X[i][0]*w1+sgd.X[i][1]*w2+b-sgd.y[i];L+=e*e}return L/2000}
+function sgdReset(){sgd.p=[0,0,0];sgd.path=[[0,0]];sgd.losses=[sgdFullLoss(0,0,0)];sgd.steps=0;sgd.epochs=0;sgdRender()}
+function sgdTrain(){const bs=+$('#sgB').value,lr=10**+$('#sgLr').value,E=+$('#sgE').value;
+  for(let e=0;e<E;e++){const idx=[...Array(1000).keys()];for(let i=999;i>0;i--){const j=Math.floor(sgd.rng()*(i+1));[idx[i],idx[j]]=[idx[j],idx[i]]}
+    for(let s=0;s<1000;s+=bs){let g1=0,g2=0,gb=0;const n=Math.min(bs,1000-s);for(let k=s;k<s+n;k++){const[a,b]=sgd.X[idx[k]],er=a*sgd.p[0]+b*sgd.p[1]+sgd.p[2]-sgd.y[idx[k]];g1+=er*a;g2+=er*b;gb+=er}
+      sgd.p=[sgd.p[0]-lr*g1/n,sgd.p[1]-lr*g2/n,sgd.p[2]-lr*gb/n];sgd.steps++;if(!sgd.p.every(Number.isFinite)||Math.abs(sgd.p[0])>1e6)break;
+      if(sgd.path.length<6000)sgd.path.push([sgd.p[0],sgd.p[1]]);if(sgd.steps%Math.max(1,Math.floor(1000/bs/50))===0||bs>=100)sgd.losses.push(sgdFullLoss(...sgd.p))}sgd.epochs++}sgdRender()}
+function sgdRender(){const host=$('#sgHost');if(!host.offsetParent)return;const C=colors(),cs=getComputedStyle(document.documentElement);const lr=10**+$('#sgLr').value;$('#sgLrv').textContent=lr.toFixed(3);$('#sgEv').textContent=$('#sgE').value;
+  const W=Math.max(240,Math.min(360,host.clientWidth)),H=W,ctx=fitCanvas($('#sgCv'),W,H),X0=-1,X1=4,Y0=-5,Y1=0.5;const sx=x=>(x-X0)/(X1-X0)*W,sy=y=>(Y1-y)/(Y1-Y0)*H;
+  const[c11,c12,c22]=sgd.C,q=(w1,w2)=>{const d1=w1-2,d2=w2+3.4;return.5*(c11*d1*d1+2*c12*d1*d2+c22*d2*d2)};const N=50,cw=W/N;
+  for(let i=0;i<N;i++)for(let j=0;j<N;j++){const w1=X0+(i+.5)/N*(X1-X0),w2=Y1-(j+.5)/N*(Y1-Y0),v=Math.min(1,Math.sqrt(q(w1,w2))/3.5);ctx.fillStyle=`color-mix(in srgb, ${cs.getPropertyValue('--accent').trim()} ${Math.round(v*65)}%, ${C.surface})`;ctx.fillRect(i*cw,j*cw,cw+1,cw+1)}
+  ctx.font=MONO;ctx.fillStyle=C.muted;ctx.textAlign='left';ctx.fillText('w₁ →',W-34,H-6);ctx.fillText('w₂ ↑',4,12);
+  ctx.strokeStyle=C.ink;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(sx(2)-6,sy(-3.4)-6);ctx.lineTo(sx(2)+6,sy(-3.4)+6);ctx.moveTo(sx(2)+6,sy(-3.4)-6);ctx.lineTo(sx(2)-6,sy(-3.4)+6);ctx.stroke();
+  ctx.strokeStyle=C.pos;ctx.lineWidth=1.6;ctx.beginPath();sgd.path.forEach(([a,b],i)=>{const X=sx(Math.max(X0-1,Math.min(X1+1,a))),Y=sy(Math.max(Y0-1,Math.min(Y1+1,b)));i?ctx.lineTo(X,Y):ctx.moveTo(X,Y)});ctx.stroke();
+  const[pa,pb]=sgd.path[sgd.path.length-1];ctx.fillStyle=C.pos;ctx.beginPath();ctx.arc(sx(pa),sy(pb),5,0,7);ctx.fill();
+  const cv2=$('#sgLoss'),W2=Math.max(220,cv2.parentElement.clientWidth),H2=150,c2=fitCanvas(cv2,W2,H2),pl=40,pr=8,pt=8,pb2=20;const Ls=sgd.losses.filter(Number.isFinite).map(v=>Math.log10(Math.max(v,1e-6)));
+  if(Ls.length>1){let lo=Math.floor(Math.min(...Ls)),hi=Math.ceil(Math.max(...Ls));if(hi===lo)hi++;const X=i=>pl+i/(Ls.length-1)*(W2-pl-pr),Y=v=>pt+(hi-v)/(hi-lo)*(H2-pt-pb2);
+    c2.font=MONO;c2.fillStyle=C.muted;c2.strokeStyle=C.line;c2.textAlign='right';c2.textBaseline='middle';for(let k=lo;k<=hi;k++){c2.beginPath();c2.moveTo(pl,Y(k));c2.lineTo(W2-pr,Y(k));c2.stroke();c2.fillText(k>=0?String(10**k):(10**k).toFixed(-k),pl-4,Y(k))}
+    c2.strokeStyle=C.accent;c2.lineWidth=1.8;c2.beginPath();Ls.forEach((v,i)=>i?c2.lineTo(X(i),Y(v)):c2.moveTo(X(i),Y(v)));c2.stroke();c2.textAlign='left';c2.textBaseline='top';c2.fillText('训练损失（对数刻度）',pl+4,pt)}
+  const bs=+$('#sgB').value,L=sgd.losses[sgd.losses.length-1];
+  $('#sgCalc').textContent=`批量大小 ${bs}，每个 epoch 更新 ${Math.ceil(1000/bs)} 次\n已训练 ${sgd.epochs} 个 epoch，共 ${sgd.steps} 次更新\n\nw = [${sgd.p[0].toFixed(4)}, ${sgd.p[1].toFixed(4)}]（真实 [2, -3.4]）\nb = ${sgd.p[2].toFixed(4)}（真实 4.2）\n训练损失 = ${Number.isFinite(L)?L.toExponential(3):'nan（发散了）'}${!sgd.p.every(Number.isFinite)||Math.abs(sgd.p[0])>1e5?'\n\n学习率太大，参数发散了。调小学习率再点“参数归零”。':''}`}
+$('#sgRun').onclick=sgdTrain;$('#sgReset').onclick=sgdReset;$('#sgLr').oninput=sgdRender;$('#sgE').oninput=sgdRender;$('#sgB').onchange=sgdRender;
+
+// ---------- 第 6 天：softmax 调试台 ----------
+const SMN=['猫','鸡','狗'];
+function smRender(){const o=[1,2,3].map(i=>+$('#smO'+i).value),T=+$('#smT').value,y=+$('#smY').value;[1,2,3].forEach(i=>$('#smO'+i+'v').textContent=(+$('#smO'+i).value).toFixed(1));$('#smTv').textContent=T.toFixed(1);
+  const z=o.map(v=>v/T),m=Math.max(...z),e=z.map(v=>Math.exp(v-m)),s=e.reduce((a,b)=>a+b,0),p=e.map(v=>v/s);const best=p.indexOf(Math.max(...p));
+  $('#smBars').innerHTML=p.map((v,i)=>`<div class="bar"><span class="ch">${SMN[i]}</span><span class="tr"><i style="width:${(v*100).toFixed(1)}%;${i===y?'background:var(--pos)':''}"></i></span><span class="pv">${(v*100).toFixed(1)}%${i===best?' ◀':''}</span></div>`).join('');
+  const loss=-Math.log(p[y]),H=-p.reduce((a,v)=>a+(v>0?v*Math.log2(v):0),0);
+  $('#smCalc').textContent=`logit / 温度 = [${z.map(v=>v.toFixed(2)).join(', ')}]\nexp 之后    = [${z.map(v=>Math.exp(v).toFixed(2)).join(', ')}]，加起来 ${z.reduce((a,v)=>a+Math.exp(v),0).toFixed(2)}\nsoftmax     = [${p.map(v=>v.toFixed(3)).join(', ')}]，加起来 1\n\n预测：${SMN[best]}（logit 最大的那个）${best===y?'，猜对了':'，猜错了'}\n交叉熵损失 = −log ŷ_${SMN[y]} = −log ${p[y].toFixed(3)} = ${loss.toFixed(3)}\n对 logit 的梯度 = ŷ − y = [${p.map((v,i)=>(v-(i===y?1:0)).toFixed(3)).join(', ')}]\n  （正确类别的梯度是负的，梯度下降会把它的 logit 往上推）\n预测分布的熵 = ${H.toFixed(3)} 比特（最大 ${Math.log2(3).toFixed(3)}，表示完全拿不准）`}
+['#smO1','#smO2','#smO3','#smT'].forEach(s=>$(s).addEventListener('input',smRender));$('#smY').onchange=smRender;
+
+// ---------- 第 6 天：可靠性图和 ECE ----------
+let calSeed=5;
+function calData(){let s=calSeed*9973+1;const r=()=>{s=(s*1664525+1013904223)>>>0;return s/4294967296};const n=3000,ps=[],ys=[];for(let i=0;i<n;i++){const p=0.05+0.9*r();ps.push(p);ys.push(r()<p?1:0)}return{ps,ys}}
+let calD=null;
+function calRender(){const host=$('#calHost');if(!host.offsetParent)return;if(!calD)calD=calData();const C=colors(),k=+$('#calK').value;$('#calKv').textContent=k.toFixed(1)+(Math.abs(k-1)<0.05?'（校准良好）':k>1?'（过度自信）':'（不够自信）');
+  const lg=p=>Math.log(p/(1-p)),sg=x=>1/(1+Math.exp(-x));const conf=calD.ps.map(p=>sg(lg(p)*k));const B=10,cnt=new Array(B).fill(0),sc=new Array(B).fill(0),sy=new Array(B).fill(0);
+  conf.forEach((c,i)=>{const b=Math.min(B-1,Math.floor(c*B));cnt[b]++;sc[b]+=c;sy[b]+=calD.ys[i]});const N=conf.length;let ece=0;for(let b=0;b<B;b++)if(cnt[b])ece+=cnt[b]/N*Math.abs(sy[b]/cnt[b]-sc[b]/cnt[b]);
+  const W=Math.max(240,Math.min(380,host.clientWidth)),H=W,ctx=fitCanvas($('#calCv'),W,H),pl=40,pr=10,pt=10,pb=34;const X=v=>pl+v*(W-pl-pr),Y=v=>pt+(1-v)*(H-pt-pb);
+  ctx.font=MONO;ctx.fillStyle=C.muted;ctx.strokeStyle=C.line;ctx.textAlign='right';ctx.textBaseline='middle';for(let t=0;t<=1.0001;t+=0.2){ctx.beginPath();ctx.moveTo(pl,Y(t));ctx.lineTo(W-pr,Y(t));ctx.stroke();ctx.fillText(t.toFixed(1),pl-5,Y(t))}
+  ctx.textAlign='center';ctx.textBaseline='top';for(let t=0;t<=1.0001;t+=0.2)ctx.fillText(t.toFixed(1),X(t),H-pb+5);ctx.font=bodyFont(11.5);ctx.fillText('模型给出的置信度',(pl+W-pr)/2,H-16);
+  for(let b=0;b<B;b++){if(!cnt[b])continue;const acc=sy[b]/cnt[b],x0=X(b/B)+2,x1=X((b+1)/B)-2;ctx.fillStyle=C.accent;ctx.fillRect(x0,Y(acc),x1-x0,Y(0)-Y(acc));const mc=sc[b]/cnt[b];ctx.fillStyle=C.pos;ctx.fillRect(x0,Y(mc)-1.5,x1-x0,3)}
+  ctx.strokeStyle=C.ink;ctx.setLineDash([5,4]);ctx.beginPath();ctx.moveTo(X(0),Y(0));ctx.lineTo(X(1),Y(1));ctx.stroke();ctx.setLineDash([]);
+  $('#calCalc').textContent=`${N} 个样本，分成 ${B} 个等宽区间\n\n区间        样本数  平均置信度  实际正确率\n`+cnt.map((c,b)=>c?`${(b/B).toFixed(1)}–${((b+1)/B).toFixed(1)}  ${String(c).padStart(6)}     ${(sc[b]/c).toFixed(3)}      ${(sy[b]/c).toFixed(3)}`:null).filter(Boolean).join('\n')+`\n\nECE = Σ (区间样本数 / 总数) × |实际正确率 − 平均置信度|\n    = ${(ece*100).toFixed(2)}%\n\n蓝柱 = 实际正确率，橙线 = 平均置信度，虚线 = 完美校准`}
+$('#calK').oninput=calRender;$('#calNew').onclick=()=>{calSeed++;calD=calData();calRender()};
+
+// ---------- 第 7 天：matplotlib 图（Animator 曲线、show_images 网格） ----------
+const FMT_COLOR={m:'--purple',g:'--ok',r:'--bad',b:'--accent',k:'--ink',c:'--neg'};
+function fmtStyle(fmt,i){const m=fmt.match(/^([bgrcmyk])?(--|-\.|-|:|o)?$/)||[];const ls=m[2]||'-';return{color:m[1]?FMT_COLOR[m[1]]:SERIESC[i%4],dash:ls==='--'?[6,4]:ls==='-.'?[7,3,2,3]:ls===':'?[2,3]:[],scatter:ls==='o'}}
+const VIRIDIS=[[68,1,84],[59,82,139],[33,145,140],[94,201,98],[253,231,37]];
+function viridis(t){t=Math.max(0,Math.min(1,t))*4;const i=Math.min(3,Math.floor(t)),f=t-i,a=VIRIDIS[i],b=VIRIDIS[i+1];return[a[0]+(b[0]-a[0])*f,a[1]+(b[1]-a[1])*f,a[2]+(b[2]-a[2])*f]}
+function drawImage(cv,img,px){const{H,W}=img;cv.width=W;cv.height=H;cv.style.width=px+'px';cv.style.height=Math.round(px*H/W)+'px';const c=cv.getContext('2d'),d=c.createImageData(W,H);let lo=Infinity,hi=-Infinity;for(const v of img.px){if(v<lo)lo=v;if(v>hi)hi=v}const rg=hi-lo||1;
+  for(let k=0;k<W*H;k++){const[r,g,b]=viridis((img.px[k]-lo)/rg);d.data[k*4]=r;d.data[k*4+1]=g;d.data[k*4+2]=b;d.data[k*4+3]=255}c.putImageData(d,0,0)}
+function renderFig(wrap,fig){if(fig.axes.some(a=>a.image)){const grid=document.createElement('div');grid.className='imgrid';grid.style.gridTemplateColumns=`repeat(${fig.cols},minmax(0,1fr))`;
+    for(const ax of fig.axes){const cell=document.createElement('figure');if(ax.title){const t=document.createElement('figcaption');t.textContent=ax.title;cell.appendChild(t)}if(ax.image){const cv=document.createElement('canvas');cv.setAttribute('aria-label',ax.title||'图片');cell.appendChild(cv);drawImage(cv,ax.image,72)}grid.appendChild(cell)}wrap.appendChild(grid);return}
+  for(const ax of fig.axes){if(!ax.lines.length)continue;const spec={series:ax.lines.map((l,i)=>({x:l.x,y:l.y,label:ax.legend[i]||'',...fmtStyle(l.fmt,i)})),hlines:[],xlabel:ax.xlabel,ylabel:ax.ylabel,legend:ax.legend.length>0,xlim:ax.xlim,ylim:ax.ylim};const cv=document.createElement('canvas');cv.setAttribute('aria-label','训练曲线');wrap.appendChild(cv);drawPlot(cv,spec)}}
+
+// ---------- 第 7 天：解压内嵌的 Fashion-MNIST，像素查看器 ----------
+let FM_U8=null;
+const fmReady=(async()=>{const el=document.getElementById('fmData');const st=()=>document.getElementById('fmStatus');try{const bin=Uint8Array.from(atob(el.textContent.trim()),c=>c.charCodeAt(0));
+  if(typeof DecompressionStream==='undefined')throw new Error('这个浏览器不支持解压');const buf=await new Response(new Blob([bin]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();FM_U8=new Uint8Array(buf);MT.setFashion(FM_U8);
+  if(st())st().textContent='图片数据已就绪：训练集 6000 张，测试集 1000 张，来自 Fashion-MNIST 官方数据。';return true}catch(e){if(st()){st().textContent=`图片数据解压失败（${e.message}），请换用最新版的 Chrome、Edge、Safari 或 Firefox。`;st().classList.add('bad')}return false}})();
+const FM_NAMES=['t-shirt','trouser','pullover','dress','coat','sandal','shirt','sneaker','bag','ankle boot'];
+function pixRender(){if(!FM_U8)return;const i=+$('#pixI').value;$('#pixIv').textContent=i;const px=FM_U8.subarray(i*784,i*784+784),lab=FM_U8[6000*784+i];$('#pixLab2').textContent=`标签 ${lab}：${FM_NAMES[lab]}`;
+  const cv=$('#pixCv'),c=cv.getContext('2d');for(let r=0;r<28;r++)for(let q=0;q<28;q++){const v=px[r*28+q];c.fillStyle=`rgb(${v},${v},${v})`;c.fillRect(q*10,r*10,10,10)}
+  const s=$('#pixStrip'),W=Math.max(200,s.parentElement.clientWidth);s.width=784;s.style.width=W+'px';s.style.height='40px';const sc=s.getContext('2d');for(let k=0;k<784;k++){const v=px[k];sc.fillStyle=`rgb(${v},${v},${v})`;sc.fillRect(k,0,1,40)}}
+$('#pixI').addEventListener('input',pixRender);
+$('#pixCv').addEventListener('mousemove',e=>{if(!FM_U8)return;const r=$('#pixCv').getBoundingClientRect(),q=Math.floor((e.clientX-r.left)/r.width*28),row=Math.floor((e.clientY-r.top)/r.height*28);if(q<0||q>27||row<0||row>27)return;const i=+$('#pixI').value,v=FM_U8[i*784+row*28+q];
+  $('#pixCalc').textContent=`第 ${row} 行第 ${q} 列
+原始值 ${v}（0 到 255）
+ToTensor 之后 = ${v} / 255 = ${(v/255).toFixed(4)}
+张量里的位置：img[0, ${row}, ${q}]
+拉平后的位置：第 ${row*28+q} 个（= ${row} × 28 + ${q}）`});
+// ---------- 第 8 天：用 ReLU 拼曲线 ----------
+const UA_F=[x=>Math.sin(2*x)+0.3*x,x=>Math.abs(x)-1,x=>x<-1?-1:x<1?0.3:1.2];
+function uaFit(h,f){const xs=Array.from({length:121},(_,i)=>-3+i*0.05),ks=Array.from({length:h},(_,i)=>-3+6*(i+0.5)/h);
+  const feat=x=>[1,x,...ks.map(k=>Math.max(0,x-k))];const n=h+2,A=Array.from({length:n},()=>new Float64Array(n+1));
+  for(const x of xs){const p=feat(x),y=f(x);for(let i=0;i<n;i++){for(let j=0;j<n;j++)A[i][j]+=p[i]*p[j];A[i][n]+=p[i]*y}}for(let i=0;i<n;i++)A[i][i]+=1e-6;
+  for(let i=0;i<n;i++){let m=i;for(let r=i+1;r<n;r++)if(Math.abs(A[r][i])>Math.abs(A[m][i]))m=r;[A[i],A[m]]=[A[m],A[i]];for(let r=0;r<n;r++){if(r===i)continue;const c=A[r][i]/A[i][i];for(let j=i;j<=n;j++)A[r][j]-=c*A[i][j]}}
+  const w=A.map((r,i)=>r[n]/r[i]);const pred=x=>feat(x).reduce((s,v,i)=>s+v*w[i],0);let mse=0;for(const x of xs)mse+=(pred(x)-f(x))**2;return{ks,w,pred,mse:mse/xs.length}}
+function uaRender(){const host=$('#uaHost');if(!host.offsetParent)return;const C=colors(),h=+$('#uaH').value,f=UA_F[+$('#uaF').value];$('#uaHv').textContent=h;const r=uaFit(h,f);
+  const W=Math.max(260,host.clientWidth),H=Math.round(Math.min(300,W*.7)),ctx=fitCanvas($('#uaCv'),W,H),sx=x=>(x+3.2)/6.4*W,sy=y=>H/2-y*H/5.2;
+  ctx.strokeStyle=C.line;ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(0,sy(0));ctx.lineTo(W,sy(0));ctx.moveTo(sx(0),0);ctx.lineTo(sx(0),H);ctx.stroke();
+  ctx.save();ctx.beginPath();ctx.rect(0,0,W,H);ctx.clip();ctx.globalAlpha=.35;ctx.strokeStyle=C.muted;ctx.lineWidth=1;
+  r.ks.forEach((k,i)=>{const wk=r.w[i+2];ctx.beginPath();for(let q=0;q<=100;q++){const x=-3.2+6.4*q/100,y=wk*Math.max(0,x-k);q?ctx.lineTo(sx(x),sy(y)):ctx.moveTo(sx(x),sy(y))}ctx.stroke()});ctx.globalAlpha=1;
+  const line=(g,col,w,dash)=>{ctx.strokeStyle=col;ctx.lineWidth=w;ctx.setLineDash(dash);ctx.beginPath();for(let q=0;q<=320;q++){const x=-3+6*q/320;q?ctx.lineTo(sx(x),sy(g(x))):ctx.moveTo(sx(x),sy(g(x)))}ctx.stroke();ctx.setLineDash([])};
+  line(f,C.accent,3,[]);line(r.pred,C.pos,2,[6,4]);r.ks.forEach(k=>{ctx.fillStyle=C.pos;ctx.beginPath();ctx.arc(sx(k),sy(r.pred(k)),2.5,0,7);ctx.fill()});ctx.restore();
+  ctx.font=bodyFont(12);ctx.fillStyle=C.ink;ctx.fillText('— 目标',8,16);ctx.fillText('- - MLP 输出',8,32);
+  $('#uaCalc').textContent=`隐藏层：${h} 个 ReLU 单元，第 i 个算 ReLU(x − kᵢ)\n输出层：o = b + a·x + Σ wᵢ·ReLU(x − kᵢ)\n参数：${h} 个折点 + ${h+2} 个输出层权重\n\n均方误差 = ${r.mse.toExponential(2)}\n${r.mse<1e-3?'已经贴得很紧了。':h<4?'单元太少，只能拼出几段直线。':'再多加几个单元会更贴近。'}\n\n这里折点 kᵢ 是固定排开的，只求输出层权重。\n真正训练 MLP 时，折点（来自第一层的权重和偏置）也会一起学。`}
+$('#uaH').addEventListener('input',uaRender);$('#uaF').onchange=uaRender;
+// ---------- 第 8 天：三个激活函数 ----------
+function actRender(){const x=+$('#actX').value;$('#actXv').textContent=x.toFixed(1);const s=1/(1+Math.exp(-x)),t=Math.tanh(x);
+  $('#actCalc').textContent=`函数        值          导数\nReLU     ${Math.max(0,x).toFixed(4).padStart(8)}     ${(x>0?1:0).toFixed(4).padStart(8)}   ${x>0?'导数是 1，梯度原样通过':'导数是 0，梯度被挡住'}\nsigmoid  ${s.toFixed(4).padStart(8)}     ${(s*(1-s)).toFixed(4).padStart(8)}   ${Math.abs(x)>4?'导数接近 0：饱和区，梯度几乎消失':'最大 0.25，在 x = 0 处'}\ntanh     ${t.toFixed(4).padStart(8)}     ${(1-t*t).toFixed(4).padStart(8)}   ${Math.abs(x)>3?'导数接近 0：饱和区':'最大 1，在 x = 0 处'}\n\n叠 10 层 sigmoid、每层导数都取最大值 0.25：\n0.25^10 = ${(0.25**10).toExponential(2)}，梯度到第一层时几乎没了。`}
+$('#actX').addEventListener('input',actRender);
+
+// ---------- 小结勾选、课程表、切换天数 ----------
+function checksSetup(){$$('.check-list').forEach(ul=>{const day=ul.dataset.day,key='checks'+day,st=store.get(key,{});$$('input',ul).forEach(c=>{c.checked=!!st[c.dataset.k];c.onchange=()=>{const s=store.get(key,{});s[c.dataset.k]=c.checked;store.set(key,s);checkMsg(ul)}});checkMsg(ul)})}
+function checkMsg(ul){const day=ul.dataset.day,all=$$('input',ul),n=all.filter(c=>c.checked).length,msg=ul.parentElement.querySelector('.check-msg');const done=n===all.length;
+  msg.innerHTML=done?`<span class="ok">第 ${day} 天完成。</span>${DAYS.includes(String(+day+1))?`<a href="#day${+day+1}">去第 ${+day+1} 天</a>`:'下一天还在准备中。'}`:`已勾 ${n} / ${all.length}。没把握的那条，回到对应的代码格再改几次。`;
+  const nav=$(`[data-nav="${day}"]`);if(nav)nav.classList.toggle('done',done)}
+const ROAD=[['1','第 1 章 引言 + 2.1 数据操作'],['2','2.2 数据预处理 + 2.3 线性代数'],['3','2.4 微积分 + 2.5 自动微分','paper'],['4','2.6 概率 + 2.7 查阅文档','paper'],['5','3.1 线性回归 + 3.2 从零开始实现','paper'],['6','3.3 简洁实现 + 3.4 softmax 回归','paper'],['7','3.5 至 3.7 图像分类数据集、softmax 回归实现'],
+  ['8','4.1 至 4.3 多层感知机（论文里的 FFN 和输出头）','paper'],['9','4.4 至 4.6 模型选择、过拟合、权重衰减、暂退法（论文里的 Dropout、ρ‖g‖²、按验证集选检查点）','paper'],['10','4.8 至 4.9 数值稳定性和初始化、环境和分布偏移（梯度消失；模拟器和真实日志的差别）','paper'],
+  ['11','5.1 至 5.2 + 5.5 层和块、参数管理、读写文件（论文的 class DKT(nn.Module)、state_dict 存检查点）','paper'],['12','8.1 + 8.3 至 8.4 序列模型、语言模型、循环神经网络','paper'],['13','8.5 至 8.7 循环神经网络的实现、梯度裁剪、通过时间反向传播（论文的 clip_grad_norm_）','paper'],
+  ['14','9.1 至 9.2 GRU 和 LSTM，专题：动手写一个 DKT','paper'],['15','10.1 至 10.3 注意力提示、汇聚、评分函数（DKVMN 的记忆读写）','paper'],['16','10.5 至 10.6 多头注意力、自注意力和位置编码（SAKT）','paper'],['17','10.7 Transformer：残差连接、LayerNorm（simpleKT、AKT）','paper'],
+  ['18','11.4 至 11.6 + 11.10 小批量随机梯度下降、动量、Adam（论文用的优化器）','paper'],['19','论文专题：离线策略评估 IPS、SNIPS、DR（书里没有）','paper'],['20','论文专题：逐行读你的 experiment.py','paper'],
+  ['选学','4.7 前向传播、反向传播和计算图；4.10 Kaggle 房价预测'],['选学','第 6 至 7 章 卷积神经网络（LeNet、ResNet 等）'],['选学','9.3 至 9.8 深度和双向循环网络、机器翻译、seq2seq'],['选学','第 11 章其余优化算法、第 12 章计算性能'],['选学','第 13 至 15 章 计算机视觉、自然语言处理']];
+function roadRender(){$('#roadList').innerHTML=ROAD.map(([d,t,f])=>{const live=DAYS.includes(d);return`<div><span class="d">${/^\d+$/.test(d)?`第 ${d} 天`:d}</span><span>${live?`<a href="#day${d}">${esc(t)}</a>`:esc(t)}${f==='paper'?' <span class="mark">论文</span>':''}</span><span class="st${live?' now':''}">${live?'已上线':'未上线'}</span></div>`}).join('')}
+const REDRAW={'1':()=>{kRender();imRender();ofRender()},'2':()=>{dotRender();normRender()},'3':()=>{secRender();gradRender()},'4':()=>{diceRender();bayesRender();bktRender()},'5':()=>{houseRender();if(!sgd.X)sgdData();sgdRender()},'6':()=>{smRender();calRender()},'7':()=>{pixRender()},'8':()=>{uaRender();actRender()}};
+function showDay(day,scroll){if(!DAYS.includes(day))day='1';$$('main.day').forEach(m=>m.hidden=m.dataset.day!==day);$$('[data-nav]').forEach(a=>a.classList.toggle('on',a.dataset.nav===day));store.set('lastDay',day);
+  if(!RAN[day]){if(day==='7'&&!FM_U8){fmReady.then(ok=>{if(ok&&!RAN['7']){runAll('7');REDRAW['7']()}});}else runAll(day)}$$('#day'+day+' textarea').forEach(autoSize);REDRAW[day]();if(scroll)window.scrollTo(0,0)}
+function route(){const h=location.hash.replace('#','');const m=h.match(/^day(\d+)$/);if(m){showDay(m[1],true);return}
+  const el=h&&document.getElementById(h);if(el){const main=el.closest('main.day');if(main&&main.hidden){showDay(main.dataset.day,false);setTimeout(()=>el.scrollIntoView(),0)}}}
+addEventListener('hashchange',route);
+
+// ---------- 启动 ----------
+function redraw(){const d=store.get('lastDay','1');REDRAW[d]&&REDRAW[d]();$$('.plot canvas').forEach(cv=>{if(cv._fig&&cv.offsetParent)drawPlot(cv,cv._fig)})}
+let rz;addEventListener('resize',()=>{clearTimeout(rz);rz=setTimeout(redraw,150)});
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change',redraw);
+new MutationObserver(redraw).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+setupCells();ofData();kqRender();muRender();sqRender();checksSetup();roadRender();
+{const h=location.hash.match(/^#day(\d+)$/);showDay(h?h[1]:(location.hash&&document.getElementById(location.hash.slice(1))?.closest('main.day')?.dataset.day)||store.get('lastDay','1'),false);if(location.hash&&!h)route()}
+document.fonts&&document.fonts.ready.then(redraw);

@@ -1,0 +1,230 @@
+<main class="wrap day" id="day3" data-day="3" hidden>
+<section class="hero">
+  <div class="eyebrow">第 3 天 · 原书第 2.4 节 + 第 2.5 节</div>
+  <h1>导数、梯度，和 <code class="big">loss.backward()</code> 到底做了什么</h1>
+  <p class="lead">训练模型就是不停地问：每个参数往哪边拧一点，损失会变小？回答这个问题的数学工具是导数和梯度，PyTorch 里自动算梯度的功能叫自动微分。今天学完，你就能看懂所有训练代码里最核心的那一行。</p>
+  <div class="plan">
+    <div><b class="k">今天的时间</b>大约 60 分钟。第一部分 25 分钟，第二部分 35 分钟。</div>
+    <div><b class="k">学完你能</b><ul><li>说清导数和梯度是什么</li><li>用链式法则拆复合函数</li><li>用 <code>requires_grad</code> 和 <code>backward()</code> 求梯度</li><li>知道为什么每次要清零梯度</li></ul></div>
+    <div><b class="k">和你的论文</b><ul><li>论文里“梯度符号检查”检查的就是今天的东西</li><li>训练循环 <code>loss.backward(); opt.step()</code></li></ul></div>
+  </div>
+</section>
+
+<section class="part" id="calculus">
+  <div class="part-h"><div class="eyebrow">第一部分</div><h2>2.4 微积分</h2><span class="src">对应原书第 2.4 节</span></div>
+  <div class="prose">
+    <p>原书说，拟合模型其实是两件事：<b>优化</b>（让模型在训练数据上表现好）和<b>泛化</b>（让它在没见过的数据上也好）。今天讲优化要用的工具。</p>
+    <div class="row"><button class="btn primary runAll" data-day="3">从头全部运行</button><span class="small muted runAllMsg"></span></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">2.4.1</span><h3>导数：x 动一点点，y 动多少</h3></div>
+    <div class="prose"><p>函数 f 在 x 处的导数定义为：让 h 趋近于 0 时，<b>(f(x + h) − f(x)) ÷ h</b> 的极限。它是 f 在 x 处的瞬时变化率，也是曲线在这一点切线的斜率。原书用 f(x) = 3x² − 4x 做实验：</p></div>
+    <div class="cell"><textarea>%matplotlib inline
+from d2l import torch as d2l
+from matplotlib_inline import backend_inline
+import numpy as np
+
+def f(x):
+    return 3 * x ** 2 - 4 * x</textarea></div>
+    <div class="prose"><p>令 x = 1，让 h 一次比一次小，算出来的数越来越接近 2：</p></div>
+    <div class="cell"><textarea>def numerical_lim(f, x, h):
+    return (f(x + h) - f(x)) / h
+
+h = 0.1
+for i in range(5):
+    print(f'h={h:.5f}, numerical limit={numerical_lim(f, 1, h):.5f}')
+    h *= 0.1</textarea></div>
+    <div class="panel stack" id="secLab">
+      <h4>割线怎么变成切线</h4>
+      <p class="small muted">绿线连接 x 和 x + h 两个点，叫割线，它的斜率就是上面算的那个数。把 h 往 0 拖，割线慢慢贴住曲线，变成虚线的切线。</p>
+      <div class="two">
+        <div class="cv" id="secHost"><canvas id="secCv" aria-label="函数曲线、割线和切线"></canvas></div>
+        <div class="stack">
+          <label class="ctrl" for="secX">在哪一点 x <output id="secXv">1.0</output><input type="range" id="secX" min="0" max="2.5" step="0.1" value="1"></label>
+          <label class="ctrl" for="secH">h <output id="secHv">1.00</output><input type="range" id="secH" min="-3" max="0" step="0.05" value="0"></label>
+          <div class="calc" id="secCalc"></div>
+        </div>
+      </div>
+    </div>
+    <div class="prose"><p>用求导法则可以直接算：常数的导数是 0，xⁿ 的导数是 n·xⁿ⁻¹，eˣ 的导数是 eˣ，ln x 的导数是 1/x，再加上常数倍、加法、乘法、除法几条法则。所以 f'(x) = 3·2x − 4 = 6x − 4，x = 1 时正好是 2。</p></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">2.4.2</span><h3>画出函数和切线</h3></div>
+    <div class="prose"><p>原书写了几个用 matplotlib 画图的函数（<code>use_svg_display</code>、<code>set_figsize</code>、<code>set_axes</code>、<code>plot</code>），并保存进了 d2l 包。这个网页里 <code>d2l.plot</code> 已经准备好了，图直接画在代码格下面。下面画 f(x) 和它在 x = 1 处的切线 y = 2x − 3：</p></div>
+    <div class="cell"><textarea>x = np.arange(0, 3, 0.1)
+d2l.plot(x, [f(x), 2 * x - 3], 'x', 'f(x)', legend=['f(x)', 'Tangent line (x=1)'])</textarea></div>
+    <div class="prose"><p><b>练习 1（原书）</b>：画出 f(x) = x³ − 1/x 和它在 x = 1 处的切线。先自己算导数：f'(x) = 3x² + 1/x²，x = 1 时斜率是 4，f(1) = 0，所以切线是 y = 4x − 4。把下面的代码补完整（x 不能取 0，所以从 0.1 开始）。</p></div>
+    <div class="cell"><textarea>x = np.arange(0.1, 3, 0.1)
+g = x ** 3 - 1 / x
+tangent = 4 * x - 4      # 切线：斜率 4，过点 (1, 0)
+d2l.plot(x, [g, tangent], 'x', 'f(x)', legend=['f(x)', 'Tangent line (x=1)'])</textarea></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">2.4.3</span><h3>偏导数和梯度</h3></div>
+    <div class="prose"><p>模型的损失通常同时依赖很多个参数。只让其中一个参数动、其他不动时求出的导数叫<b>偏导数</b>。把对每个参数的偏导数排成一个向量，就是<b>梯度</b>，写作 ∇f。梯度指向函数增长最快的方向，所以往梯度的<b>反方向</b>走一小步，函数值下降得最快。这就是梯度下降。</p></div>
+    <div class="panel stack" id="gradLab">
+      <h4>在山坡上找下山的方向</h4>
+      <p class="small muted">函数是 f(x₁, x₂) = x₁² + 3x₂²，颜色越深越高，最低点在中间。点图上任意位置放一个小球，箭头是负梯度方向。点“走一步”，小球按 <code>位置 ← 位置 − 学习率 × 梯度</code> 往下走。</p>
+      <div class="two">
+        <div class="cv" id="gradHost"><canvas id="gradCv" aria-label="二元函数等高线、梯度箭头和下降路径"></canvas></div>
+        <div class="stack">
+          <div class="row"><button class="btn primary" id="gradStep">走一步</button><button class="btn" id="gradRun">走 10 步</button><button class="btn" id="gradReset">回到起点</button></div>
+          <label class="ctrl" for="gradLr">学习率 <output id="gradLrv">0.10</output><input type="range" id="gradLr" min="0.02" max="0.4" step="0.02" value="0.1"></label>
+          <div class="calc" id="gradCalc"></div>
+        </div>
+      </div>
+      <p class="note">把学习率调到 0.34 以上，小球会在 x₂ 方向来回越跳越远。第 1 天修水管时学习率太大参数爆炸，也是这个原因。</p>
+    </div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">2.4.4</span><h3>链式法则</h3></div>
+    <div class="prose"><p>深度学习的函数是一层套一层的。如果 y = f(u)，u = g(x)，那么 <b>dy/dx = dy/du × du/dx</b>：一层一层的导数乘起来。比如 y = (3x + 1)²，令 u = 3x + 1，则 dy/du = 2u，du/dx = 3，所以 dy/dx = 6(3x + 1)。x = 2 时是 42。用数值方法验证：</p></div>
+    <div class="cell"><textarea>def y_of(x):
+    return (3 * x + 1) ** 2
+
+x0 = 2.0
+chain = 2 * (3 * x0 + 1) * 3        # dy/du × du/dx
+numeric = numerical_lim(y_of, x0, 1e-6)
+print(f'链式法则: {chain}, 数值近似: {numeric:.4f}')</textarea></div>
+    <div class="prose"><p>神经网络有几十上百层，手算每层的导数再乘起来太累了，而且容易出错。PyTorch 会帮你自动按链式法则从最后一层往回乘，这就是第二部分要讲的自动微分，也叫<b>反向传播</b>。</p></div>
+  </div>
+</section>
+
+<section class="part" id="autograd">
+  <div class="part-h"><div class="eyebrow">第二部分</div><h2>2.5 自动微分</h2><span class="src">对应原书第 2.5 节，代码全部来自原书 PyTorch 版</span></div>
+  <div class="prose"><p>PyTorch 在你做计算的时候，会悄悄记下“哪个数是由哪些数、经过什么运算得到的”，这张记录叫<b>计算图</b>。调用 <code>backward()</code> 时，它沿着计算图往回走，用链式法则把梯度算出来，存进每个参数的 <code>.grad</code> 里。下面的代码格会把计算图画出来。</p>
+    <div class="row"><button class="btn primary runAll" data-day="3">从头全部运行</button><span class="small muted runAllMsg"></span></div></div>
+
+  <div class="blk"><div class="blk-h"><span class="n">2.5.1</span><h3>一个简单的例子</h3></div>
+    <div class="prose"><p>求 y = 2xᵀx 对向量 x 的梯度。先创建 x：</p></div>
+    <div class="cell"><textarea>import torch
+
+x = torch.arange(4.0)
+x</textarea></div>
+    <div class="prose"><p>告诉 PyTorch：“我要对 x 求梯度，请记账”。<code>x.grad</code> 是存梯度的地方，现在还是空的（None）。</p></div>
+    <div class="cell"><textarea>x.requires_grad_(True)  # 等价于x=torch.arange(4.0,requires_grad=True)
+x.grad  # 默认值是None</textarea></div>
+    <div class="prose"><p>计算 y。注意输出里多了 <code>grad_fn=&lt;MulBackward0&gt;</code>：PyTorch 记住了 y 是乘法算出来的。图示是计算图，从 y 往下追到 x。</p></div>
+    <div class="cell"><textarea>y = 2 * torch.dot(x, x)
+y</textarea></div>
+    <div class="prose"><p>调用反向传播，梯度就出现在 <code>x.grad</code> 里了：</p></div>
+    <div class="cell"><textarea>y.backward()
+x.grad</textarea></div>
+    <div class="prose"><p>手算：y = 2(x₀² + x₁² + x₂² + x₃²)，对每个 xᵢ 求偏导是 4xᵢ。验证一下：</p></div>
+    <div class="cell"><textarea>x.grad == 4 * x</textarea></div>
+    <div class="prose"><p>再算 x 的另一个函数。PyTorch <b>默认会把新梯度加到旧梯度上</b>，所以先用 <code>zero_()</code> 清零。y = x 各元素之和，每个偏导都是 1：</p></div>
+    <div class="cell"><textarea># 在默认情况下，PyTorch会累积梯度，我们需要清除之前的值
+x.grad.zero_()
+y = x.sum()
+y.backward()
+x.grad</textarea></div>
+    <div class="callout">
+      <h4>忘记清零会怎样？</h4>
+      <p>把上面那格里的 <code>x.grad.zero_()</code> 删掉，多运行几次，会看到梯度每次都多加一份 1：变成 2、3、4……这是新手最常见的 bug 之一。训练循环里每一步都要先 <code>optimizer.zero_grad()</code>，就是这个原因。</p>
+    </div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">2.5.2</span><h3>非标量变量的反向传播</h3></div>
+    <div class="prose"><p><code>backward()</code> 默认只能从一个数（标量）开始往回算。y = x * x 是一个向量，深度学习里通常先把它加起来变成一个数再求梯度，这样得到的是每个样本偏导数的和。</p></div>
+    <div class="cell"><textarea>x.grad.zero_()
+y = x * x
+# 等价于y.backward(torch.ones(len(x)))
+y.sum().backward()
+x.grad</textarea></div>
+    <div class="prose"><p>不加 <code>.sum()</code> 直接对向量调用会报错，试试：</p></div>
+    <div class="cell"><textarea>y = x * x
+y.backward()</textarea></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">2.5.3</span><h3>分离计算</h3></div>
+    <div class="prose"><p>有时要把某个中间结果当成常数，不让梯度从它那里往回流。<code>detach()</code> 返回一个数值相同、但和计算图断开的新张量 u。于是 z = u * x 对 x 的梯度就是 u，而不是 3x²。</p></div>
+    <div class="cell"><textarea>x.grad.zero_()
+y = x * x
+u = y.detach()
+z = u * x
+
+z.sum().backward()
+x.grad == u</textarea></div>
+    <div class="prose"><p>y 自己的计算图还在，所以还能对 y 反向传播，得到 2x：</p></div>
+    <div class="cell"><textarea>x.grad.zero_()
+y.sum().backward()
+x.grad == 2 * x</textarea></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">2.5.4</span><h3>Python 控制流的梯度计算</h3></div>
+    <div class="prose"><p>即使函数里有 while 循环和 if 判断，循环次数还取决于输入，自动微分照样能算。因为计算图记录的是这一次实际走过的运算。</p></div>
+    <div class="cell"><textarea>def f(a):
+    b = a * 2
+    while b.norm() < 1000:
+        b = b * 2
+    if b.sum() > 0:
+        c = b
+    else:
+        c = 100 * b
+    return c</textarea></div>
+    <div class="cell"><textarea>a = torch.randn(size=(), requires_grad=True)
+d = f(a)
+d.backward()</textarea></div>
+    <div class="prose"><p>不管走了几次循环，f(a) 都等于 k × a（k 是某个常数），所以导数就是 k = d / a：</p></div>
+    <div class="cell"><textarea>a.grad == d / a</textarea></div>
+  </div>
+
+  <div class="blk" id="trainloop"><div class="blk-h"><span class="n">2.5.5</span><h3>把今天学的拼起来：一个最小的训练循环</h3></div>
+    <div class="prose"><p>这一格不在原书里，是把今天的东西串起来，第 5 天线性回归的训练循环就长这样：算损失 → <code>backward()</code> 求梯度 → 在 <code>torch.no_grad()</code> 里更新参数 → 清零梯度。目标是把 x 从 1 推到 5。</p></div>
+    <div class="cell"><textarea>x = torch.ones(3, requires_grad=True)
+for step in range(3):
+    loss = ((x - 5) ** 2).sum()
+    loss.backward()
+    with torch.no_grad():
+        x -= 0.1 * x.grad
+    x.grad.zero_()
+    print(step, loss.item(), x)</textarea></div>
+    <div class="prose"><p>为什么更新时要放在 <code>torch.no_grad()</code> 里？因为“更新参数”这个动作本身不该被记进计算图。不放会怎样？试试：</p></div>
+    <div class="cell"><textarea>x = torch.ones(3, requires_grad=True)
+x -= 0.1</textarea></div>
+    <p class="note">你论文的实验代码里，每个训练步也是这几行，只是参数从 3 个变成了约 8 万个，并且用 <code>torch.optim.Adam</code> 代替了手写的 <code>x -= 0.1 * x.grad</code>。论文还专门做了“梯度符号检查”：确认损失里的 −λ·V̂ 项求出来的梯度方向，确实能让价值估计变大（余弦值为 −1）。这检查的就是今天学的 backward。</p>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">2.5.6</span><h3>练习（原书）</h3></div>
+    <div class="prose"><p><b>练习 2</b>：反向传播之后立刻再运行一次，看看会发生什么。</p></div>
+    <div class="cell"><textarea>x = torch.arange(4.0, requires_grad=True)
+y = 2 * torch.dot(x, x)
+y.backward()
+y.backward()</textarea></div>
+    <div class="prose"><p>报错的意思是：第一次反向传播后，计算图里存的中间值已经被释放了。真需要传两次，第一次写 <code>y.backward(retain_graph=True)</code>。</p>
+    <p><b>练习 3</b>：控制流的例子里，把 a 换成随机向量会怎样？把下面的 <code>size=()</code> 改成 <code>size=(3,)</code> 试试。提示：<code>d</code> 变成向量了，需要先求和。</p></div>
+    <div class="cell"><textarea>a = torch.randn(size=(), requires_grad=True)
+d = f(a)
+d.backward()
+a.grad == d / a</textarea></div>
+    <div class="prose"><p><b>练习 5</b>：令 f(x) = sin(x)，画出 f(x) 和 df/dx 的图像，不准直接用 cos(x)，要用自动微分算导数。</p></div>
+    <div class="cell"><textarea>x = torch.arange(-6.0, 6.0, 0.1, requires_grad=True)
+y = torch.sin(x)
+y.sum().backward()
+d2l.plot(x.detach(), [y.detach(), x.grad], 'x', 'f(x)', legend=['sin(x)', 'd sin(x) / dx'])</textarea></div>
+    <div class="prose"><p>画出来的导数曲线正好是 cos(x)。用数字确认一下误差几乎为 0：</p></div>
+    <div class="cell"><textarea>(x.grad - torch.cos(x.detach())).abs().max()</textarea></div>
+  </div>
+</section>
+
+<section class="part">
+  <div class="part-h"><div class="eyebrow">今日小结</div><h2>今天学会了吗？</h2></div>
+  <div class="two">
+    <div class="panel stack">
+      <ul class="check-list" data-day="3">
+        <li><label><input type="checkbox" data-k="c1">导数是 x 动一点点时 y 变化的速度，也是切线斜率</label></li>
+        <li><label><input type="checkbox" data-k="c2">梯度是所有偏导数排成的向量，往负梯度方向走函数下降最快</label></li>
+        <li><label><input type="checkbox" data-k="c3">链式法则：一层层的导数乘起来</label></li>
+        <li><label><input type="checkbox" data-k="c4">我会用 <code>requires_grad=True</code>、<code>backward()</code>、<code>.grad</code></label></li>
+        <li><label><input type="checkbox" data-k="c5">我知道梯度会累加，每次要先清零</label></li>
+        <li><label><input type="checkbox" data-k="c6">我知道更新参数要放在 <code>torch.no_grad()</code> 里</label></li>
+      </ul>
+      <span class="small check-msg"></span>
+    </div>
+    <div class="panel stack">
+      <h3>明天（第 4 天）学什么</h3>
+      <p>原书 2.6 概率（掷骰子、大数定律、条件概率、贝叶斯定理）和 2.7 查阅文档。你论文里 BKT 模拟学生的 guess、slip 参数，就是条件概率。</p>
+    </div>
+  </div>
+</section>
+</main>

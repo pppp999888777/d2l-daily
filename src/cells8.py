@@ -1,0 +1,17 @@
+CELLS = [
+"import torch\ntorch.arange(-8.0, 8.0, 0.1).tolist() == [round(v, 7) for v in torch.arange(-8.0, 8.0, 0.1).tolist()], len(torch.arange(-8.0, 8.0, 0.1)), torch.arange(-8.0, 8.0, 0.1)[75:85].tolist()",
+"[torch.arange(0, 1, 0.1).tolist(), torch.arange(1.0, 7.0).tolist(), torch.arange(-6.0, 6.0, 0.1)[59:62].tolist(), len(torch.arange(0, 3, 0.1)), torch.arange(0.5, 4.0, 0.7).tolist()]",
+"%matplotlib inline\nfrom d2l import torch as d2l\nimport torch",
+"x = torch.arange(-8.0, 8.0, 0.1, requires_grad=True)\ny = torch.relu(x)\nd2l.plot(x.detach(), y.detach(), 'x', 'relu(x)', figsize=(5, 2.5))\ny[78:83]",
+"y.backward(torch.ones_like(x), retain_graph=True)\nd2l.plot(x.detach(), x.grad, 'x', 'grad of relu', figsize=(5, 2.5))\nx.grad[78:83]",
+"y = torch.sigmoid(x)\nd2l.plot(x.detach(), y.detach(), 'x', 'sigmoid(x)', figsize=(5, 2.5))\ny[[0, 80, 159]]",
+"x.grad.data.zero_()\ny.backward(torch.ones_like(x),retain_graph=True)\nd2l.plot(x.detach(), x.grad, 'x', 'grad of sigmoid', figsize=(5, 2.5))\nx.grad[[0, 80, 159]], x.grad.max()",
+"y = torch.tanh(x)\nd2l.plot(x.detach(), y.detach(), 'x', 'tanh(x)', figsize=(5, 2.5))\nx.grad.data.zero_()\ny.backward(torch.ones_like(x),retain_graph=True)\nx.grad[[0, 80, 159]], y[[0, 80, 159]]",
+"from torch import nn\nnum_inputs, num_outputs, num_hiddens = 784, 10, 256\nW1 = nn.Parameter(torch.randn(\n    num_inputs, num_hiddens, requires_grad=True) * 0.01)\nb1 = nn.Parameter(torch.zeros(num_hiddens, requires_grad=True))\nW2 = nn.Parameter(torch.randn(\n    num_hiddens, num_outputs, requires_grad=True) * 0.01)\nb2 = nn.Parameter(torch.zeros(num_outputs, requires_grad=True))\nparams = [W1, b1, W2, b2]\n[p.shape for p in params], W1.is_leaf, W1.requires_grad, b1",
+"def relu(X):\n    a = torch.zeros_like(X)\n    return torch.max(X, a)\nrelu(torch.tensor([[-1.0, 2.0], [0.5, -3.0]]))",
+"t = torch.tensor([-1.0, 2.0, 0.0], requires_grad=True)\nr = relu(t)\nr.sum().backward()\nr, t.grad",
+"def net(X):\n    X = d2l.reshape(X, (-1, num_inputs))\n    H = relu(X@W1 + b1)  # 这里“@”代表矩阵乘法\n    return (H@W2 + b2)\nnet(torch.zeros(3, 1, 28, 28)).shape, net(torch.zeros(3, 1, 28, 28)).grad_fn",
+"loss = nn.CrossEntropyLoss(reduction='none')\nlin1 = torch.ones(2, 3) @ torch.ones(3, 4)\nW = torch.tensor([[1.0, 2.0], [3.0, 4.0]]); W_1 = torch.tensor([[0.5, 0.0], [1.0, 1.0]]); b_1 = torch.tensor([1.0, -1.0]); W_2 = torch.tensor([[2.0], [1.0]]); b_2 = torch.tensor([0.5])\nX = torch.tensor([[1.0, 2.0]])\nh = X @ W_1 + b_1\no = h @ W_2 + b_2\no, X @ (W_1 @ W_2) + (b_1 @ W_2 + b_2)",
+"net2 = nn.Sequential(nn.Flatten(),\n                    nn.Linear(784, 256),\n                    nn.ReLU(),\n                    nn.Linear(256, 10))\ndef init_weights(m):\n    if type(m) == nn.Linear:\n        nn.init.normal_(m.weight, std=0.01)\nnet2.apply(init_weights);\nnet2, sum(p.numel() for p in net2.parameters())",
+"nn.Sequential(nn.Linear(4, 5), nn.ReLU(), nn.Linear(5, 3)), [p.shape for p in nn.Sequential(nn.Linear(4, 5), nn.ReLU(), nn.Linear(5, 3)).parameters()]",
+]

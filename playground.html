@@ -1,0 +1,1353 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,-apple-system,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+<title>深度学习调试台</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@700;900&display=swap">
+<style>
+/* 布局：一条长页面，七章按学习顺序排列；每章 = 讲解文字 + 一块能动手的实验台 */
+:root{
+  --bg:#f1f4f7; --surface:#ffffff; --sunk:#e8edf2; --ink:#15202b; --muted:#566373; --line:#d3dbe4;
+  --accent:#0a7c74; --accent-ink:#ffffff; --pos:#de5f0b; --neg:#1d72c6; --bad:#c2410c;
+  --f-display:"Noto Serif SC","Songti SC","STSong",serif;
+  --f-body:"Noto Sans SC","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0e131a; --surface:#151c26; --sunk:#1c2532; --ink:#e3e9f0; --muted:#95a1b1; --line:#2a3544;
+    --accent:#36c1b5; --accent-ink:#03201d; --pos:#ff8a3a; --neg:#4ea6f4; --bad:#ff9a5c; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0e131a; --surface:#151c26; --sunk:#1c2532; --ink:#e3e9f0; --muted:#95a1b1; --line:#2a3544;
+  --accent:#36c1b5; --accent-ink:#03201d; --pos:#ff8a3a; --neg:#4ea6f4; --bad:#ff9a5c; color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.75}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+.wrap{max-width:1080px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+h1,h2,h3{text-wrap:balance;margin:0}
+h1{font-family:var(--f-display);font-weight:900;font-size:clamp(2rem,5.5vw,3.3rem);line-height:1.2;letter-spacing:.01em}
+h2{font-family:var(--f-display);font-weight:700;font-size:clamp(1.4rem,3vw,1.85rem);line-height:1.35}
+h3{font-size:1.05rem;font-weight:700}
+p{margin:0;max-width:68ch}
+code,.mono{font-family:var(--f-mono);font-size:.92em}
+a{color:var(--accent)}
+
+nav.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--bg);border-bottom:1px solid var(--line)}
+nav.top .wrap{display:flex;gap:4px;overflow-x:auto;padding-block:8px;scrollbar-width:none}
+nav.top a{flex:none;text-decoration:none;color:var(--muted);font-size:13px;padding:4px 10px;border-radius:6px;white-space:nowrap}
+nav.top a:hover{background:var(--sunk);color:var(--ink)}
+nav.top a b{font-family:var(--f-mono);color:var(--accent);margin-right:4px;font-weight:600}
+
+header.hero{padding-block:48px 28px}
+.hero-grid{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:32px;align-items:center}
+.hero p.lead{font-size:1.06rem;color:var(--muted);margin-top:14px}
+.answer{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:20px}
+.answer .label{font-size:12px;letter-spacing:.12em;color:var(--muted)}
+.bigshape{font-family:var(--f-mono);font-size:clamp(1.6rem,4.5vw,2.4rem);font-weight:600;margin:6px 0 10px}
+.bigshape .t{color:var(--pos)} .bigshape .d{color:var(--neg)}
+.answer ul{margin:0;padding-left:1.2em;color:var(--ink)}
+.answer li+li{margin-top:4px}
+
+.map{display:grid;gap:10px;margin-top:22px}
+.nest{border:1px solid var(--line);border-radius:12px;padding:10px 12px 12px;background:var(--surface)}
+.nest .nest{background:var(--sunk)} .nest .nest .nest{background:var(--surface)}
+.nest>.nl{font-size:13px;font-weight:700} .nest>.nd{font-size:12px;color:var(--muted);margin-bottom:8px;line-height:1.5}
+
+section.ch{padding-block:44px;border-top:1px solid var(--line)}
+.ch-head{display:flex;gap:14px;align-items:baseline;margin-bottom:10px}
+.ch-num{font-family:var(--f-mono);font-size:13px;color:var(--accent);font-weight:600;flex:none}
+.prose{display:grid;gap:10px;margin-bottom:20px}
+.prose p{color:var(--ink)}
+.muted{color:var(--muted)}
+.small{font-size:13px}
+
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;min-width:0}
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
+.stack{display:grid;gap:12px;align-content:start;min-width:0}
+.row{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center}
+.ctrl{display:grid;gap:2px;font-size:13px;color:var(--muted);min-width:0}
+.ctrl output{font-family:var(--f-mono);color:var(--ink);font-weight:600}
+input[type=range]{accent-color:var(--accent);width:180px;max-width:100%}
+select,input[type=text],textarea{font:inherit;font-size:14px;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:7px;padding:6px 9px;max-width:100%}
+textarea{width:100%;font-family:var(--f-body);line-height:1.6;resize:vertical}
+.btn{font:inherit;font-size:14px;padding:6px 14px;border-radius:7px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer;white-space:nowrap}
+.btn:hover{background:var(--sunk)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:500}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn:disabled{opacity:.45;cursor:default}
+:is(.btn,select,input,textarea,a,canvas,li[tabindex]):focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.code{font-family:var(--f-mono);font-size:13px;background:var(--sunk);border-radius:8px;padding:10px 12px;margin:0;overflow-x:auto;white-space:pre;line-height:1.6}
+.code .c{color:var(--muted)}
+.shape{font-family:var(--f-mono);background:var(--sunk);padding:1px 7px;border-radius:5px;white-space:nowrap;font-size:.92em}
+.shape .t{color:var(--pos);font-weight:600} .shape .d{color:var(--neg);font-weight:600} .shape .o{color:var(--accent);font-weight:600}
+.kv{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 14px;font-size:13.5px}
+.kv dt{color:var(--muted)} .kv dd{margin:0;font-family:var(--f-mono);overflow-wrap:anywhere}
+.calc{font-family:var(--f-mono);font-size:13px;background:var(--sunk);border-radius:8px;padding:10px 12px;line-height:1.75;overflow-x:auto;white-space:pre}
+.note{font-size:13px;color:var(--muted);background:var(--sunk);border-radius:8px;padding:10px 12px}
+.warn{color:var(--bad);font-weight:500}
+
+.heat{overflow-x:auto;max-width:100%}
+.heat canvas{display:block;cursor:crosshair}
+.legend{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
+.legend i{display:inline-block;width:120px;height:9px;border-radius:3px;background:linear-gradient(90deg,var(--neg),var(--surface),var(--pos));border:1px solid var(--line)}
+.legend i.seq{background:linear-gradient(90deg,var(--surface),var(--accent))}
+.cv-host{min-width:0}
+.cv-host canvas{display:block;max-width:100%;border-radius:8px;background:var(--sunk);touch-action:manipulation}
+
+/* 矩阵乘法表 */
+.mm{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;overflow-x:auto}
+.mm table{border-collapse:collapse;font-family:var(--f-mono);font-size:13px}
+.mm td{width:34px;height:30px;text-align:center;border:1px solid var(--line);background:var(--surface);font-variant-numeric:tabular-nums}
+.mm .cap{font-size:12px;color:var(--muted);text-align:center;margin-top:4px;font-family:var(--f-mono)}
+.mm td.hi{background:color-mix(in srgb,var(--accent) 22%,var(--surface))}
+.mm td.hiA{background:color-mix(in srgb,var(--pos) 22%,var(--surface))}
+.mm td.hiB{background:color-mix(in srgb,var(--neg) 22%,var(--surface))}
+.mm .C td{cursor:pointer}
+.mm .op{font-size:20px;color:var(--muted)}
+
+/* Transformer 调试器 */
+.dbg{display:grid;grid-template-columns:230px minmax(0,1fr);gap:16px;margin-top:14px}
+.steps{list-style:none;margin:0;padding:0;display:grid;gap:2px;align-content:start;counter-reset:s}
+.steps li{counter-increment:s;display:grid;grid-template-columns:24px minmax(0,1fr);gap:0 6px;padding:5px 8px;border-radius:7px;cursor:pointer;font-size:13px;line-height:1.45}
+.steps li::before{content:counter(s);font-family:var(--f-mono);color:var(--muted);font-size:12px;grid-row:span 2;padding-top:1px}
+.steps li .sh{font-family:var(--f-mono);font-size:11px;color:var(--muted)}
+.steps li:hover{background:var(--sunk)}
+.steps li.on{background:var(--accent);color:var(--accent-ink)}
+.steps li.on::before,.steps li.on .sh{color:var(--accent-ink)}
+.steps li.grp{margin-top:6px}
+.dbg-main{display:grid;gap:12px;min-width:0;align-content:start}
+.dbg-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.dbg-bar .pos{font-family:var(--f-mono);font-size:13px;color:var(--muted)}
+.shape-line{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;font-size:13.5px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:grid;justify-items:center;border:1px solid var(--line);border-radius:7px;padding:4px 8px;background:var(--sunk);min-width:42px}
+.chip b{font-size:17px;font-weight:500} .chip span{font-family:var(--f-mono);font-size:11px;color:var(--muted)}
+.bars{display:grid;gap:4px}
+.bar{display:grid;grid-template-columns:30px minmax(0,1fr) 62px;gap:8px;align-items:center;font-size:13px}
+.bar .ch{font-size:16px;text-align:center}
+.bar .tr{height:14px;background:var(--sunk);border-radius:4px;overflow:hidden}
+.bar .tr i{display:block;height:100%;background:var(--accent);border-radius:4px}
+.bar .pv{font-family:var(--f-mono);font-variant-numeric:tabular-nums;text-align:right;color:var(--muted)}
+.stats{display:flex;flex-wrap:wrap;gap:4px 16px;font-family:var(--f-mono);font-size:12.5px;color:var(--muted)}
+.stats b{color:var(--ink);font-weight:600}
+
+.gen{font-size:16px;line-height:1.8;white-space:pre-wrap;background:var(--sunk);border-radius:8px;padding:10px 12px;min-height:3.6em;overflow-wrap:anywhere}
+.flow{display:grid;gap:4px;font-size:13px}
+.flow div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;padding:5px 0;border-bottom:1px dashed var(--line)}
+.flow div:last-child{border-bottom:0}
+
+table.ref{border-collapse:collapse;width:100%;font-size:13.5px}
+table.ref th,table.ref td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+table.ref th{font-weight:700;color:var(--muted);font-size:12.5px;letter-spacing:.04em}
+table.ref td.num{font-family:var(--f-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.tblwrap{overflow-x:auto}
+.gloss{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+.gloss div{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:13.5px;line-height:1.6}
+.gloss b{display:block;font-size:14px}
+
+#tip{position:fixed;z-index:60;pointer-events:none;background:var(--ink);color:var(--bg);font-family:var(--f-mono);font-size:12px;line-height:1.5;padding:6px 9px;border-radius:6px;max-width:340px;white-space:pre-wrap}
+footer{padding-block:30px 50px;color:var(--muted);font-size:13px;border-top:1px solid var(--line)}
+
+@media (max-width:820px){
+  .hero-grid,.two{grid-template-columns:minmax(0,1fr)}
+  .dbg{grid-template-columns:minmax(0,1fr)}
+  .steps{display:flex;overflow-x:auto;gap:4px;padding-bottom:4px}
+  .steps li{flex:none;grid-template-columns:auto;max-width:130px}
+  .steps li::before{grid-row:auto}
+}
+@media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important}}
+html{scroll-behavior:smooth;scroll-padding-top:56px}
+/* 第 8 章 */
+.sub{display:grid;gap:12px;margin-top:32px}
+.sub-h{display:flex;gap:10px;align-items:baseline}
+.sub-h .tag{font-family:var(--f-mono);font-size:12.5px;color:var(--accent);font-weight:600;flex:none}
+.kv dd.plain{font-family:var(--f-body);font-size:13.5px;line-height:1.65}
+.skills{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.sk{border:1px solid var(--line);border-radius:9px;padding:8px 10px;background:var(--surface);text-align:left;cursor:pointer;font:inherit;color:var(--ink);display:grid;gap:5px;min-width:0}
+.sk:hover{border-color:var(--accent)}
+.sk.last{box-shadow:0 0 0 2px var(--pos)}
+.sk .top{display:flex;justify-content:space-between;gap:6px;font-size:13px;align-items:center}
+.sk .state{font-size:12px;color:var(--muted)} .sk .state.yes{color:var(--accent);font-weight:700} .sk .state.no{color:var(--bad);font-weight:700}
+.sk .meter{height:8px;background:var(--sunk);border-radius:4px;overflow:hidden;display:block}
+.sk .meter i{display:block;height:100%;background:var(--neg);border-radius:4px}
+.sk .par{font-family:var(--f-mono);font-size:10.5px;color:var(--muted);line-height:1.4}
+.terms{display:flex;flex-wrap:wrap;gap:6px}
+.term{font-family:var(--f-mono);font-size:12.5px;padding:3px 9px;border-radius:6px;border:1px solid var(--line)}
+.term.on{background:color-mix(in srgb,var(--accent) 16%,var(--surface));border-color:var(--accent);color:var(--ink)}
+.term.off{color:var(--muted);text-decoration:line-through}
+.vbtns{display:flex;flex-wrap:wrap;gap:6px}
+.vbtns .btn.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.split{display:flex;height:20px;border-radius:6px;overflow:hidden;gap:2px}
+.split i{display:block;height:100%}
+.method-card h3{margin-top:2px}
+.qa details{border-bottom:1px solid var(--line);padding-block:12px}
+.qa details:last-child{border-bottom:0}
+.qa summary{cursor:pointer;font-weight:500}
+.qa details p{margin-top:8px;color:var(--ink);font-size:14px}
+</style>
+
+<nav class="top" aria-label="章节">
+  <div class="wrap">
+    <a href="#tensor"><b>1</b>张量与形状</a>
+    <a href="#ml"><b>2</b>机器学习</a>
+    <a href="#matmul"><b>3</b>矩阵乘法</a>
+    <a href="#nn"><b>4</b>神经网络</a>
+    <a href="#llm"><b>5</b>大模型单步调试</a>
+    <a href="#train"><b>6</b>亲手训练</a>
+    <a href="#ref"><b>7</b>速查表</a>
+    <a href="#paper"><b>8</b>我的论文</a>
+  </div>
+</nav>
+
+<div class="wrap">
+<header class="hero">
+  <div class="hero-grid">
+    <div>
+      <h1>深度学习调试台</h1>
+      <p class="lead">不讲原理 PPT。这一页上的每个数字都是你的浏览器现场算出来的：拖滑块、点按钮、把鼠标放到任何一格上，就能看到这个数从哪来、下一步变成什么。按 1 到 8 的顺序玩一遍，机器学习、深度学习、大模型是怎么跑的就清楚了。</p>
+      <div class="map" aria-label="三者关系">
+        <div class="nest"><div class="nl">机器学习</div><div class="nd">让电脑从数据里自己调参数，而不是人写规则（第 2 章）</div>
+          <div class="nest"><div class="nl">深度学习</div><div class="nd">用很多层神经网络来做机器学习（第 3、4 章）</div>
+            <div class="nest"><div class="nl">大模型（LLM）</div><div class="nd" style="margin-bottom:0">超大的 Transformer 神经网络，任务只有一个：猜下一个字（第 5、6 章）</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="answer">
+      <div class="label">先回答你的问题：调试时看到的 24×64 是什么？</div>
+      <div class="bigshape">x.shape = [<span class="t">24</span>, <span class="d">64</span>]</div>
+      <ul>
+        <li><b style="color:var(--pos)">24</b> 通常是<b>序列长度 T</b>：这句话被切成了 24 个 token（中文里大致一个字一个）。</li>
+        <li><b style="color:var(--neg)">64</b> 通常是<b>隐藏维度 d</b>：每个 token 用 64 个小数来描述。</li>
+        <li>所以它就是一张 24 行 × 64 列的数字表格，一共 1536 个数。每一行代表一个字。</li>
+        <li>如果它是权重 <code>W</code> 的形状，意思就变成“输入 24 维、输出 64 维”。第 3 章教你怎么分辨。</li>
+      </ul>
+      <p class="small muted" style="margin-top:10px">第 1 章能直接看到这张 24×64 的表，第 5 章能一步步看它在大模型里怎么变形。</p>
+    </div>
+  </div>
+</header>
+</div>
+
+<!-- 第 1 章 -->
+<section class="ch" id="tensor"><div class="wrap">
+  <div class="ch-head"><span class="ch-num">第 1 章</span><h2>张量：模型眼里一切都是数字表格</h2></div>
+  <div class="prose">
+    <p>模型不认识字。它先给每个字分配一串数字（这串数字叫“向量”），再把一句话里所有字的向量摞起来，变成一张表。这张表在代码里叫<b>张量（tensor）</b>，表的尺寸叫<b>形状（shape）</b>。</p>
+    <p class="muted">下面就是一句 24 个字的话在模型里的样子。每一行是一个字，每一列是一个特征。橙色是正数，蓝色是负数，颜色越深绝对值越大。把鼠标放上去看具体的数。</p>
+  </div>
+  <div class="panel stack">
+    <div class="row">
+      <label class="ctrl" for="t1T">T：几个字（序列长度） <output id="t1Tv">24</output><input type="range" id="t1T" min="1" max="24" value="24"></label>
+      <label class="ctrl" for="t1D">d：每个字几个数（隐藏维度） <output id="t1Dv">64</output><input type="range" id="t1D" min="1" max="64" value="64"></label>
+      <label class="ctrl" for="t1B">B：一次喂几句话（批大小） <output id="t1Bv">1</output><input type="range" id="t1B" min="1" max="8" value="1"></label>
+    </div>
+    <div class="shape-line"><span>在 PyTorch 里 <code>print(x.shape)</code> 会打印：</span><span class="shape" id="t1Shape"></span><span class="muted" id="t1Count"></span></div>
+    <div class="heat" id="t1Heat"></div>
+    <div class="row" style="justify-content:space-between"><div class="legend">负 <i></i> 正</div><span class="small muted" id="t1Hint"></span></div>
+  </div>
+  <div class="two" style="margin-top:16px">
+    <div class="panel stack">
+      <h3>维度是怎么一层层往上加的</h3>
+      <dl class="kv">
+        <dt>0 维 · 标量</dt><dd>3.14 <span class="muted">shape = []</span></dd>
+        <dt>1 维 · 向量</dt><dd>一个字的 64 个数 <span class="muted">shape = [64]</span></dd>
+        <dt>2 维 · 矩阵</dt><dd>一句话 24 个字 <span class="muted">shape = [24, 64]</span></dd>
+        <dt>3 维</dt><dd>一批 8 句话 <span class="muted">shape = [8, 24, 64]</span></dd>
+        <dt>4 维</dt><dd>再拆成 4 个注意力头 <span class="muted">[8, 4, 24, 16]</span></dd>
+      </dl>
+    </div>
+    <div class="panel stack">
+      <h3>调试时看到一个形状，怎么判断每个数字是什么</h3>
+      <p class="small">看最后一维：几乎总是“每个东西用几个数描述”（d、特征数、词表大小）。看第一维：如果有 batch，通常是 B。中间那个往往是 T（字数）。拿不准就改一下输入句子的长度，哪个数跟着变，哪个就是 T。</p>
+      <pre class="code"><span class="c"># 最实用的调试习惯：每一步都打印形状</span>
+x = embedding(ids)
+print(x.shape)   <span class="c"># torch.Size([24, 64])</span>
+q = x @ Wq
+print(q.shape)   <span class="c"># torch.Size([24, 64])</span></pre>
+    </div>
+  </div>
+</div></section>
+
+<!-- 第 2 章 -->
+<section class="ch" id="ml"><div class="wrap">
+  <div class="ch-head"><span class="ch-num">第 2 章</span><h2>机器学习：让电脑自己把参数调对</h2></div>
+  <div class="prose">
+    <p>最小的机器学习模型只有两个参数：<code>ŷ = w·x + b</code>，就是一条直线。一开始 w 和 b 都是 0，直线是平的、很不准。“学习”就是反复做这四件事：<b>预测 → 算误差（loss）→ 算梯度（往哪个方向调能让误差变小）→ 把参数挪一点点</b>。</p>
+    <p class="muted">点“走一步”，看右边每个数是怎么算的。点图上空白处可以加数据点。把学习率调到 0.05 试试，会看到参数爆炸，这就是调大模型时常说的“训练发散”。</p>
+  </div>
+  <div class="two">
+    <div class="stack">
+      <div class="cv-host" id="regHost"><canvas id="regCv" aria-label="数据点和拟合直线，点击可以添加数据点"></canvas></div>
+      <div class="row">
+        <button class="btn" id="regStep">走一步</button>
+        <button class="btn primary" id="regRun">自动训练</button>
+        <button class="btn" id="regReset">参数归零</button>
+        <button class="btn" id="regData">换一批数据</button>
+        <label class="ctrl" for="regLr">学习率 lr
+          <select id="regLr"><option>0.001</option><option>0.003</option><option selected>0.01</option><option>0.02</option><option>0.05</option></select></label>
+      </div>
+      <div class="cv-host"><canvas id="regLoss" aria-label="损失随训练步数的变化"></canvas></div>
+      <p class="small muted">上图：loss 随步数下降（纵轴是对数刻度）。</p>
+    </div>
+    <div class="panel stack">
+      <h3>现在这一步里发生了什么</h3>
+      <div class="calc" id="regCalc"></div>
+      <p class="note">这里只有 2 个参数。GPT-2 小号版有 1.24 亿个，GPT-4 级别的模型据估计上万亿个，但每一个参数都按同一个规则更新：<code>参数 ← 参数 − 学习率 × 梯度</code>。梯度由“反向传播”自动算出来，PyTorch 里就是 <code>loss.backward()</code> 这一行。</p>
+    </div>
+  </div>
+</div></section>
+
+<!-- 第 3 章 -->
+<section class="ch" id="matmul"><div class="wrap">
+  <div class="ch-head"><span class="ch-num">第 3 章</span><h2>矩阵乘法：神经网络里最常做的一件事</h2></div>
+  <div class="prose">
+    <p>大模型 99% 的计算量都是矩阵乘法。规则只有一条：<b>左边的列数必须等于右边的行数</b>，结果的形状是“左边的行数 × 右边的列数”。<span class="shape">[m, k] @ [k, n] → [m, n]</span></p>
+    <p class="muted">点结果矩阵里的任意一格，看它是左边哪一行和右边哪一列相乘再相加得到的。</p>
+  </div>
+  <div class="panel stack">
+    <div class="row">
+      <label class="ctrl" for="mmM">m（行数，像字数 T） <output id="mmMv">3</output><input type="range" id="mmM" min="1" max="6" value="3"></label>
+      <label class="ctrl" for="mmK">k（中间维度，像 d） <output id="mmKv">4</output><input type="range" id="mmK" min="1" max="6" value="4"></label>
+      <label class="ctrl" for="mmN">n（输出维度） <output id="mmNv">2</output><input type="range" id="mmN" min="1" max="6" value="2"></label>
+      <button class="btn" id="mmShuffle">换一组数字</button>
+    </div>
+    <div class="mm" id="mmBox"></div>
+    <div class="calc" id="mmCalc">点右边结果矩阵中的一格。</div>
+  </div>
+  <div class="two" style="margin-top:16px">
+    <div class="panel stack">
+      <h3>换成大模型里的真实尺寸</h3>
+      <p class="small">把上面的 m 换成 24（字数），k 换成 64，n 换成 64，就是大模型里算 Query 的那一步：</p>
+      <pre class="code">q = x @ Wq
+<span class="c">#  [24, 64] @ [64, 64] → [24, 64]</span>
+<span class="c">#  结果每一格 = 64 次乘法再相加</span>
+<span class="c">#  整个结果 = 24 × 64 × 64 = 98,304 次乘法</span></pre>
+    </div>
+    <div class="panel stack">
+      <h3>一层神经网络就是矩阵乘法加一点东西</h3>
+      <pre class="code">h = relu(x @ W + b)
+<span class="c">#  x: [24, 64]   输入（数据）</span>
+<span class="c">#  W: [64, 256]  权重（要学的参数）</span>
+<span class="c">#  b: [256]      偏置（要学的参数）</span>
+<span class="c">#  h: [24, 256]  输出</span></pre>
+      <p class="small muted">分辨数据和权重：数据的第一维会随句子长度变化；权重的形状在模型建好那一刻就固定了。</p>
+    </div>
+  </div>
+</div></section>
+
+<!-- 第 4 章 -->
+<section class="ch" id="nn"><div class="wrap">
+  <div class="ch-head"><span class="ch-num">第 4 章</span><h2>神经网络：一层层叠起来就是“深度”</h2></div>
+  <div class="prose">
+    <p>第 2 章的直线只能画直线。把好几层“矩阵乘法 + 激活函数”叠起来，模型就能画出弯曲的边界，把橙点和蓝点分开。层数多了就叫<b>深度</b>学习。</p>
+    <p class="muted">先选“螺旋”，只给 1 层 2 个神经元训练，会发现怎么也分不开；再改成 3 层 12 个神经元重新训练，看它能不能学会。</p>
+  </div>
+  <div class="two">
+    <div class="stack">
+      <div class="cv-host" id="nnHost"><canvas id="nnCv" aria-label="二维分类数据和模型的决策边界"></canvas></div>
+      <div class="row">
+        <button class="btn primary" id="nnRun">开始训练</button>
+        <button class="btn" id="nnStep">走一步</button>
+        <button class="btn" id="nnReset">重新初始化</button>
+      </div>
+      <div class="stats" id="nnStats"></div>
+    </div>
+    <div class="panel stack">
+      <div class="row">
+        <label class="ctrl" for="nnData">数据
+          <select id="nnData"><option value="spiral">螺旋</option><option value="circle">圆环</option><option value="xor">异或（四象限）</option><option value="blobs">两团（直线就能分）</option></select></label>
+        <label class="ctrl" for="nnAct">激活函数
+          <select id="nnAct"><option value="tanh">tanh</option><option value="relu">ReLU</option></select></label>
+        <label class="ctrl" for="nnLr">学习率
+          <select id="nnLr"><option>0.03</option><option selected>0.1</option><option>0.3</option><option>1</option></select></label>
+      </div>
+      <div class="row">
+        <label class="ctrl" for="nnL">隐藏层数 <output id="nnLv">3</output><input type="range" id="nnL" min="1" max="3" value="3"></label>
+        <label class="ctrl" for="nnH">每层神经元 <output id="nnHv">12</output><input type="range" id="nnH" min="2" max="16" value="12"></label>
+      </div>
+      <h3>数据在网络里的形状</h3>
+      <div class="flow" id="nnFlow"></div>
+      <p class="note">背景颜色是模型的判断：越偏橙越认为是橙点。每训练一步，所有权重都按第 2 章同样的规则挪一点。</p>
+    </div>
+  </div>
+</div></section>
+
+<!-- 第 5 章 -->
+<section class="ch" id="llm"><div class="wrap">
+  <div class="ch-head"><span class="ch-num">第 5 章</span><h2>大模型单步调试：一句话在 Transformer 里怎么跑</h2></div>
+  <div class="prose">
+    <p>这是一个真的 Transformer（单层、单头的简化版），在你浏览器里运行。像调试器一样一步一步往下走，每一步都能看到代码、张量的形状和里面的每个数。你看到的 <span class="shape">[<span class="t">24</span>, <span class="d">64</span>]</span> 会在这里反复出现。</p>
+    <p class="muted">它的权重是随机生成的，还没训练，所以最后预测的下一个字是乱的。第 6 章会演示训练怎样让预测变准。真实大模型就是把第 5 到 14 步重复很多层（GPT-2 小号版 12 层，d = 768）。</p>
+  </div>
+  <div class="panel">
+    <div class="row">
+      <label class="ctrl" for="tfText" style="flex:1 1 280px">输入一句话（最多 24 个字）<input type="text" id="tfText" maxlength="24" value="大模型读一句话时会把每个字变成一串数字然后一起算"></label>
+      <label class="ctrl" for="tfD">d（每个字几个数）
+        <select id="tfD"><option>16</option><option>32</option><option selected>64</option></select></label>
+    </div>
+    <div class="dbg">
+      <ol class="steps" id="tfSteps"></ol>
+      <div class="dbg-main">
+        <div class="dbg-bar">
+          <button class="btn" id="tfPrev">◀ 上一步</button>
+          <button class="btn primary" id="tfNext">下一步 ▶</button>
+          <span class="pos" id="tfPos"></span>
+        </div>
+        <h3 id="tfTitle"></h3>
+        <pre class="code" id="tfCode"></pre>
+        <div class="shape-line" id="tfShape"></div>
+        <p id="tfExplain"></p>
+        <div id="tfViz">
+          <div class="chips" id="tfChips" hidden></div>
+          <div id="tfHeatWrap"><div class="heat" id="tfHeat"></div><div class="row" style="margin-top:6px"><div class="legend" id="tfLegend">负 <i></i> 正</div></div></div>
+          <div id="tfNextBox" hidden class="stack">
+            <div class="bars" id="tfBars"></div>
+            <div class="row">
+              <label class="ctrl" for="tfTemp">温度 temperature <output id="tfTempv">1.0</output><input type="range" id="tfTemp" min="0.1" max="2" step="0.1" value="1"></label>
+              <button class="btn primary" id="tfGen">按概率选一个字，接到句子后面</button>
+            </div>
+            <p class="small muted">选出的字会接到输入框末尾，然后整个流程从第 1 步重新跑。大模型“写文章”就是这样一个字一个字往后接的。超过 24 个字时最前面的字会被挤掉，这叫上下文窗口。</p>
+          </div>
+        </div>
+        <div class="stats" id="tfStats"></div>
+        <div class="calc" id="tfDetail">点热力图里任意一格，这里显示这个数是怎么算出来的。</div>
+      </div>
+    </div>
+  </div>
+</div></section>
+
+<!-- 第 6 章 -->
+<section class="ch" id="train"><div class="wrap">
+  <div class="ch-head"><span class="ch-num">第 6 章</span><h2>亲手训练一个会背唐诗的迷你语言模型</h2></div>
+  <div class="prose">
+    <p>大模型的训练目标只有一句话：<b>看前面几个字，猜下一个字</b>。猜错了就算 loss，反向传播，更新参数，重复几百万次。这里的模型很小（看前 3 个字，几万个参数），在你的浏览器里训练，一两分钟就能背出这几首诗。</p>
+    <p class="muted">点“开始训练”，看 loss 往下掉，看生成的文字从乱码变成诗句。也可以把训练文本换成你自己的文字再训练。</p>
+  </div>
+  <div class="two">
+    <div class="stack">
+      <div class="row">
+        <button class="btn primary" id="lmRun">开始训练</button>
+        <button class="btn" id="lmReset">重置模型</button>
+        <label class="ctrl" for="lmLr">学习率
+          <select id="lmLr"><option>0.003</option><option selected>0.01</option><option>0.03</option></select></label>
+      </div>
+      <div class="stats" id="lmStats"></div>
+      <div class="cv-host"><canvas id="lmLoss" aria-label="训练损失曲线"></canvas></div>
+      <p class="small muted" id="lmLossNote"></p>
+      <h3>模型现在写出来的东西</h3>
+      <div class="gen" id="lmSample"></div>
+      <div class="row">
+        <label class="ctrl" for="lmSeed">开头 <input type="text" id="lmSeed" value="床前" maxlength="12" style="width:110px"></label>
+        <label class="ctrl" for="lmTemp">温度 <output id="lmTempv">0.8</output><input type="range" id="lmTemp" min="0.1" max="2" step="0.1" value="0.8"></label>
+        <button class="btn" id="lmGen">接着写</button>
+      </div>
+    </div>
+    <div class="panel stack">
+      <h3>一个训练步里数据的形状</h3>
+      <div class="flow" id="lmFlow"></div>
+      <h3>考考它：给 3 个字，猜第 4 个</h3>
+      <div class="row"><input type="text" id="lmProbe" value="明月光" maxlength="3" style="width:120px" aria-label="输入三个字"><span class="small muted">改这里的字，下面马上变</span></div>
+      <div class="bars" id="lmBars"></div>
+      <details>
+        <summary class="small" style="cursor:pointer">训练文本（可以改成你自己的）</summary>
+        <textarea id="lmCorpus" rows="9" style="margin-top:8px"></textarea>
+        <p class="small muted">改完点“重置模型”再训练。</p>
+      </details>
+    </div>
+  </div>
+</div></section>
+
+<!-- 第 7 章 -->
+<section class="ch" id="ref"><div class="wrap">
+  <div class="ch-head"><span class="ch-num">第 7 章</span><h2>速查表：名词和真实模型的尺寸</h2></div>
+  <div class="prose"><p>本页演示用的数字和真实模型对照。结构完全一样，只是每个数大了很多倍。</p></div>
+  <div class="panel tblwrap">
+    <table class="ref">
+      <thead><tr><th>参数</th><th>本页演示</th><th>GPT-2 小号</th><th>GPT-3</th><th>含义</th></tr></thead>
+      <tbody>
+        <tr><td>T 上下文长度</td><td class="num">24</td><td class="num">1,024</td><td class="num">2,048</td><td>一次最多看几个 token</td></tr>
+        <tr><td>d 隐藏维度</td><td class="num">64</td><td class="num">768</td><td class="num">12,288</td><td>每个 token 用几个数描述</td></tr>
+        <tr><td>层数</td><td class="num">1</td><td class="num">12</td><td class="num">96</td><td>第 5 章第 5 到 14 步重复几次</td></tr>
+        <tr><td>注意力头数</td><td class="num">1</td><td class="num">12</td><td class="num">96</td><td>把 d 拆成几份并行算注意力</td></tr>
+        <tr><td>V 词表大小</td><td class="num">约 60</td><td class="num">50,257</td><td class="num">50,257</td><td>logits 最后一维的长度</td></tr>
+        <tr><td>参数总数</td><td class="num">约 5 万</td><td class="num">1.24 亿</td><td class="num">1,750 亿</td><td>所有 W、b、E 里数字的个数</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="gloss" style="margin-top:16px">
+    <div><b>参数 / 权重</b>模型里要学的数字，W、b、E 都是。训练就是在调它们。</div>
+    <div><b>loss 损失</b>一个数，表示模型这次错了多少。越小越好。</div>
+    <div><b>梯度</b>每个参数往哪个方向改、改多少能让 loss 变小。</div>
+    <div><b>反向传播</b>从 loss 往回一层层算出所有参数梯度的方法。</div>
+    <div><b>学习率 lr</b>每一步沿梯度挪多远。太大发散，太小学得慢。</div>
+    <div><b>batch / epoch</b>batch 是一次喂进去的样本数 B；epoch 是把全部数据过一遍。</div>
+    <div><b>token</b>模型处理的最小单位。中文大致一个字，英文常是半个单词。</div>
+    <div><b>embedding 词嵌入</b>每个 token 对应的那一行数字，形状 [V, d] 的大表。</div>
+    <div><b>attention 注意力</b>每个字决定要从前面哪些字那里拿信息，结果是 [T, T] 的权重表。</div>
+    <div><b>Q / K / V</b>Query 是“我在找什么”，Key 是“我有什么”，Value 是“我能给出的内容”。</div>
+    <div><b>残差 + LayerNorm</b>把输入直接加回输出，再把每行数字缩放到稳定范围，让很深的网络也能训练。</div>
+    <div><b>logits / softmax</b>logits 是每个候选字的原始打分；softmax 把打分变成加起来等于 1 的概率。</div>
+    <div><b>温度 temperature</b>除在 logits 上。小于 1 更保守，大于 1 更随机。</div>
+    <div><b>训练 vs 推理</b>训练要算梯度、改参数；推理（你平时用聊天机器人）只做前向计算，参数不动。</div>
+  </div>
+</div></section>
+
+<!-- 第 8 章 -->
+<section class="ch" id="paper"><div class="wrap">
+  <div class="ch-head"><span class="ch-num">第 8 章</span><h2>你的论文：知识追踪越准，教得就越好吗？</h2></div>
+  <div class="prose">
+    <p>这一章用前 7 章学到的东西，把你论文生成器里最新的那篇《Does Preserving Calibration Improve Decision-Focused Knowledge Tracing?》从头拆一遍。下面的结果数字全部来自这篇论文的实验结果文件（4 个数据集 × 5 个随机种子），模拟学生的参数也是论文从真实数据里拟合出来的那一套。</p>
+  </div>
+
+  <div class="two">
+    <div class="panel stack">
+      <h3>一页纸看懂这篇论文</h3>
+      <dl class="kv">
+        <dt>在研究什么</dt><dd class="plain">知识追踪（KT）：看学生的做题记录，猜他下一题会不会做对。和第 6 章“看前面的字猜下一个字”是同一类事情。</dd>
+        <dt>问的问题</dt><dd class="plain">平时大家只比谁的预测更准（AUC）。可是在自适应学习系统里，模型真正的工作是<b>决定下一题出什么</b>。预测更准，出题就更好吗？</dd>
+        <dt>提出的方法</dt><dd class="plain"><b>Safe-DFKT-AG</b>：在 DKT 上加一个“策略头”，直接朝“让学生学得更多”的方向训练，同时用护栏保住预测准确度，再加一项防止它刷分的惩罚。</dd>
+        <dt>结论</dt><dd class="plain"><b>阴性结果。</b>预测准确度几乎没掉（AUC 77.19% 对 77.32%），但教学效果更差（NLG −0.0099 对 DKT 的 0.0601）。原因是策略头学会了“刷分”，总给学生出他早就会的题。</dd>
+      </dl>
+    </div>
+    <div class="panel stack">
+      <h3>论文里的东西，在前面哪一章学过</h3>
+      <div class="tblwrap"><table class="ref">
+        <thead><tr><th>论文里</th><th>对应本页</th></tr></thead>
+        <tbody>
+          <tr><td>DKT = LSTM，<code>d = 64</code></td><td><a href="#tensor">第 1 章</a> 张量的 d、<a href="#nn">第 4 章</a> 神经网络</td></tr>
+          <tr><td>BCE 损失（预测对错的交叉熵）</td><td><a href="#ml">第 2 章</a> loss、<a href="#train">第 6 章</a> 训练</td></tr>
+          <tr><td>SAKT / AKT / simpleKT</td><td><a href="#llm">第 5 章</a> 注意力（它们都是注意力模型）</td></tr>
+          <tr><td>策略 softmax，温度 <code>T = 0.05</code></td><td><a href="#llm">第 5 章</a> 最后一步的温度</td></tr>
+          <tr><td>梯度符号检查（cos = −1）</td><td><a href="#ml">第 2 章</a> 梯度和更新方向</td></tr>
+          <tr><td>batch 256、15 个 epoch</td><td><a href="#ref">第 7 章</a> 名词表</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+
+  <!-- 8.1 DKT 形状 -->
+  <div class="sub">
+    <div class="sub-h"><span class="tag">8.1</span><h3>DKT 在调试器里长什么样：你看到的 [.., 64] 从哪来</h3></div>
+    <p class="muted">论文的骨干模型 DKT 每次读 256 个学生、每人 100 步做题记录。每一步是一个“(技能, 对/错)”组合，跟第 5 章里一个字一个 token 是一回事。切换数据集，看形状和参数个数怎么变。</p>
+    <div class="panel stack">
+      <div class="row">
+        <label class="ctrl" for="p8Ds">数据集
+          <select id="p8Ds"><option value="assist2009">ASSISTments 2009</option><option value="ednet">EdNet</option><option value="algebra2005">Algebra 2005</option><option value="junyi">Junyi</option></select></label>
+        <span class="small muted" id="p8DsInfo"></span>
+      </div>
+      <div class="flow" id="p8Flow"></div>
+      <p class="note" id="p8ParamNote"></p>
+    </div>
+  </div>
+
+  <!-- 8.2 单个学生 -->
+  <div class="sub">
+    <div class="sub-h"><span class="tag">8.2</span><h3>实验台①：亲手给一个模拟学生出题</h3></div>
+    <p class="muted">论文没法真的找学生做实验，所以给每个数据集拟合了一个 12 个技能的“模拟学生”（BKT 模型）：每个技能有 4 个参数，<b>p0</b> 一开始就会的概率，<b>learn</b> 练一次学会的概率，<b>guess</b> 不会但蒙对的概率，<b>slip</b> 会了但失误的概率。下面用的就是论文拟合出来的数。点任意技能给他出一道题。</p>
+    <div class="two">
+      <div class="stack">
+        <div class="row">
+          <button class="btn" id="p8New">换一个学生</button>
+          <button class="btn primary" id="p8Ai">让模型按 c = 0.7 出一题</button>
+          <button class="btn" id="p8Rand">随机出一题</button>
+          <label class="row small" for="p8Peek" style="gap:6px"><input type="checkbox" id="p8Peek"> 偷看他真实会不会</label>
+        </div>
+        <div class="skills" id="p8Skills"></div>
+      </div>
+      <div class="panel stack">
+        <div class="stats" id="p8StuStats"></div>
+        <div class="calc" id="p8StuLog"></div>
+        <p class="note">蓝条是知识追踪模型<b>估计</b>的“这题能做对的概率” p̂。论文里这个估计由 DKT 给出，这里换成了按同样参数计算的 BKT 估计，便于在浏览器里运行。勾上“偷看”，可以对比模型估计和学生真实状态差多少。<b>NLG</b> 是论文的主指标：(练后表现 − 练前表现) ÷ (1 − 练前表现)，按全部 12 个技能平均。</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 8.3 策略比拼 -->
+  <div class="sub">
+    <div class="sub-h"><span class="tag">8.3</span><h3>实验台②：300 个学生 × 60 题，哪种出题策略最好</h3></div>
+    <p class="muted">这就是论文的评估方法。每种策略都给同样的 300 个模拟学生各出 60 题，然后看 NLG。拖动 c 和“策略头偏向”，自己验证论文的几个发现：c = 0.7 时随机出题反而赢；c 调低以后知识追踪策略就能超过随机；策略头一旦偏向已经会的技能，效果最差。</p>
+    <div class="panel stack">
+      <div class="row">
+        <label class="ctrl" for="p8RDs">数据集
+          <select id="p8RDs"><option value="assist2009">ASSISTments 2009</option><option value="ednet">EdNet</option><option value="algebra2005">Algebra 2005</option><option value="junyi">Junyi</option></select></label>
+        <label class="ctrl" for="p8C">目标难度 c（挑预测正确率最接近 c 的技能） <output id="p8Cv">0.70</output><input type="range" id="p8C" min="0.1" max="0.9" step="0.05" value="0.7"></label>
+        <label class="ctrl" for="p8H">策略头偏向已会技能的强度 <output id="p8Hv">40</output><input type="range" id="p8H" min="0" max="80" step="5" value="40"></label>
+        <button class="btn primary" id="p8Run">跑一遍</button>
+      </div>
+      <div class="two">
+        <div class="cv-host"><canvas id="p8RunBar" aria-label="各策略的学习增益"></canvas></div>
+        <div class="stack">
+          <div class="tblwrap"><table class="ref" id="p8RunTbl"></table></div>
+          <p class="small muted" id="p8RunNote"></p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 8.4 结果浏览器 -->
+  <div class="sub">
+    <div class="sub-h"><span class="tag">8.4</span><h3>论文结果浏览器：12 种方法 × 4 个数据集</h3></div>
+    <p class="muted">这里是论文的真实结果，不是浏览器里现场模拟的。切换数据集和指标，点任意一行看这个模型是什么。</p>
+    <div class="panel stack">
+      <div class="row">
+        <label class="ctrl" for="p8BDs">数据集
+          <select id="p8BDs"><option value="all">4 个数据集平均</option><option value="assist2009">ASSISTments 2009</option><option value="ednet">EdNet</option><option value="algebra2005">Algebra 2005</option><option value="junyi">Junyi</option></select></label>
+        <label class="ctrl" for="p8BMet">指标
+          <select id="p8BMet"></select></label>
+        <label class="row small" for="p8BAbl" style="gap:6px"><input type="checkbox" id="p8BAbl"> 加上消融实验的 5 个变体</label>
+      </div>
+      <p class="small" id="p8BMetNote"></p>
+      <div class="two">
+        <div class="cv-host"><canvas id="p8BBar" aria-label="各方法在所选指标上的结果"></canvas></div>
+        <div class="stack">
+          <div class="method-card" id="p8BCard"></div>
+        </div>
+      </div>
+    </div>
+    <div class="two" style="margin-top:16px">
+      <div class="panel stack">
+        <h3>预测准（AUC）和教得好（NLG）几乎没关系</h3>
+        <div class="cv-host"><canvas id="p8Sc1" aria-label="AUC 和 NLG 的散点图"></canvas></div>
+        <p class="small muted">每个点是一个模型。横轴越靠右预测越准，纵轴越靠上学生学得越多。点并没有从左下排到右上。这就是论文标题问题的答案。</p>
+      </div>
+      <div class="panel stack">
+        <h3>花在“已经会的技能”上的步数越多，学得越少</h3>
+        <div class="cv-host"><canvas id="p8Sc2" aria-label="练已掌握技能比例和 NLG 的散点图"></canvas></div>
+        <p class="small muted">这个比例几乎能直接预测 NLG：比例最低的 Uncertainty-0.5 学得最多，比例最高的那几个学得最少。论文据此诊断出了“刷分”。</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 8.5 方法拆解 -->
+  <div class="sub">
+    <div class="sub-h"><span class="tag">8.5</span><h3>Safe-DFKT-AG 拆开看：损失函数的每一项在干什么</h3></div>
+    <div class="panel stack">
+      <pre class="code">L(θ) = BCE − λ·V̂_DR + γ·max(0, BCE − (1+ε)·BCE_base) + β·Var[ψ] + η·Σ π(k)·1[p̂_k > 0.85] + ρ‖g‖²
+<span class="c">#      预测准   教得好     安全护栏：预测别比原来差太多        方差惩罚     防刷分：别把概率放在已会技能上   策略头别太激进</span></pre>
+      <p class="small muted">选一个变体，看它保留了哪几项、去掉了哪几项，以及这样训练出来的真实结果（4 个数据集、5 个种子的平均）。</p>
+      <div class="vbtns" id="p8Var"></div>
+      <div class="terms" id="p8Terms"></div>
+      <div class="stats" id="p8VarStats"></div>
+      <p id="p8VarNote"></p>
+    </div>
+    <div class="two" style="margin-top:16px">
+      <div class="panel stack">
+        <h3>策略头怎么把选择带偏</h3>
+        <p class="small muted">论文公式 (3)：π(k) = softmax( −|p̂_k − c| / T + g_k )。下面 12 个技能的 p̂ 是示例值。g_k 是策略头加上去的分数。把“策略头偏向”调大，看概率怎么流向已经会的技能。</p>
+        <div class="row">
+          <label class="ctrl" for="p8PC">c <output id="p8PCv">0.70</output><input type="range" id="p8PC" min="0.1" max="0.9" step="0.05" value="0.7"></label>
+          <label class="ctrl" for="p8PT">温度 T <output id="p8PTv">0.05</output><input type="range" id="p8PT" min="0.01" max="0.3" step="0.01" value="0.05"></label>
+          <label class="ctrl" for="p8PG">策略头偏向 <output id="p8PGv">0</output><input type="range" id="p8PG" min="0" max="20" step="1" value="0"></label>
+        </div>
+        <div class="bars" id="p8PBars"></div>
+        <div class="calc" id="p8PCalc"></div>
+      </div>
+      <div class="panel stack">
+        <h3>差距 93% 来自策略头</h3>
+        <p class="small muted">同一个微调后的骨干，去掉策略头、改用普通“最接近 0.7”规则出题，NLG 就回到 0.0500，接近 DKT。</p>
+        <div class="cv-host"><canvas id="p8DD" aria-label="DKT、去掉策略头、Safe-DFKT 三者的 NLG"></canvas></div>
+        <div class="split" id="p8Split" aria-label="差距分解"></div>
+        <div class="row small" style="justify-content:space-between"><span id="p8SplitA"></span><span id="p8SplitB"></span></div>
+        <p class="note">对“是不是校准不好导致的”这个疑问，论文用 Platt 重新校准做了反事实检验，只补回了差距的 <b>2.9%</b>。所以问题不在校准，在策略头。</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 8.6 训练越久 -->
+  <div class="sub">
+    <div class="sub-h"><span class="tag">8.6</span><h3>越训练，离线估计越好看，真实效果越差</h3></div>
+    <p class="muted">模型训练时能看到的只有离线估计 DR（拿历史日志估算“如果按这个策略出题会怎样”）。模拟器里能算出真实值。同一个模型、同样 15 个 epoch，两条线朝相反方向走。这叫“优化者的诅咒”。</p>
+    <div class="panel stack">
+      <div class="row"><label class="ctrl" for="p8TrM">方法
+        <select id="p8TrM"><option>Safe-DFKT</option><option>Safe-DFKT-AG</option><option>DF-KT</option></select></label></div>
+      <div class="two">
+        <div class="stack"><h3 class="small">离线 DR 估计（模型以为的）</h3><div class="cv-host"><canvas id="p8TrA" aria-label="每个 epoch 的离线 DR 估计"></canvas></div></div>
+        <div class="stack"><h3 class="small">模拟器里的真实 NLG（验证集学生）</h3><div class="cv-host"><canvas id="p8TrB" aria-label="每个 epoch 的真实 NLG"></canvas></div></div>
+      </div>
+      <h3>每种方法的离线估计都偏高</h3>
+      <div class="cv-host"><canvas id="p8Bias" aria-label="各方法 DR 估计减去真实值"></canvas></div>
+      <p class="small muted">DR 估计值减去模拟器真实值（NLG 奖励，4 个数据集平均）。全部大于 0，连随机出题也被高估，说明离线估计偏乐观不是决策导向训练独有的问题。</p>
+    </div>
+  </div>
+
+  <!-- 8.7 难度扫描 -->
+  <div class="sub">
+    <div class="sub-h"><span class="tag">8.7</span><h3>把出题难度调低，大家都变好了</h3></div>
+    <div class="two">
+      <div class="panel stack">
+        <div class="cv-host"><canvas id="p8Sweep" aria-label="目标难度 c 对 NLG 的影响"></canvas></div>
+        <p class="small muted">横轴是目标难度 c（3 个种子、4 个数据集平均）。虚线是随机出题 0.1353。c = 0.3 时 DKT 达到 0.1501，四种方法都追平或超过了随机。论文的解释是：NLG 按全部 12 个技能平均，奖励“覆盖面广”；c = 0.7 让策略只盯着少数几个技能练。</p>
+      </div>
+      <div class="panel stack">
+        <h3>技能从 12 个换成 24 个</h3>
+        <div class="tblwrap"><table class="ref" id="p8Scale"></table></div>
+        <p class="small muted">论文的规模检查（3 个种子）。技能变多以后所有方法的 NLG 都下降，排名基本不变：随机和 Uncertainty-0.5 仍然在前。</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 8.8 问答 -->
+  <div class="sub">
+    <div class="sub-h"><span class="tag">8.8</span><h3>答辩和审稿时最可能被问到的 6 个问题</h3></div>
+    <div class="panel qa">
+      <details open><summary>为什么随机出题比所有知识追踪模型都好？这不是说明模型没用吗？</summary><p>不是。NLG 是对全部 12 个技能求平均，练得越“广”越占便宜；c = 0.7 这条规则会让策略反复练少数几个技能。把 c 调到 0.3，DKT 就到了 0.1501，超过随机的 0.1353。论文把这一点当作评估环境的局限来报告，而不是“出题没用”。你可以在 8.3 里亲手调 c 验证。</p></details>
+      <details><summary>AUC 只差 0.13 个百分点，教学效果为什么差这么多？</summary><p>因为出题主要不是骨干网络决定的，而是后加的策略头 g 决定的。策略头改变了 Safe-DFKT 86.58% 的出题选择，差距的 93% 来自它。不加防刷分项时，93.94% 的步数花在学生已经会的技能上（DKT 是 78.12%），只练了 3.29 个不同技能（随机是 11.94 个）。</p></details>
+      <details><summary>为什么奖励会把模型带歪？</summary><p>NLG 奖励里“练后掌握度”在 73.6% 到 87.7% 的步数里只能取 0 或 1，结果每个技能的 NLG 奖励更多反映的是“学生本来会不会”（与 p0 的 Spearman 相关 0.57 到 0.81），而不是“练了能学到多少”。在 4 个模拟器里有 3 个，它和真实学习增益是负相关（−0.37、−0.14、−0.33）。所以模型越努力提高这个奖励，就越倾向于出学生早就会的题。换回 r_gain 奖励的变体（0.0256）是消融里最好的。</p></details>
+      <details><summary>是不是校准没保住？</summary><p>不是主因。模拟器里 Safe-DFKT-AG 的 ECE 1.64%，DKT 1.44%，差异不显著（p = 0.36）。Platt 重新校准只补回 2.9% 的差距。DKVMN 的校准是所有模型里最好的（0.71%），NLG 却最差。</p></details>
+      <details><summary>Junyi 数据集为什么跟另外三个不一样？</summary><p>Junyi 上 Safe-DFKT-AG 和 DKT 基本打平（−0.0014），用决策价值检查点时甚至反超（+0.0181）。论文给出的线索是：只有在 Junyi 上，NLG 奖励和真实学习增益是正相关（0.69），奖励没有把模型带歪。另外 Junyi 是唯一带先修关系（12 条边）的模拟器。注意：本页 8.3 的浏览器复现没有这 12 条先修边（结果文件里没存），所以 Junyi 的数字和论文差得最多。</p></details>
+      <details><summary>这篇论文的结论能推广吗？</summary><p>论文自己写明了边界：所有模拟器都来自同一个 BKT 家族；NLG 奖励覆盖面；单步 DR 估计的是“只在一步上换策略”的价值，不是完整部署的价值；注意力基线是简化版；只有 5 个种子。所以结论是“在这些模拟器里，只保住校准不足以让决策变好”，不是“决策导向训练一定不行”。</p></details>
+    </div>
+  </div>
+</div></section>
+
+<footer><div class="wrap">本页所有计算都在你的浏览器里完成，没有连接任何服务器。第 5 章的权重是随机的，第 6 章的模型从随机开始训练。第 8 章的结果数字来自论文工作流里的实验结果文件（2026-10-22 版）。</div></footer>
+
+<div id="tip" hidden></div>
+
+<script>
+// ============ 工具函数 ============
+const $ = (s) => document.querySelector(s);
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function randn(r){let u=0;while(!u)u=r();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*r())}
+function hashStr(s){let h=2166136261;for(const c of s){h^=c.codePointAt(0);h=Math.imul(h,16777619)}return h>>>0}
+function randMat(rows,cols,scale,seed){const r=mulberry32(seed),M=[];for(let i=0;i<rows;i++){const a=new Float64Array(cols);for(let j=0;j<cols;j++)a[j]=randn(r)*scale;M.push(a)}return M}
+function matmul(A,B){const m=A.length,k=B.length,n=B[0].length,C=[];for(let i=0;i<m;i++){const row=new Float64Array(n),a=A[i];for(let p=0;p<k;p++){const av=a[p],b=B[p];for(let j=0;j<n;j++)row[j]+=av*b[j]}C.push(row)}return C}
+function transpose(A){const m=A.length,n=A[0].length,T=[];for(let j=0;j<n;j++){const r=new Float64Array(m);for(let i=0;i<m;i++)r[i]=A[i][j];T.push(r)}return T}
+function addM(A,B){return A.map((r,i)=>r.map((v,j)=>v+B[i][j]))}
+function softmax(row){let mx=-Infinity;for(const v of row)if(v>mx)mx=v;const e=Array.from(row,v=>v===-Infinity?0:Math.exp(v-mx));const s=e.reduce((a,b)=>a+b,0);return Float64Array.from(e,v=>v/s)}
+function layerNorm(M){return M.map(r=>{const n=r.length;let m=0;for(const v of r)m+=v;m/=n;let va=0;for(const v of r)va+=(v-m)**2;va/=n;const s=Math.sqrt(va+1e-5);return r.map(v=>(v-m)/s)})}
+const fmt=(v,d=3)=>v===-Infinity?'-∞':(Number.isFinite(v)?(Math.abs(v)<5e-10?'0':v.toFixed(d)):String(v));
+const showCh=c=>c==='\n'?'⏎':(c===' '?'␠':c);
+
+function fitCanvas(cv,W,H){const r=window.devicePixelRatio||1;cv.width=Math.round(W*r);cv.height=Math.round(H*r);cv.style.width=W+'px';cv.style.height=H+'px';const c=cv.getContext('2d');c.setTransform(r,0,0,r,0,0);return c}
+function hexRgb(h){h=h.trim().replace('#','');if(h.length===3)h=[...h].map(c=>c+c).join('');const n=parseInt(h,16);return[n>>16&255,n>>8&255,n&255]}
+function colors(){const cs=getComputedStyle(document.documentElement),g=n=>cs.getPropertyValue(n).trim();const o={};for(const k of['bg','surface','sunk','ink','muted','line','accent','pos','neg'])o[k]=g('--'+k);o.rgb={};for(const k in o)if(k!=='rgb')o.rgb[k]=hexRgb(o[k]);return o}
+function mixRgb(a,b,t){return`rgb(${Math.round(a[0]+(b[0]-a[0])*t)},${Math.round(a[1]+(b[1]-a[1])*t)},${Math.round(a[2]+(b[2]-a[2])*t)})`}
+
+// 悬浮提示
+const tip=$('#tip');
+function showTip(e,text){tip.textContent=text;tip.hidden=false;const pad=14;let x=e.clientX+pad,y=e.clientY+pad;const w=tip.offsetWidth,h=tip.offsetHeight;if(x+w>innerWidth-8)x=e.clientX-w-pad;if(y+h>innerHeight-8)y=e.clientY-h-pad;tip.style.left=Math.max(4,x)+'px';tip.style.top=Math.max(4,y)+'px'}
+function hideTip(){tip.hidden=true}
+
+// ============ 热力图组件 ============
+const heats=[];
+class Heat{
+  constructor(host,opts={}){this.host=host;this.cv=document.createElement('canvas');this.cv.tabIndex=0;host.appendChild(this.cv);this.opts=opts;this.M=null;heats.push(this);
+    this.cv.addEventListener('mousemove',e=>this.hover(e));this.cv.addEventListener('mouseleave',hideTip);
+    this.cv.addEventListener('click',e=>{const c=this.cell(e);if(c&&this.o.onClick)this.o.onClick(c[0],c[1],this.M[c[0]][c[1]]);this.hover(e)})}
+  set(M,o={}){this.M=M;this.o=o;this.draw()}
+  draw(){const M=this.M;if(!M||!M.length)return;const rows=M.length,cols=M[0].length,o=this.o,C=colors();
+    const rl=o.rowLabels,cl=o.colLabels;const lw=rl?30:0;
+    const avail=Math.max(240,(this.host.clientWidth||640)-2);
+    let cw=Math.floor((avail-lw)/cols);cw=Math.max(4,Math.min(cw,o.maxCell||26));
+    const showCl=cl&&cw>=13;const th=(o.colIndex||showCl)?18:0;
+    const ch=Math.max(rl?15:6,Math.min(cw,22));
+    const W=lw+cols*cw,H=th+rows*ch;const ctx=fitCanvas(this.cv,W,H);
+    let mx=0;for(const r of M)for(const v of r)if(Number.isFinite(v)&&Math.abs(v)>mx)mx=Math.abs(v);if(o.range)mx=o.range;if(!mx)mx=1;
+    const S=C.rgb.surface;
+    for(let i=0;i<rows;i++)for(let j=0;j<cols;j++){const v=M[i][j];let col;
+      if(!Number.isFinite(v))col=C.sunk;
+      else if(o.mode==='seq')col=mixRgb(S,C.rgb.accent,Math.min(1,Math.abs(v)/mx)**0.7);
+      else{const t=Math.min(1,Math.abs(v)/mx)**0.8;col=mixRgb(S,v>=0?C.rgb.pos:C.rgb.neg,t)}
+      ctx.fillStyle=col;ctx.fillRect(lw+j*cw,th+i*ch,cw-(cw>6?1:0),ch-1)}
+    // 遮罩格画斜线
+    ctx.strokeStyle=C.line;ctx.lineWidth=1;
+    for(let i=0;i<rows;i++)for(let j=0;j<cols;j++)if(M[i][j]===-Infinity){const x=lw+j*cw,y=th+i*ch;ctx.beginPath();ctx.moveTo(x+2,y+ch-3);ctx.lineTo(x+cw-3,y+2);ctx.stroke()}
+    ctx.fillStyle=C.muted;ctx.textBaseline='middle';
+    if(rl){ctx.font=`${Math.min(13,ch-2)}px ${getComputedStyle(document.body).fontFamily}`;ctx.textAlign='right';for(let i=0;i<rows;i++)ctx.fillText(showCh(rl[i]),lw-6,th+i*ch+ch/2)}
+    if(th){ctx.textAlign='center';if(showCl){ctx.font=`12px ${getComputedStyle(document.body).fontFamily}`;for(let j=0;j<cols;j++)ctx.fillText(showCh(cl[j]),lw+j*cw+cw/2,th/2)}
+      else{ctx.font='10px "JetBrains Mono",monospace';const step=Math.max(1,Math.ceil(26/cw));for(let j=0;j<cols;j+=step)ctx.fillText(String(j),lw+j*cw+cw/2,th/2)}}
+    if(o.hiRow!=null){ctx.strokeStyle=C.ink;ctx.lineWidth=1.5;ctx.strokeRect(lw+.5,th+o.hiRow*ch+.5,cols*cw-1,ch-1)}
+    this.g={lw,th,cw,ch,rows,cols}}
+  cell(e){if(!this.g)return null;const r=this.cv.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top,g=this.g;const j=Math.floor((x-g.lw)/g.cw),i=Math.floor((y-g.th)/g.ch);if(i<0||j<0||i>=g.rows||j>=g.cols)return null;return[i,j]}
+  hover(e){const c=this.cell(e);if(!c){hideTip();return}const[i,j]=c,v=this.M[i][j];showTip(e,this.o.tip?this.o.tip(i,j,v):`[${i}, ${j}] = ${fmt(v)}`)}
+}
+
+function charEmbed(ch,d){const r=mulberry32(hashStr('emb'+ch));const a=new Float64Array(d);for(let j=0;j<d;j++)a[j]=randn(r)*0.8;return a}
+function shapeHtml(dims){return'['+dims.map(([n,v])=>`<span class="${n==='T'||n==='B'?'t':(n==='d'?'d':'o')}">${v}</span>`).join(', ')+']'}
+function shapeCaption(dims){return dims.map(([n,v,w])=>`${n} = ${v} ${w}`).join(' × ')}
+
+// ============ 第 1 章 ============
+const t1Text='大模型读一句话时会把每个字变成一串数字然后一起算';
+const heat1=new Heat($('#t1Heat'));
+function renderCh1(){const T=+$('#t1T').value,d=+$('#t1D').value,B=+$('#t1B').value;
+  $('#t1Tv').textContent=T;$('#t1Dv').textContent=d;$('#t1Bv').textContent=B;
+  const chars=[...t1Text].slice(0,T);const M=chars.map(c=>charEmbed(c,d));
+  heat1.set(M,{rowLabels:chars,colIndex:true,tip:(i,j,v)=>`第 ${i+1} 行「${chars[i]}」的第 ${j+1} 个数\nx[${i}][${j}] = ${fmt(v,4)}`});
+  const dims=B>1?[['B',B],['T',T],['d',d]]:[['T',T],['d',d]];
+  $('#t1Shape').innerHTML='torch.Size('+shapeHtml(dims)+')';
+  $('#t1Count').textContent=(B>1?`${B} × `:'')+`${T} × ${d} = ${(B*T*d).toLocaleString()} 个数字`;
+  $('#t1Hint').textContent=B>1?`B = ${B}：相当于 ${B} 张这样的表摞在一起，一次一起算（下面只画第 1 张）`:'这些数现在是随机的，训练会把它们慢慢调成有意义的值';
+}
+['#t1T','#t1D','#t1B'].forEach(s=>$(s).addEventListener('input',renderCh1));
+
+// ============ 第 2 章 线性回归 ============
+const reg={pts:[],w:0,b:0,step:0,losses:[],run:false,boom:false,seed:3};
+const RX=[0,10],RY=[-5,30];
+function regData(){const r=mulberry32(reg.seed++);reg.pts=[];for(let i=0;i<16;i++){const x=0.5+r()*9;reg.pts.push({x,y:2*x+1+randn(r)*1.6})}}
+function regGrad(){const n=reg.pts.length;let L=0,dw=0,db=0;for(const p of reg.pts){const e=reg.w*p.x+reg.b-p.y;L+=e*e;dw+=2*e*p.x;db+=2*e}return{L:L/n,dw:dw/n,db:db/n}}
+function regDoStep(){if(!reg.pts.length)return;const lr=+$('#regLr').value,g=regGrad();reg.w-=lr*g.dw;reg.b-=lr*g.db;reg.step++;const L2=regGrad().L;reg.losses.push(L2);
+  if(!Number.isFinite(L2)||Math.abs(reg.w)>1e6){reg.boom=true;reg.run=false;$('#regRun').textContent='自动训练'}}
+function regDraw(){const host=$('#regHost'),W=Math.max(260,host.clientWidth),H=Math.round(Math.min(320,W*0.62));const cv=$('#regCv'),ctx=fitCanvas(cv,W,H),C=colors();
+  const pl=34,pr=10,pt=10,pb=24;const sx=x=>pl+(x-RX[0])/(RX[1]-RX[0])*(W-pl-pr),sy=y=>pt+(RY[1]-y)/(RY[1]-RY[0])*(H-pt-pb);
+  ctx.strokeStyle=C.line;ctx.lineWidth=1;ctx.fillStyle=C.muted;ctx.font='10px "JetBrains Mono",monospace';ctx.textAlign='right';ctx.textBaseline='middle';
+  for(let y=0;y<=30;y+=10){ctx.beginPath();ctx.moveTo(pl,sy(y));ctx.lineTo(W-pr,sy(y));ctx.stroke();ctx.fillText(y,pl-5,sy(y))}
+  ctx.textAlign='center';ctx.textBaseline='top';for(let x=0;x<=10;x+=2)ctx.fillText(x,sx(x),H-pb+5);
+  // 残差线
+  ctx.strokeStyle=C.muted;ctx.setLineDash([3,3]);
+  if(Number.isFinite(reg.w))for(const p of reg.pts){const yh=reg.w*p.x+reg.b;ctx.beginPath();ctx.moveTo(sx(p.x),sy(p.y));ctx.lineTo(sx(p.x),sy(Math.max(RY[0]-50,Math.min(RY[1]+50,yh))));ctx.stroke()}
+  ctx.setLineDash([]);
+  ctx.save();ctx.beginPath();ctx.rect(pl,pt,W-pl-pr,H-pt-pb);ctx.clip();
+  if(Number.isFinite(reg.w)){ctx.strokeStyle=C.accent;ctx.lineWidth=2.5;ctx.beginPath();ctx.moveTo(sx(0),sy(reg.b));ctx.lineTo(sx(10),sy(reg.w*10+reg.b));ctx.stroke()}
+  ctx.restore();
+  for(const p of reg.pts){ctx.fillStyle=C.pos;ctx.beginPath();ctx.arc(sx(p.x),sy(p.y),4.5,0,7);ctx.fill()}
+  cv._map={pl,pr,pt,pb,W,H};
+  drawCurve($('#regLoss'),reg.losses,{h:110});
+  // 计算面板
+  const lr=+$('#regLr').value;
+  if(reg.boom){$('#regCalc').innerHTML=`<span class="warn">第 ${reg.step} 步：参数爆炸了（w = ${fmt(reg.w,1)}）。</span>\n学习率 ${lr} 太大，每一步都跳过了最低点，\n而且越跳越远。把学习率调小，再点“参数归零”。`;return}
+  if(!reg.pts.length){$('#regCalc').textContent='没有数据点。点左边图上任意位置添加。';return}
+  const g=regGrad(),p0=reg.pts[0],y0=reg.w*p0.x+reg.b;
+  $('#regCalc').textContent=
+`已训练 ${reg.step} 步，${reg.pts.length} 个数据点
+
+① 预测   ŷ = w·x + b = ${fmt(reg.w)}·x + ${fmt(reg.b)}
+   举例第 1 个点: x = ${fmt(p0.x,2)}
+   ŷ = ${fmt(reg.w)} × ${fmt(p0.x,2)} + ${fmt(reg.b)} = ${fmt(y0,2)}
+   真实 y = ${fmt(p0.y,2)}，误差 = ${fmt(y0-p0.y,2)}
+
+② 损失   loss = 所有点 (ŷ − y)² 的平均
+        = ${fmt(g.L,4)}
+
+③ 梯度   ∂loss/∂w = ${fmt(g.dw,4)}
+        ∂loss/∂b = ${fmt(g.db,4)}
+   （正数表示该把参数调小，负数表示调大）
+
+④ 下一步更新（lr = ${lr}）
+   w ← ${fmt(reg.w)} − ${lr} × ${fmt(g.dw,3)} = ${fmt(reg.w-lr*g.dw)}
+   b ← ${fmt(reg.b)} − ${lr} × ${fmt(g.db,3)} = ${fmt(reg.b-lr*g.db)}
+
+生成数据用的真实规律是 y = 2x + 1（模型并不知道）`;
+}
+$('#regCv').addEventListener('click',e=>{const cv=$('#regCv'),m=cv._map;if(!m)return;const r=cv.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;
+  const dx=RX[0]+(x-m.pl)/(m.W-m.pl-m.pr)*(RX[1]-RX[0]),dy=RY[1]-(y-m.pt)/(m.H-m.pt-m.pb)*(RY[1]-RY[0]);if(dx<RX[0]||dx>RX[1]||dy<RY[0]||dy>RY[1])return;reg.pts.push({x:dx,y:dy});regDraw()});
+$('#regStep').onclick=()=>{if(!reg.boom)regDoStep();regDraw()};
+$('#regRun').onclick=()=>{if(reg.boom)return;reg.run=!reg.run;$('#regRun').textContent=reg.run?'暂停':'自动训练'};
+$('#regReset').onclick=()=>{reg.w=0;reg.b=0;reg.step=0;reg.losses=[];reg.boom=false;regDraw()};
+$('#regData').onclick=()=>{regData();$('#regReset').onclick()};
+$('#regLr').onchange=regDraw;
+
+function drawCurve(cv,data,opts={}){const W=Math.max(240,cv.parentElement.clientWidth),H=opts.h||120,ctx=fitCanvas(cv,W,H),C=colors();
+  const pl=40,pr=8,pt=8,pb=18;ctx.font='10px "JetBrains Mono",monospace';ctx.fillStyle=C.muted;
+  const fin=data.filter(Number.isFinite);
+  if(fin.length<2){ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('训练开始后这里画出 loss 曲线',W/2,H/2);return}
+  const stride=Math.max(1,Math.floor(fin.length/600)),pts=[];for(let i=0;i<fin.length;i+=stride)pts.push([i,Math.log10(Math.max(fin[i],1e-4))]);
+  let lo=Infinity,hi=-Infinity;for(const p of pts){if(p[1]<lo)lo=p[1];if(p[1]>hi)hi=p[1]}if(hi-lo<0.6){const m=(hi+lo)/2;hi=m+0.3;lo=m-0.3}
+  const sx=i=>pl+i/(fin.length-1)*(W-pl-pr),sy=v=>pt+(hi-v)/(hi-lo)*(H-pt-pb);
+  ctx.strokeStyle=C.line;ctx.textAlign='right';ctx.textBaseline='middle';
+  for(let k=Math.ceil(lo);k<=Math.floor(hi);k++){ctx.beginPath();ctx.moveTo(pl,sy(k));ctx.lineTo(W-pr,sy(k));ctx.stroke();ctx.fillText(k>=0?String(10**k):(10**k).toFixed(-k),pl-5,sy(k))}
+  ctx.textAlign='left';ctx.textBaseline='top';ctx.fillText(`第 ${fin.length} 步`,pl,H-pb+4);
+  ctx.beginPath();pts.forEach((p,n)=>n?ctx.lineTo(sx(p[0]),sy(p[1])):ctx.moveTo(sx(p[0]),sy(p[1])));
+  ctx.lineTo(sx(pts[pts.length-1][0]),H-pb);ctx.lineTo(sx(0),H-pb);ctx.closePath();ctx.fillStyle=mixRgb(C.rgb.surface,C.rgb.accent,.18);ctx.fill();
+  ctx.beginPath();pts.forEach((p,n)=>n?ctx.lineTo(sx(p[0]),sy(p[1])):ctx.moveTo(sx(p[0]),sy(p[1])));ctx.strokeStyle=C.accent;ctx.lineWidth=1.8;ctx.stroke();
+  const lp=pts[pts.length-1];ctx.fillStyle=C.accent;ctx.beginPath();ctx.arc(sx(lp[0]),sy(lp[1]),3.5,0,7);ctx.fill();
+  ctx.fillStyle=C.ink;ctx.textAlign='right';ctx.textBaseline='bottom';ctx.fillText(fmt(fin[fin.length-1],3),W-pr,sy(lp[1])-5>pt+10?sy(lp[1])-5:pt+12)}
+
+// ============ 第 3 章 矩阵乘法 ============
+const mm={A:[],B:[],seed:11,sel:null};
+function mmGen(){const m=+$('#mmM').value,k=+$('#mmK').value,n=+$('#mmN').value,r=mulberry32(mm.seed);const ri=()=>Math.floor(r()*7)-3;
+  mm.A=Array.from({length:m},()=>Array.from({length:k},ri));mm.B=Array.from({length:k},()=>Array.from({length:n},ri));
+  if(mm.sel&&(mm.sel[0]>=m||mm.sel[1]>=n))mm.sel=null;mmRender()}
+function mmRender(){const A=mm.A,B=mm.B,m=A.length,k=B.length,n=B[0].length;$('#mmMv').textContent=m;$('#mmKv').textContent=k;$('#mmNv').textContent=n;
+  const Cm=A.map(r=>Array.from({length:n},(_,j)=>r.reduce((s,a,p)=>s+a*B[p][j],0)));const sel=mm.sel;
+  const tbl=(M,cls,hi,cap)=>`<div><table class="${cls}">${M.map((r,i)=>'<tr>'+r.map((v,j)=>`<td class="${hi(i,j)}" data-i="${i}" data-j="${j}">${v}</td>`).join('')+'</tr>').join('')}</table><div class="cap">${cap}</div></div>`;
+  $('#mmBox').innerHTML=tbl(A,'',(i)=>sel&&sel[0]===i?'hiA':'',`A  [${m}, ${k}]`)+'<span class="op">@</span>'+tbl(B,'',(i,j)=>sel&&sel[1]===j?'hiB':'',`B  [${k}, ${n}]`)+'<span class="op">=</span>'+tbl(Cm,'C',(i,j)=>sel&&sel[0]===i&&sel[1]===j?'hi':'',`C  [${m}, ${n}]`);
+  $('#mmBox').querySelectorAll('.C td').forEach(td=>td.onclick=()=>{mm.sel=[+td.dataset.i,+td.dataset.j];mmRender()});
+  if(sel){const[i,j]=sel;const terms=A[i].map((a,p)=>`${a}×${B[p][j]}`).join(' + '),prods=A[i].map((a,p)=>a*B[p][j]).join(' + ');
+    $('#mmCalc').textContent=`C[${i}][${j}] = A 第 ${i} 行 · B 第 ${j} 列\n        = ${terms}\n        = ${prods}\n        = ${Cm[i][j]}\n\n这里只有 ${k} 项相加。大模型里 k = 64 或 768，就是 64 或 768 项相加。`}
+  else $('#mmCalc').textContent='点右边结果矩阵 C 中的一格。';}
+['#mmM','#mmK','#mmN'].forEach(s=>$(s).addEventListener('input',mmGen));
+$('#mmShuffle').onclick=()=>{mm.seed++;mmGen()};
+
+// ============ 第 4 章 神经网络 ============
+const nn={run:false,epoch:0,loss:NaN,acc:0,data:[]};
+function nnMakeData(){const kind=$('#nnData').value,r=mulberry32(42),D=[];
+  if(kind==='spiral'){for(let c=0;c<2;c++)for(let i=0;i<100;i++){const t=i/100,rad=0.08+t*0.85,a=t*1.75*2*Math.PI+c*Math.PI;D.push({x:rad*Math.cos(a)+randn(r)*0.025,y:rad*Math.sin(a)+randn(r)*0.025,c})}}
+  else if(kind==='circle'){for(let i=0;i<200;i++){const c=i%2,rad=c?0.62+r()*0.3:r()*0.38,a=r()*2*Math.PI;D.push({x:rad*Math.cos(a),y:rad*Math.sin(a),c})}}
+  else if(kind==='xor'){for(let i=0;i<200;i++){let x=r()*1.8-0.9,y=r()*1.8-0.9;x+=Math.sign(x)*0.08;y+=Math.sign(y)*0.08;D.push({x,y,c:x*y>0?0:1})}}
+  else{for(let i=0;i<200;i++){const c=i%2;D.push({x:(c?0.4:-0.4)+randn(r)*0.2,y:(c?0.35:-0.35)+randn(r)*0.2,c})}}
+  nn.data=D}
+function nnInit(){const L=+$('#nnL').value,H=+$('#nnH').value,relu=$('#nnAct').value==='relu';nn.sizes=[2,...Array(L).fill(H),2];nn.W=[];nn.b=[];nn.vW=[];nn.vb=[];const r=mulberry32(Date.now()%100000);
+  for(let l=0;l<nn.sizes.length-1;l++){const a=nn.sizes[l],o=nn.sizes[l+1],s=Math.sqrt((relu?2:1)/a)*(l===0?1.6:1);const w=new Float64Array(a*o);for(let i=0;i<w.length;i++)w[i]=randn(r)*s;nn.W.push(w);nn.b.push(new Float64Array(o));nn.vW.push(new Float64Array(a*o));nn.vb.push(new Float64Array(o))}
+  nn.epoch=0;nn.loss=NaN;nn.acc=0;nnFlow();nnEval();nnDraw()}
+function nnFwd(x,y,keep){const relu=$('#nnAct').value==='relu',L=nn.W.length;let a=Float64Array.of(x,y);const acts=[a];
+  for(let l=0;l<L;l++){const ins=nn.sizes[l],o=nn.sizes[l+1],W=nn.W[l],z=Float64Array.from(nn.b[l]);for(let i=0;i<ins;i++){const ai=a[i];if(!ai)continue;for(let j=0;j<o;j++)z[j]+=ai*W[i*o+j]}
+    if(l<L-1)for(let j=0;j<o;j++)z[j]=relu?Math.max(0,z[j]):Math.tanh(z[j]);a=z;if(keep)acts.push(a)}
+  const m=Math.max(a[0],a[1]),e0=Math.exp(a[0]-m),e1=Math.exp(a[1]-m);const p=Float64Array.of(e0/(e0+e1),e1/(e0+e1));return keep?{acts,p}:p}
+function nnStep(){const relu=$('#nnAct').value==='relu',L=nn.W.length,N=nn.data.length,lr=+$('#nnLr').value;const gW=nn.W.map(w=>new Float64Array(w.length)),gb=nn.b.map(b=>new Float64Array(b.length));let loss=0,ok=0;
+  for(const s of nn.data){const{acts,p}=nnFwd(s.x,s.y,true);loss-=Math.log(p[s.c]+1e-12);if((p[1]>0.5?1:0)===s.c)ok++;let d=Float64Array.from(p);d[s.c]-=1;
+    for(let l=L-1;l>=0;l--){const ins=nn.sizes[l],o=nn.sizes[l+1],ap=acts[l],W=nn.W[l];for(let i=0;i<ins;i++){const ai=ap[i];for(let j=0;j<o;j++)gW[l][i*o+j]+=ai*d[j]}for(let j=0;j<o;j++)gb[l][j]+=d[j];
+      if(l>0){const dp=new Float64Array(ins);for(let i=0;i<ins;i++){let s2=0;for(let j=0;j<o;j++)s2+=W[i*o+j]*d[j];const av=ap[i];dp[i]=s2*(relu?(av>0?1:0):1-av*av)}d=dp}}}
+  for(let l=0;l<L;l++){const W=nn.W[l],v=nn.vW[l],g=gW[l];for(let i=0;i<W.length;i++){v[i]=0.9*v[i]-lr*g[i]/N;W[i]+=v[i]}const b=nn.b[l],vb=nn.vb[l];for(let j=0;j<b.length;j++){vb[j]=0.9*vb[j]-lr*gb[l][j]/N;b[j]+=vb[j]}}
+  nn.epoch++;nn.loss=loss/N;nn.acc=ok/N}
+function nnEval(){let loss=0,ok=0;for(const s of nn.data){const p=nnFwd(s.x,s.y);loss-=Math.log(p[s.c]+1e-12);if((p[1]>0.5?1:0)===s.c)ok++}nn.loss=loss/nn.data.length;nn.acc=ok/nn.data.length}
+function nnDraw(){const host=$('#nnHost'),S=Math.max(240,Math.min(host.clientWidth,440)),cv=$('#nnCv'),ctx=fitCanvas(cv,S,S),C=colors();const G=44,cs=S/G;
+  for(let gy=0;gy<G;gy++)for(let gx=0;gx<G;gx++){const x=-1+(gx+.5)/G*2,y=1-(gy+.5)/G*2,p=nnFwd(x,y)[1];const t=Math.abs(p-0.5)*2;ctx.fillStyle=mixRgb(C.rgb.surface,p>0.5?C.rgb.pos:C.rgb.neg,0.12+t*0.38);ctx.fillRect(gx*cs,gy*cs,cs+1,cs+1)}
+  for(const s of nn.data){ctx.beginPath();ctx.arc((s.x+1)/2*S,(1-s.y)/2*S,3.6,0,7);ctx.fillStyle=s.c?C.pos:C.neg;ctx.fill();ctx.strokeStyle=C.surface;ctx.lineWidth=1;ctx.stroke()}
+  $('#nnStats').innerHTML=`<span>训练轮数 <b>${nn.epoch}</b></span><span>loss <b>${fmt(nn.loss,4)}</b></span><span>准确率 <b>${(nn.acc*100).toFixed(1)}%</b></span>`}
+function nnFlow(){const s=nn.sizes,act=$('#nnAct').value;let html=`<div><span>输入 X：200 个点，每个点 2 个坐标</span><span class="shape">${shapeHtml([['B',200],['d',2]])}</span></div>`;let params=0;
+  for(let l=0;l<s.length-1;l++){params+=s[l]*s[l+1]+s[l+1];const last=l===s.length-2;
+    html+=`<div><span>${last?'输出层':'第 '+(l+1)+' 层'}：@ W${l+1} <span class="shape">${shapeHtml([['o',s[l]],['o',s[l+1]]])}</span> + b${l+1}${last?'':' → '+act}</span><span class="shape">${shapeHtml([['B',200],['d',s[l+1]]])}</span></div>`}
+  html+=`<div><span>softmax → 每个点属于两类的概率</span><span class="shape">${shapeHtml([['B',200],['d',2]])}</span></div><div><span><b>参数总数</b>（所有 W 和 b 里数字的个数）</span><span class="mono"><b>${params}</b></span></div>`;$('#nnFlow').innerHTML=html}
+$('#nnRun').onclick=()=>{nn.run=!nn.run;$('#nnRun').textContent=nn.run?'暂停':'开始训练'};
+$('#nnStep').onclick=()=>{nnStep();nnDraw()};
+$('#nnReset').onclick=()=>nnInit();
+$('#nnData').onchange=()=>{nnMakeData();nnInit()};
+$('#nnAct').onchange=nnInit;
+['#nnL','#nnH'].forEach(s=>$(s).addEventListener('input',()=>{$('#nnLv').textContent=$('#nnL').value;$('#nnHv').textContent=$('#nnH').value;nnInit()}));
+
+// ============ 第 5 章 Transformer 单步调试 ============
+const TF_BASE='的一是了我不人在有这个上们来到时大地为子中你说生国年着就那和要也得里后自以会';
+const tf={step:0,R:null,sel:null,heat:null,wcache:{}};
+function posEnc(T,d){const P=[];for(let t=0;t<T;t++){const r=new Float64Array(d);for(let i=0;i<d;i++){const k=Math.floor(i/2),ang=t/Math.pow(10000,2*k/d);r[i]=i%2?Math.cos(ang):Math.sin(ang)}P.push(r)}return P}
+function tfWeights(d){if(!tf.wcache[d]){const s=1/Math.sqrt(d);tf.wcache[d]={Wq:randMat(d,d,s,101),Wk:randMat(d,d,s,102),Wv:randMat(d,d,s,103),Wo:randMat(d,d,s,104),W1:randMat(d,4*d,s,105),W2:randMat(4*d,d,1/Math.sqrt(4*d),106)}}return tf.wcache[d]}
+function tfRun(){let text=[...$('#tfText').value.replace(/\s/g,'')].slice(-24);if(!text.length)text=['你'];const d=+$('#tfD').value,T=text.length;
+  const vocab=[...new Set([...TF_BASE,...text])],idx=Object.fromEntries(vocab.map((c,i)=>[c,i])),ids=text.map(c=>idx[c]);
+  const E=vocab.map(c=>charEmbed(c,d)),W=tfWeights(d),sq=Math.sqrt(d);
+  const X=ids.map(i=>E[i]),P=posEnc(T,d),X1=addM(X,P);
+  const Q=matmul(X1,W.Wq),K=matmul(X1,W.Wk),Vv=matmul(X1,W.Wv);
+  const S=matmul(Q,transpose(K)).map(r=>r.map(v=>v/sq));const Sm=S.map((r,i)=>r.map((v,j)=>j>i?-Infinity:v));const A=Sm.map(softmax);
+  const O=matmul(A,Vv),OW=matmul(O,W.Wo),R1=layerNorm(addM(X1,OW));
+  const F1=matmul(R1,W.W1).map(r=>r.map(v=>Math.max(0,v))),F2=matmul(F1,W.W2),Hh=layerNorm(addM(R1,F2));
+  const L=matmul(Hh,transpose(E));
+  tf.R={text,d,T,V:vocab.length,vocab,ids,E,W,X,P,X1,Q,K,V:Vv,S,Sm,A,O,R1,F1,Hh,L}}
+const rowTip=(R,name)=>(i,j,v)=>`${name}[${i}][${j}] = ${fmt(v,4)}\n第 ${i} 个字「${R.text[i]}」的第 ${j} 个数`;
+function dotDetail(R,xr,xname,Wm,wname,i,j,res){const n=xr.length;let s=0;for(let k=0;k<n;k++)s+=xr[k]*Wm[k][j];const terms=[0,1,2].filter(k=>k<n).map(k=>`${fmt(xr[k],2)}×${fmt(Wm[k][j],2)}`).join(' + ');
+  return`${res}[${i}][${j}] = ${xname} 第 ${i} 行 · ${wname} 第 ${j} 列\n          = ${terms}${n>3?` + …（共 ${n} 项乘积相加）`:''}\n          = ${fmt(s,4)}`}
+const TD=R=>[['T',R.T,'个字'],['d',R.d,'个特征']];
+const TF_STEPS=[
+ {t:'分词',code:'ids = tokenizer(text)',dims:R=>[['T',R.T,'个 token']],viz:'chips',
+  ex:R=>`把句子切成 token，每个 token 换成它在词表里的编号。这里一个字一个 token，一共 ${R.T} 个，所以形状是 [${R.T}]。词表里有 ${R.V} 个字（真实模型有 5 万到 15 万个）。`},
+ {t:'查词嵌入表',code:'x = embedding(ids)       # 嵌入表 E 的形状 [V, d]',dims:TD,m:R=>R.X,
+  ex:R=>`嵌入表 E 是一张 [${R.V}, ${R.d}] 的大表，每个字占一行。按编号把每个字那一行取出来摞在一起，就得到 [${R.T}, ${R.d}]。这就是你调试时看到的那种形状：${R.T} 行是 ${R.T} 个字，${R.d} 列是每个字的 ${R.d} 个特征。`,
+  det:(R,i,j)=>`x[${i}][${j}] = E[${R.ids[i]}][${j}] = ${fmt(R.X[i][j],4)}\n「${R.text[i]}」的编号是 ${R.ids[i]}，所以直接抄 E 第 ${R.ids[i]} 行。\n这一步没有任何计算，只是查表。`},
+ {t:'位置编码',code:'pos = positional_encoding(T, d)',dims:TD,m:R=>R.P,
+  ex:R=>'光有字还不够，模型还得知道每个字排第几。位置编码给每个位置一串固定的 sin/cos 数字，形状和 x 完全一样。左边几列变化快，右边几列变化慢，像钟表的秒针和时针。',
+  det:(R,i,j)=>{const k=Math.floor(j/2);return`pos[${i}][${j}] = ${j%2?'cos':'sin'}( ${i} / 10000^(${2*k}/${R.d}) )\n           = ${fmt(R.P[i][j],4)}\n只跟位置 ${i} 和列号 ${j} 有关，跟是什么字无关。`}},
+ {t:'加上位置',code:'x = x + pos',dims:TD,m:R=>R.X1,
+  ex:R=>'两张同样形状的表逐格相加。现在每一行既包含“这是什么字”，又包含“它排第几”。',
+  det:(R,i,j)=>`x[${i}][${j}] = 字的嵌入 + 位置编码\n         = ${fmt(R.X[i][j],4)} + ${fmt(R.P[i][j],4)}\n         = ${fmt(R.X1[i][j],4)}`},
+ {t:'算 Query',grp:1,code:'q = x @ Wq               # Wq: [d, d]',dims:TD,m:R=>R.Q,
+  ex:R=>`第 3 章的矩阵乘法：[${R.T}, ${R.d}] @ [${R.d}, ${R.d}] → [${R.T}, ${R.d}]。Query 可以理解成每个字发出的提问：“我想找什么样的信息？”`,
+  det:(R,i,j)=>dotDetail(R,R.X1[i],'x',R.W.Wq,'Wq',i,j,'q')},
+ {t:'算 Key',code:'k = x @ Wk',dims:TD,m:R=>R.K,
+  ex:R=>'同样的乘法，换一个权重矩阵。Key 是每个字挂出的标签：“我这里有什么信息。”',
+  det:(R,i,j)=>dotDetail(R,R.X1[i],'x',R.W.Wk,'Wk',i,j,'k')},
+ {t:'算 Value',code:'v = x @ Wv',dims:TD,m:R=>R.V,
+  ex:R=>'Value 是每个字真正要交出去的内容。Q、K、V 三个都是 [T, d]，只是权重不同。',
+  det:(R,i,j)=>dotDetail(R,R.X1[i],'x',R.W.Wv,'Wv',i,j,'v')},
+ {t:'注意力打分',code:'scores = q @ k.T / sqrt(d)   # [T,d] @ [d,T]',dims:R=>[['T',R.T,'个字（提问方）'],['T',R.T,'个字（被看的）']],m:R=>R.S,lab:1,
+  ex:R=>`每个字的 Query 和每个字的 Key 做点积，得到一张 [${R.T}, ${R.T}] 的打分表。第 i 行第 j 列是“第 i 个字有多想看第 j 个字”。形状从 [T, d] 变成了 [T, T]，d 在乘法里被加没了。`,
+  det:(R,i,j)=>{let s=0;for(let k=0;k<R.d;k++)s+=R.Q[i][k]*R.K[j][k];return`scores[${i}][${j}] = q[${i}] · k[${j}] / √${R.d}\n                = ${fmt(s,3)} / ${fmt(Math.sqrt(R.d),2)}\n                = ${fmt(R.S[i][j],4)}\n「${R.text[i]}」想看「${R.text[j]}」的程度`}},
+ {t:'因果遮罩',code:'scores = scores.masked_fill(future, -inf)',dims:R=>[['T',R.T,'个字'],['T',R.T,'个字']],m:R=>R.Sm,lab:1,
+  ex:R=>'生成文字时后面的字还没写出来，所以每个字只许看自己和前面的字。右上角全部换成负无穷（画斜线的格子）。这就是 GPT 这类模型叫“因果”或“自回归”的原因。',
+  det:(R,i,j)=>j>i?`scores[${i}][${j}] = -∞\n「${R.text[i]}」在第 ${i} 位，「${R.text[j]}」在第 ${j} 位，是未来的字，不许偷看。`:`scores[${i}][${j}] = ${fmt(R.Sm[i][j],4)}\n第 ${j} 位不在第 ${i} 位后面，保留。`},
+ {t:'softmax 变成权重',code:'attn = softmax(scores, dim=-1)',dims:R=>[['T',R.T,'个字'],['T',R.T,'个字']],m:R=>R.A,lab:1,mode:'seq',
+  ex:R=>'每一行做 softmax：所有数变成 0 到 1 之间，并且一行加起来正好等于 1。负无穷变成 0。颜色越深，表示这个字越关注那一列的字。',
+  det:(R,i,j)=>{const row=R.A[i],top=[...row].map((v,k)=>[v,k]).filter(x=>x[0]>0).sort((a,b)=>b[0]-a[0]).slice(0,4);return`attn[${i}][${j}] = e^scores[${i}][${j}] / 这一行所有 e^scores 之和\n              = ${fmt(row[j],4)}\n第 ${i} 行加起来 = ${fmt(row.reduce((a,b)=>a+b,0),4)}\n「${R.text[i]}」最关注：${top.map(([v,k])=>`「${R.text[k]}」${(v*100).toFixed(1)}%`).join('  ')}`}},
+ {t:'按权重混合',code:'out = attn @ v            # [T,T] @ [T,d]',dims:TD,m:R=>R.O,
+  ex:R=>`用上一步的权重，把所有字的 Value 加权平均。[${R.T}, ${R.T}] @ [${R.T}, ${R.d}] → [${R.T}, ${R.d}]，形状又回到了 [T, d]。现在每个字的那一行都混进了它关注的那些字的信息。`,
+  det:(R,i,j)=>{const parts=R.A[i].map((a,k)=>[a,k]).filter(x=>x[0]>0.0005).sort((a,b)=>b[0]-a[0]).slice(0,3);return`out[${i}][${j}] = Σ_k attn[${i}][k] × v[k][${j}]\n             = ${parts.map(([a,k])=>`${fmt(a,3)}×${fmt(R.V[k][j],2)}`).join(' + ')}${R.A[i].filter(a=>a>0.0005).length>3?' + …':''}\n             = ${fmt(R.O[i][j],4)}`}},
+ {t:'残差 + 归一化',code:'x = layernorm(x + out @ Wo)',dims:TD,m:R=>R.R1,
+  ex:R=>'先乘一个输出矩阵 Wo，再把这层的输入直接加回来（残差），然后把每一行缩放成平均 0、方差 1（LayerNorm）。形状不变。残差让很深的网络也能训练得动。',
+  det:(R,i,j)=>`x[${i}][${j}] = ${fmt(R.R1[i][j],4)}\n这一行 ${R.d} 个数的平均值 ≈ 0，标准差 ≈ 1`},
+ {t:'前馈网络·放大',grp:1,code:'h = relu(x @ W1)         # W1: [d, 4d]',dims:R=>[['T',R.T,'个字'],['4d',4*R.d,'个中间特征']],m:R=>R.F1,
+  ex:R=>`每个字各自过一个两层小网络（第 4 章那种）。先放大到 4 倍宽：[${R.T}, ${R.d}] @ [${R.d}, ${4*R.d}] → [${R.T}, ${4*R.d}]。ReLU 把负数全变成 0，所以图里没有蓝色。大模型的知识主要存在这类权重里。`,
+  det:(R,i,j)=>`h[${i}][${j}] = relu( x[${i}] · W1[:, ${j}] ) = ${fmt(R.F1[i][j],4)}\n${R.F1[i][j]===0?'点积是负数，被 ReLU 截成了 0':'点积是正数，原样保留'}`},
+ {t:'前馈网络·还原',code:'x = layernorm(x + h @ W2)   # W2: [4d, d]',dims:TD,m:R=>R.Hh,
+  ex:R=>`再缩回 [${R.T}, ${R.d}]，同样加残差、做归一化。到这里一层 Transformer 就算完了。真实模型会把第 5 到 14 步重复 12 层、96 层甚至更多，每层形状都是 [T, d] 进、[T, d] 出。`,
+  det:(R,i,j)=>`x[${i}][${j}] = ${fmt(R.Hh[i][j],4)}`},
+ {t:'给每个字打分',grp:1,code:'logits = x @ E.T          # [T,d] @ [d,V]',dims:R=>[['T',R.T,'个位置'],['V',R.V,'个候选字']],m:R=>R.L,lab:2,
+  ex:R=>`拿每个位置的结果去和词表里每个字比相似度，得到 [${R.T}, ${R.V}]。第 i 行是“第 i 个字后面该接什么”的打分。生成时只用最后一行。`,
+  det:(R,i,j)=>`logits[${i}][${j}] = x[${i}] · E[${j}] = ${fmt(R.L[i][j],3)}\n在「${R.text[i]}」后面接「${showCh(R.vocab[j])}」的原始打分`},
+ {t:'选出下一个字',code:'probs = softmax(logits[-1] / temperature)',dims:R=>[['V',R.V,'个候选字的概率']],viz:'next',
+  ex:R=>`取最后一行 logits，除以温度，做 softmax，得到 ${R.V} 个字各自的概率。下面是概率最高的 10 个。权重是随机的，所以现在它在瞎猜；训练过的模型这里会给合理的字很高的概率。`},
+];
+function tfStepsList(){$('#tfSteps').innerHTML=TF_STEPS.map((s,i)=>`<li tabindex="0" data-i="${i}" class="${s.grp?'grp':''}"><span>${s.t}</span><span class="sh" id="tfsh${i}"></span></li>`).join('');
+  $('#tfSteps').querySelectorAll('li').forEach(li=>{const go=()=>{tf.step=+li.dataset.i;tf.sel=null;tfRender()};li.onclick=go;li.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();go()}}})}
+function tfRender(){const R=tf.R,s=TF_STEPS[tf.step];
+  TF_STEPS.forEach((st,i)=>{const el=document.getElementById('tfsh'+i);el.textContent='['+st.dims(R).map(x=>x[1]).join(', ')+']';el.parentElement.classList.toggle('on',i===tf.step)});
+  $('#tfPos').textContent=`第 ${tf.step+1} / ${TF_STEPS.length} 步`;$('#tfPrev').disabled=tf.step===0;$('#tfNext').disabled=tf.step===TF_STEPS.length-1;
+  $('#tfTitle').textContent=s.t;$('#tfCode').textContent=s.code;
+  const dims=s.dims(R),prev=tf.step>0?TF_STEPS[tf.step-1].dims(R):null;
+  $('#tfShape').innerHTML=(prev?`<span class="shape">${shapeHtml(prev)}</span><span class="muted">→</span>`:'')+`<span class="shape">${shapeHtml(dims)}</span><span class="muted">${shapeCaption(dims)}</span>`;
+  $('#tfExplain').textContent=s.ex(R);
+  $('#tfChips').hidden=s.viz!=='chips';$('#tfNextBox').hidden=s.viz!=='next';$('#tfHeatWrap').hidden=!!s.viz;
+  if(s.viz==='chips'){$('#tfChips').innerHTML=R.text.map((c,i)=>`<div class="chip"><b>${c}</b><span>${R.ids[i]}</span></div>`).join('');$('#tfStats').innerHTML=`<span>ids = [${R.ids.join(', ')}]</span>`;$('#tfDetail').textContent='上面每个格子：上面是字，下面是它在词表里的编号。模型只看到编号。';return}
+  if(s.viz==='next'){tfNextRender();return}
+  const M=s.m(R);$('#tfLegend').innerHTML=s.mode==='seq'?'0 <i class="seq"></i> 1':'负 <i></i> 正';
+  tf.heat.set(M,{rowLabels:R.text,colLabels:s.lab===1?R.text:(s.lab===2?R.vocab:null),colIndex:!s.lab,mode:s.mode,maxCell:s.lab===1?28:22,hiRow:tf.sel?tf.sel[0]:null,
+    tip:s.lab===1?(i,j,v)=>`[${i}][${j}] = ${fmt(v,4)}\n「${R.text[i]}」→「${R.text[j]}」`:(s.lab===2?(i,j,v)=>`logits[${i}][${j}] = ${fmt(v,3)}\n「${R.text[i]}」后面接「${showCh(R.vocab[j])}」`:rowTip(R,['x','pos','x','q','k','v','','','','','out','x','h','x'][tf.step]||'x')),
+    onClick:(i,j)=>{tf.sel=[i,j];tfRender()}});
+  let mn=Infinity,mx=-Infinity,sum=0,n=0;for(const r of M)for(const v of r)if(Number.isFinite(v)){if(v<mn)mn=v;if(v>mx)mx=v;sum+=v;n++}
+  $('#tfStats').innerHTML=`<span>形状 <b>${M.length} × ${M[0].length}</b></span><span>一共 <b>${(M.length*M[0].length).toLocaleString()}</b> 个数</span><span>最小 <b>${fmt(mn,3)}</b></span><span>最大 <b>${fmt(mx,3)}</b></span><span>平均 <b>${fmt(sum/n,3)}</b></span>`;
+  $('#tfDetail').textContent=tf.sel&&s.det?s.det(R,tf.sel[0],tf.sel[1]):'点热力图里任意一格，这里显示这个数是怎么算出来的。'}
+function tfNextRender(){const R=tf.R,temp=+$('#tfTemp').value;$('#tfTempv').textContent=temp.toFixed(1);const last=R.L[R.T-1],p=softmax(last.map(v=>v/temp));
+  const top=[...p].map((v,i)=>[v,i]).sort((a,b)=>b[0]-a[0]).slice(0,10);tf.probs=p;
+  $('#tfBars').innerHTML=top.map(([v,i])=>`<div class="bar"><span class="ch">${showCh(R.vocab[i])}</span><span class="tr"><i style="width:${(v/top[0][0]*100).toFixed(1)}%"></i></span><span class="pv">${(v*100).toFixed(2)}%</span></div>`).join('');
+  $('#tfStats').innerHTML=`<span>候选字 <b>${R.V}</b> 个</span><span>概率总和 <b>${fmt(p.reduce((a,b)=>a+b,0),4)}</b></span><span>当前句子最后一个字「<b>${R.text[R.T-1]}</b>」</span>`;
+  $('#tfDetail').textContent=`probs[i] = e^(logits[-1][i] / ${temp.toFixed(1)}) / Σ e^(logits[-1][k] / ${temp.toFixed(1)})\n温度调低，最高的那个字概率更大；调高，概率更平均、更随机。`}
+$('#tfPrev').onclick=()=>{if(tf.step>0){tf.step--;tf.sel=null;tfRender()}};
+$('#tfNext').onclick=()=>{if(tf.step<TF_STEPS.length-1){tf.step++;tf.sel=null;tfRender()}};
+$('#tfText').addEventListener('input',()=>{tf.sel=null;tfRun();tfRender()});
+$('#tfD').onchange=()=>{tf.sel=null;tfRun();tfRender()};
+$('#tfTemp').addEventListener('input',tfNextRender);
+$('#tfGen').onclick=()=>{const p=tf.probs,R=tf.R;let r=Math.random(),k=0;for(;k<p.length-1;k++){r-=p[k];if(r<=0)break}
+  const t=[...$('#tfText').value.replace(/\s/g,''),R.vocab[k]].slice(-24).join('');$('#tfText').value=t;tfRun();tf.step=TF_STEPS.length-1;tfRender()};
+
+// ============ 第 6 章 迷你语言模型 ============
+const CORPUS=`床前明月光，疑是地上霜。举头望明月，低头思故乡。
+春眠不觉晓，处处闻啼鸟。夜来风雨声，花落知多少。
+白日依山尽，黄河入海流。欲穷千里目，更上一层楼。
+红豆生南国，春来发几枝。愿君多采撷，此物最相思。
+千山鸟飞绝，万径人踪灭。孤舟蓑笠翁，独钓寒江雪。
+锄禾日当午，汗滴禾下土。谁知盘中餐，粒粒皆辛苦。
+空山不见人，但闻人语响。返景入深林，复照青苔上。
+鹅鹅鹅，曲项向天歌。白毛浮绿水，红掌拨清波。`;
+$('#lmCorpus').value=CORPUS;
+const lm={ctx:3,d:16,H:96,B:32,run:false};
+function lmInit(){const text=$('#lmCorpus').value.replace(/\r/g,'');const vocab=[...new Set(['\n',...text])];lm.vocab=vocab;lm.idx=Object.fromEntries(vocab.map((c,i)=>[c,i]));lm.V=vocab.length;lm.data=[...text].map(c=>lm.idx[c]);
+  const{ctx,d,H}=lm,V=lm.V,r=mulberry32(7);lm.rng=mulberry32(99);const rn=(n,s)=>{const a=new Float32Array(n);for(let i=0;i<n;i++)a[i]=randn(r)*s;return a};
+  lm.p={E:rn(V*d,1),W1:rn(ctx*d*H,1/Math.sqrt(ctx*d)),b1:new Float32Array(H),W2:rn(H*V,0.5/Math.sqrt(H)),b2:new Float32Array(V)};
+  lm.g={},lm.m={},lm.v={};for(const k in lm.p){lm.g[k]=new Float32Array(lm.p[k].length);lm.m[k]=new Float32Array(lm.p[k].length);lm.v[k]=new Float32Array(lm.p[k].length)}
+  lm.t=0;lm.losses=[];lm.ema=NaN;lm.nparams=Object.values(lm.p).reduce((a,x)=>a+x.length,0);
+  lm.run=false;$('#lmRun').textContent='开始训练';lmFlow();lmSample();lmProbe();lmUI()}
+function lmCtx(seq,pos){const c=[];for(let k=lm.ctx;k>=1;k--){const q=pos-k;c.push(q>=0?seq[q]:0)}return c}
+function lmFwd(cx){const{ctx,d,H}=lm,V=lm.V,p=lm.p,e=new Float32Array(ctx*d),h=new Float32Array(H),lg=new Float32Array(V);
+  for(let c=0;c<ctx;c++)for(let k=0;k<d;k++)e[c*d+k]=p.E[cx[c]*d+k];
+  for(let j=0;j<H;j++){let s=p.b1[j];for(let i=0;i<ctx*d;i++)s+=e[i]*p.W1[i*H+j];h[j]=Math.tanh(s)}
+  for(let v=0;v<V;v++){let s=p.b2[v];for(let j=0;j<H;j++)s+=h[j]*p.W2[j*V+v];lg[v]=s}return{e,h,lg}}
+function lmTrainStep(){const{ctx,d,H,B}=lm,V=lm.V,p=lm.p,g=lm.g,N=lm.data.length;for(const k in g)g[k].fill(0);let loss=0;const dh=new Float32Array(H),sc=1/B;
+  for(let b=0;b<B;b++){const pos=Math.floor(lm.rng()*N),cx=lmCtx(lm.data,pos),y=lm.data[pos];const{e,h,lg}=lmFwd(cx);
+    let mx=-1e9;for(let v=0;v<V;v++)if(lg[v]>mx)mx=lg[v];let s=0;for(let v=0;v<V;v++){lg[v]=Math.exp(lg[v]-mx);s+=lg[v]}for(let v=0;v<V;v++)lg[v]/=s;
+    loss-=Math.log(lg[y]+1e-12);lg[y]-=1;
+    for(let v=0;v<V;v++){lg[v]*=sc;g.b2[v]+=lg[v]}
+    for(let j=0;j<H;j++){const hj=h[j],row=j*V;let acc=0;for(let v=0;v<V;v++){g.W2[row+v]+=hj*lg[v];acc+=p.W2[row+v]*lg[v]}dh[j]=acc*(1-hj*hj);g.b1[j]+=dh[j]}
+    for(let i=0;i<ctx*d;i++){const ei=e[i],row=i*H;let acc=0;for(let j=0;j<H;j++){g.W1[row+j]+=ei*dh[j];acc+=p.W1[row+j]*dh[j]}g.E[cx[Math.floor(i/d)]*d+i%d]+=acc}}
+  lm.t++;const lr=+$('#lmLr').value,b1=0.9,b2=0.999,c1=1-b1**lm.t,c2=1-b2**lm.t;
+  for(const k in p){const P=p[k],G=g[k],M=lm.m[k],Vv=lm.v[k];for(let i=0;i<P.length;i++){const gi=G[i];M[i]=b1*M[i]+(1-b1)*gi;Vv[i]=b2*Vv[i]+(1-b2)*gi*gi;P[i]-=lr*(M[i]/c1)/(Math.sqrt(Vv[i]/c2)+1e-8)}}
+  const L=loss/B;lm.ema=Number.isFinite(lm.ema)?lm.ema*0.97+L*0.03:L;lm.losses.push(lm.ema)}
+function lmProbs(cx,temp){const{lg}=lmFwd(cx);let mx=-1e9;for(const v of lg)if(v/temp>mx)mx=v/temp;const e=Array.from(lg,v=>Math.exp(v/temp-mx)),s=e.reduce((a,b)=>a+b,0);return e.map(v=>v/s)}
+function lmGenerate(seed,n,temp){const ids=[...seed].filter(c=>c in lm.idx).map(c=>lm.idx[c]);let out=ids.map(i=>lm.vocab[i]).join('');
+  for(let t=0;t<n;t++){const p=lmProbs(lmCtx(ids,ids.length),temp);let r=Math.random(),k=0;for(;k<p.length-1;k++){r-=p[k];if(r<=0)break}ids.push(k);out+=lm.vocab[k]}return out}
+function lmSample(){const seed=$('#lmSeed').value,temp=+$('#lmTemp').value;$('#lmTempv').textContent=temp.toFixed(1);const unk=[...seed].filter(c=>!(c in lm.idx));
+  $('#lmSample').textContent=lmGenerate(seed,48,temp)+(unk.length?`\n\n（「${unk.join('')}」不在训练文本里，模型不认识，已跳过）`:'')}
+function lmProbe(){const raw=[...$('#lmProbe').value].slice(-3),known=raw.filter(c=>c in lm.idx);const ids=known.map(c=>lm.idx[c]);
+  const p=lmProbs(lmCtx(ids,ids.length),1),top=p.map((v,i)=>[v,i]).sort((a,b)=>b[0]-a[0]).slice(0,8);
+  $('#lmBars').innerHTML=(known.length<raw.length?`<p class="small warn">有字不在训练文本里，已跳过。</p>`:'')+top.map(([v,i])=>`<div class="bar"><span class="ch">${showCh(lm.vocab[i])}</span><span class="tr"><i style="width:${(v/top[0][0]*100).toFixed(1)}%"></i></span><span class="pv">${(v*100).toFixed(1)}%</span></div>`).join('')}
+function lmFlow(){const{ctx,d,H,B,V}=lm;const P=lm.p;
+  $('#lmFlow').innerHTML=[
+   [`输入：${B} 个样本，每个是前 ${ctx} 个字的编号`,[['B',B],['o',ctx]]],
+   [`查嵌入表 E <span class="shape">${shapeHtml([['V',V],['d',d]])}</span>`,[['B',B],['o',ctx],['d',d]]],
+   [`把 ${ctx} 个字的向量拼成一行`,[['B',B],['o',ctx*d]]],
+   [`@ W1 <span class="shape">${shapeHtml([['o',ctx*d],['o',H]])}</span> → tanh`,[['B',B],['o',H]]],
+   [`@ W2 <span class="shape">${shapeHtml([['o',H],['V',V]])}</span> 得到 logits`,[['B',B],['V',V]]],
+   ['softmax，和正确答案比，算 loss（平均成一个数）',[]],
+  ].map(([a,dims])=>`<div><span>${a}</span><span class="shape">${dims.length?shapeHtml(dims):'标量 []'}</span></div>`).join('')+
+  `<div><span><b>参数总数</b> = E ${P.E.length} + W1 ${P.W1.length} + b1 ${P.b1.length} + W2 ${P.W2.length} + b2 ${P.b2.length}</span><span class="mono"><b>${lm.nparams.toLocaleString()}</b></span></div>`}
+function lmUI(){const L=lm.losses.length?lm.losses[lm.losses.length-1]:NaN;
+  $('#lmStats').innerHTML=`<span>训练步数 <b>${lm.t}</b></span><span>看过的样本 <b>${(lm.t*lm.B).toLocaleString()}</b></span><span>loss <b>${fmt(L,3)}</b></span><span>词表 <b>${lm.V}</b> 个字</span>`;
+  $('#lmLossNote').textContent=`完全瞎猜时 loss ≈ ln(${lm.V}) = ${Math.log(lm.V).toFixed(2)}，相当于在 ${lm.V} 个字里随便挑。loss 降到 1 左右，相当于每次只在约 e¹ ≈ 3 个字里犹豫；降到 0.3 以下基本就背下来了。`;
+  drawCurve($('#lmLoss'),lm.losses,{h:130})}
+$('#lmRun').onclick=()=>{lm.run=!lm.run;$('#lmRun').textContent=lm.run?'暂停':'继续训练'};
+$('#lmReset').onclick=lmInit;
+$('#lmGen').onclick=lmSample;
+$('#lmTemp').addEventListener('input',()=>{$('#lmTempv').textContent=(+$('#lmTemp').value).toFixed(1)});
+$('#lmProbe').addEventListener('input',lmProbe);
+
+// ============ 主循环 ============
+let frame=0;
+function loop(){frame++;
+  if(reg.run){regDoStep();regDraw()}
+  if(nn.run){for(let i=0;i<4;i++)nnStep();nnDraw()}
+  if(lm.run){for(let i=0;i<2;i++)lmTrainStep();lmUI();if(lm.t%40<2)lmProbe();if(lm.t%160<2)lmSample()}
+  requestAnimationFrame(loop)}
+
+function redrawAll(){renderCh1();regDraw();nnDraw();tfRender();lmUI()}
+let rz;addEventListener('resize',()=>{clearTimeout(rz);rz=setTimeout(redrawAll,120)});
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change',redrawAll);
+new MutationObserver(redrawAll).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+
+// 启动
+tf.heat=new Heat($('#tfHeat'));
+regData();renderCh1();regDraw();mmGen();nnMakeData();nnInit();tfStepsList();tfRun();tf.step=1;tfRender();lmInit();
+document.fonts&&document.fonts.ready.then(redrawAll);
+requestAnimationFrame(loop);
+</script>
+<script type="application/json" id="paperData">{"per":{"assist2009":{"LR":{"auc":0.70486,"ece":0.03858,"sim_nlg":0.0979,"sim_stm":46.67822,"sim_auc":0.602,"sim_ece":0.02388,"sim_frac_sel_mastered":0.77587,"sim_n_distinct":7.90467,"ope_dr":0.36159,"sim_ope_dr":0.40765,"sim_ope_true":0.3548,"sim_ope_bias":0.05285,"sim_mastery_gain":0.06589,"sim_nlg_recal":null},"PFA":{"auc":0.70992,"ece":0.05096,"sim_nlg":0.01059,"sim_stm":49.83489,"sim_auc":0.63963,"sim_ece":0.06785,"sim_frac_sel_mastered":0.86371,"sim_n_distinct":4.90267,"ope_dr":0.40246,"sim_ope_dr":0.42965,"sim_ope_true":0.37802,"sim_ope_bias":0.05163,"sim_mastery_gain":0.01472,"sim_nlg_recal":null},"Heuristic-0.7":{"auc":0.70384,"ece":0.06823,"sim_nlg":-0.01882,"sim_stm":51.5895,"sim_auc":0.67787,"sim_ece":0.02549,"sim_frac_sel_mastered":0.90536,"sim_n_distinct":10.89,"ope_dr":0.37185,"sim_ope_dr":0.42883,"sim_ope_true":0.39517,"sim_ope_bias":0.03367,"sim_mastery_gain":-0.00233,"sim_nlg_recal":null},"Random":{"auc":null,"ece":null,"sim_nlg":0.15078,"sim_stm":47.18522,"sim_auc":null,"sim_ece":null,"sim_frac_sel_mastered":0.7317,"sim_n_distinct":11.93467,"ope_dr":0.31437,"sim_ope_dr":0.40226,"sim_ope_true":0.3467,"sim_ope_bias":0.05556,"sim_mastery_gain":0.09367,"sim_nlg_recal":null},"DKT":{"auc":0.75424,"ece":0.01083,"sim_nlg":0.07532,"sim_stm":48.34183,"sim_auc":0.65784,"sim_ece":0.00653,"sim_frac_sel_mastered":0.77724,"sim_n_distinct":9.19467,"ope_dr":0.39162,"sim_ope_dr":0.41684,"sim_ope_true":0.36416,"sim_ope_bias":0.05268,"sim_mastery_gain":0.05922,"sim_nlg_recal":0.0709},"Uncertainty-0.5":{"auc":0.75424,"ece":0.01083,"sim_nlg":0.17589,"sim_stm":50.1115,"sim_auc":0.65784,"sim_ece":0.00653,"sim_frac_sel_mastered":0.6749,"sim_n_distinct":8.15467,"ope_dr":0.26443,"sim_ope_dr":0.31815,"sim_ope_true":0.2582,"sim_ope_bias":0.05994,"sim_mastery_gain":0.114,"sim_nlg_recal":null},"DKVMN":{"auc":0.74097,"ece":0.00971,"sim_nlg":-0.02963,"sim_stm":49.76994,"sim_auc":0.69939,"sim_ece":0.00391,"sim_frac_sel_mastered":0.9174,"sim_n_distinct":9.15267,"ope_dr":0.37381,"sim_ope_dr":0.43454,"sim_ope_true":0.40604,"sim_ope_bias":0.0285,"sim_mastery_gain":-0.00889,"sim_nlg_recal":null},"SAKT":{"auc":0.72987,"ece":0.01847,"sim_nlg":0.00182,"sim_stm":53.8015,"sim_auc":0.67387,"sim_ece":0.00982,"sim_frac_sel_mastered":0.85048,"sim_n_distinct":7.92333,"ope_dr":0.37388,"sim_ope_dr":0.42573,"sim_ope_true":0.37908,"sim_ope_bias":0.04665,"sim_mastery_gain":0.01411,"sim_nlg_recal":null},"AKT":{"auc":0.73465,"ece":0.01255,"sim_nlg":0.02556,"sim_stm":50.21456,"sim_auc":0.6765,"sim_ece":0.01558,"sim_frac_sel_mastered":0.85042,"sim_n_distinct":10.89867,"ope_dr":0.35416,"sim_ope_dr":0.43332,"sim_ope_true":0.38268,"sim_ope_bias":0.05064,"sim_mastery_gain":0.02478,"sim_nlg_recal":null},"simpleKT":{"auc":0.73367,"ece":0.00972,"sim_nlg":0.01992,"sim_stm":50.79289,"sim_auc":0.67892,"sim_ece":0.01365,"sim_frac_sel_mastered":0.84792,"sim_n_distinct":10.418,"ope_dr":0.3597,"sim_ope_dr":0.43204,"sim_ope_true":0.38636,"sim_ope_bias":0.04568,"sim_mastery_gain":0.02106,"sim_nlg_recal":null},"DF-KT":{"auc":0.75305,"ece":0.01126,"sim_nlg":0.07721,"sim_stm":50.51278,"sim_auc":0.66609,"sim_ece":0.00777,"sim_frac_sel_mastered":0.82974,"sim_n_distinct":4.872,"ope_dr":0.38455,"sim_ope_dr":0.46699,"sim_ope_true":0.38725,"sim_ope_bias":0.07974,"sim_mastery_gain":0.04983,"sim_nlg_recal":0.0755},"Safe-DFKT-AG":{"auc":0.75309,"ece":0.01912,"sim_nlg":-0.01929,"sim_stm":50.73361,"sim_auc":0.66286,"sim_ece":0.01522,"sim_frac_sel_mastered":0.87087,"sim_n_distinct":4.56267,"ope_dr":0.42086,"sim_ope_dr":0.44043,"sim_ope_true":0.36014,"sim_ope_bias":0.08029,"sim_mastery_gain":-0.00211,"sim_nlg_recal":-0.02013},"Safe-DFKT":{"auc":0.75309,"ece":0.01677,"sim_nlg":-0.0329,"sim_stm":54.55256,"sim_auc":0.66041,"sim_ece":0.01308,"sim_frac_sel_mastered":0.94316,"sim_n_distinct":2.786,"ope_dr":0.51434,"sim_ope_dr":0.57001,"sim_ope_true":0.52384,"sim_ope_bias":0.04617,"sim_mastery_gain":-0.01556,"sim_nlg_recal":-0.03355},"Safe-DFKT w/o policy head (two-stage deploy)":{"auc":0.75309,"ece":0.01677,"sim_nlg":0.06655,"sim_stm":48.19106,"sim_auc":0.66041,"sim_ece":0.01308,"sim_frac_sel_mastered":0.78696,"sim_n_distinct":8.654,"ope_dr":0.41622,"sim_ope_dr":0.4275,"sim_ope_true":0.378,"sim_ope_bias":0.0495,"sim_mastery_gain":0.05356,"sim_nlg_recal":0.0739},"Safe-DFKT w/o safety barrier":{"auc":0.74248,"ece":0.01848,"sim_nlg":-0.06591,"sim_stm":55.50239,"sim_auc":0.65149,"sim_ece":0.03024,"sim_frac_sel_mastered":0.95976,"sim_n_distinct":2.414,"ope_dr":0.84457,"sim_ope_dr":0.59168,"sim_ope_true":0.53478,"sim_ope_bias":0.05689,"sim_mastery_gain":-0.03472,"sim_nlg_recal":null},"Safe-DFKT w/o NLG reward":{"auc":0.75376,"ece":0.01086,"sim_nlg":0.06656,"sim_stm":48.80106,"sim_auc":0.6645,"sim_ece":0.0079,"sim_frac_sel_mastered":0.83071,"sim_n_distinct":5.306,"ope_dr":0.38394,"sim_ope_dr":0.46188,"sim_ope_true":0.38948,"sim_ope_bias":0.07241,"sim_mastery_gain":0.04339,"sim_nlg_recal":null},"Safe-DFKT w/o POEM":{"auc":0.75407,"ece":0.01257,"sim_nlg":-0.00349,"sim_stm":51.47067,"sim_auc":0.65905,"sim_ece":0.01233,"sim_frac_sel_mastered":0.89798,"sim_n_distinct":3.48067,"ope_dr":0.48157,"sim_ope_dr":0.56841,"sim_ope_true":0.49067,"sim_ope_bias":0.07774,"sim_mastery_gain":0.00261,"sim_nlg_recal":null}},"ednet":{"LR":{"auc":0.62938,"ece":0.00814,"sim_nlg":0.0318,"sim_stm":50.44594,"sim_auc":0.59422,"sim_ece":0.0226,"sim_frac_sel_mastered":0.85881,"sim_n_distinct":5.47667,"ope_dr":0.30307,"sim_ope_dr":0.33564,"sim_ope_true":0.31618,"sim_ope_bias":0.01946,"sim_mastery_gain":0.04317,"sim_nlg_recal":null},"PFA":{"auc":0.62348,"ece":0.01047,"sim_nlg":-0.01572,"sim_stm":51.67811,"sim_auc":0.63538,"sim_ece":0.04361,"sim_frac_sel_mastered":0.91052,"sim_n_distinct":3.782,"ope_dr":0.31294,"sim_ope_dr":0.34269,"sim_ope_true":0.30776,"sim_ope_bias":0.03493,"sim_mastery_gain":0.00506,"sim_nlg_recal":null},"Heuristic-0.7":{"auc":0.60927,"ece":0.0555,"sim_nlg":0.03825,"sim_stm":51.14183,"sim_auc":0.63697,"sim_ece":0.04692,"sim_frac_sel_mastered":0.84669,"sim_n_distinct":11.86,"ope_dr":0.30281,"sim_ope_dr":0.3484,"sim_ope_true":0.30241,"sim_ope_bias":0.04599,"sim_mastery_gain":0.04694,"sim_nlg_recal":null},"Random":{"auc":null,"ece":null,"sim_nlg":0.211,"sim_stm":48.93983,"sim_auc":null,"sim_ece":null,"sim_frac_sel_mastered":0.6702,"sim_n_distinct":11.93133,"ope_dr":0.28094,"sim_ope_dr":0.325,"sim_ope_true":0.2933,"sim_ope_bias":0.03171,"sim_mastery_gain":0.19006,"sim_nlg_recal":null},"DKT":{"auc":0.6734,"ece":0.00571,"sim_nlg":0.09256,"sim_stm":47.21606,"sim_auc":0.6326,"sim_ece":0.00767,"sim_frac_sel_mastered":0.81876,"sim_n_distinct":7.55267,"ope_dr":0.30846,"sim_ope_dr":0.34133,"sim_ope_true":0.3183,"sim_ope_bias":0.02303,"sim_mastery_gain":0.09278,"sim_nlg_recal":0.10013},"Uncertainty-0.5":{"auc":0.6734,"ece":0.00571,"sim_nlg":0.24304,"sim_stm":52.32,"sim_auc":0.6326,"sim_ece":0.00767,"sim_frac_sel_mastered":0.59769,"sim_n_distinct":9.60333,"ope_dr":0.25734,"sim_ope_dr":0.26877,"sim_ope_true":0.21327,"sim_ope_bias":0.0555,"sim_mastery_gain":0.21761,"sim_nlg_recal":null},"DKVMN":{"auc":0.66904,"ece":0.00542,"sim_nlg":-0.03177,"sim_stm":51.46544,"sim_auc":0.65894,"sim_ece":0.00973,"sim_frac_sel_mastered":0.92464,"sim_n_distinct":6.15,"ope_dr":0.31094,"sim_ope_dr":0.35976,"sim_ope_true":0.3257,"sim_ope_bias":0.03406,"sim_mastery_gain":-0.01017,"sim_nlg_recal":null},"SAKT":{"auc":0.66598,"ece":0.0086,"sim_nlg":-0.01876,"sim_stm":52.88917,"sim_auc":0.63612,"sim_ece":0.0102,"sim_frac_sel_mastered":0.90327,"sim_n_distinct":5.196,"ope_dr":0.30743,"sim_ope_dr":0.35247,"sim_ope_true":0.31313,"sim_ope_bias":0.03935,"sim_mastery_gain":0.00083,"sim_nlg_recal":null},"AKT":{"auc":0.66868,"ece":0.01099,"sim_nlg":0.08901,"sim_stm":49.47972,"sim_auc":0.6314,"sim_ece":0.01168,"sim_frac_sel_mastered":0.81443,"sim_n_distinct":11.114,"ope_dr":0.30508,"sim_ope_dr":0.35033,"sim_ope_true":0.3155,"sim_ope_bias":0.03483,"sim_mastery_gain":0.08783,"sim_nlg_recal":null},"simpleKT":{"auc":0.66591,"ece":0.00679,"sim_nlg":0.07418,"sim_stm":49.63128,"sim_auc":0.63399,"sim_ece":0.01304,"sim_frac_sel_mastered":0.8324,"sim_n_distinct":9.836,"ope_dr":0.30947,"sim_ope_dr":0.35216,"sim_ope_true":0.31074,"sim_ope_bias":0.04142,"sim_mastery_gain":0.07339,"sim_nlg_recal":null},"DF-KT":{"auc":0.67243,"ece":0.00896,"sim_nlg":0.06286,"sim_stm":50.31228,"sim_auc":0.63384,"sim_ece":0.00847,"sim_frac_sel_mastered":0.84836,"sim_n_distinct":5.47667,"ope_dr":0.30864,"sim_ope_dr":0.33871,"sim_ope_true":0.31538,"sim_ope_bias":0.02333,"sim_mastery_gain":0.06878,"sim_nlg_recal":0.06284},"Safe-DFKT-AG":{"auc":0.67231,"ece":0.00726,"sim_nlg":-0.00259,"sim_stm":49.58667,"sim_auc":0.63333,"sim_ece":0.01673,"sim_frac_sel_mastered":0.90604,"sim_n_distinct":4.422,"ope_dr":0.3238,"sim_ope_dr":0.35958,"sim_ope_true":0.31752,"sim_ope_bias":0.04206,"sim_mastery_gain":0.01272,"sim_nlg_recal":-0.00112},"Safe-DFKT":{"auc":0.67221,"ece":0.00662,"sim_nlg":-0.07242,"sim_stm":54.94222,"sim_auc":0.6332,"sim_ece":0.01631,"sim_frac_sel_mastered":0.96752,"sim_n_distinct":2.476,"ope_dr":0.46188,"sim_ope_dr":0.41516,"sim_ope_true":0.36686,"sim_ope_bias":0.0483,"sim_mastery_gain":-0.04728,"sim_nlg_recal":-0.07237},"Safe-DFKT w/o policy head (two-stage deploy)":{"auc":0.67221,"ece":0.00662,"sim_nlg":0.06487,"sim_stm":47.58133,"sim_auc":0.6332,"sim_ece":0.01631,"sim_frac_sel_mastered":0.83792,"sim_n_distinct":6.65067,"ope_dr":0.31751,"sim_ope_dr":0.35284,"sim_ope_true":0.32258,"sim_ope_bias":0.03026,"sim_mastery_gain":0.07094,"sim_nlg_recal":0.09875},"Safe-DFKT w/o safety barrier":{"auc":0.66347,"ece":0.00551,"sim_nlg":-0.06953,"sim_stm":54.59339,"sim_auc":0.63134,"sim_ece":0.0395,"sim_frac_sel_mastered":0.96416,"sim_n_distinct":2.64067,"ope_dr":0.68248,"sim_ope_dr":0.41484,"sim_ope_true":0.37419,"sim_ope_bias":0.04065,"sim_mastery_gain":-0.04483,"sim_nlg_recal":null},"Safe-DFKT w/o NLG reward":{"auc":0.67294,"ece":0.00727,"sim_nlg":0.08004,"sim_stm":48.98733,"sim_auc":0.63437,"sim_ece":0.00876,"sim_frac_sel_mastered":0.84418,"sim_n_distinct":6.00267,"ope_dr":0.29815,"sim_ope_dr":0.35139,"sim_ope_true":0.32108,"sim_ope_bias":0.03032,"sim_mastery_gain":0.08033,"sim_nlg_recal":null},"Safe-DFKT w/o POEM":{"auc":0.67281,"ece":0.00908,"sim_nlg":-0.05147,"sim_stm":52.63617,"sim_auc":0.6334,"sim_ece":0.0134,"sim_frac_sel_mastered":0.94836,"sim_n_distinct":3.08,"ope_dr":0.46902,"sim_ope_dr":0.42197,"sim_ope_true":0.36951,"sim_ope_bias":0.05246,"sim_mastery_gain":-0.02889,"sim_nlg_recal":null}},"algebra2005":{"LR":{"auc":0.69195,"ece":0.0273,"sim_nlg":0.1518,"sim_stm":47.57706,"sim_auc":0.63072,"sim_ece":0.03245,"sim_frac_sel_mastered":0.75233,"sim_n_distinct":9.81733,"ope_dr":0.39597,"sim_ope_dr":0.49734,"sim_ope_true":0.45883,"sim_ope_bias":0.03851,"sim_mastery_gain":0.09867,"sim_nlg_recal":null},"PFA":{"auc":0.68012,"ece":0.08589,"sim_nlg":0.00871,"sim_stm":47.00533,"sim_auc":0.66197,"sim_ece":0.10562,"sim_frac_sel_mastered":0.90506,"sim_n_distinct":6.07467,"ope_dr":0.4458,"sim_ope_dr":0.54902,"sim_ope_true":0.5046,"sim_ope_bias":0.04442,"sim_mastery_gain":0.0185,"sim_nlg_recal":null},"Heuristic-0.7":{"auc":0.74852,"ece":0.04006,"sim_nlg":-0.00241,"sim_stm":52.71222,"sim_auc":0.71647,"sim_ece":0.02873,"sim_frac_sel_mastered":0.9022,"sim_n_distinct":9.27667,"ope_dr":0.42107,"sim_ope_dr":0.5055,"sim_ope_true":0.46194,"sim_ope_bias":0.04356,"sim_mastery_gain":0.01444,"sim_nlg_recal":null},"Random":{"auc":null,"ece":null,"sim_nlg":0.18117,"sim_stm":44.80156,"sim_auc":null,"sim_ece":null,"sim_frac_sel_mastered":0.75242,"sim_n_distinct":11.948,"ope_dr":0.38471,"sim_ope_dr":0.50154,"sim_ope_true":0.46443,"sim_ope_bias":0.03712,"sim_mastery_gain":0.11211,"sim_nlg_recal":null},"DKT":{"auc":0.78845,"ece":0.00842,"sim_nlg":0.09166,"sim_stm":48.25717,"sim_auc":0.68576,"sim_ece":0.00918,"sim_frac_sel_mastered":0.82972,"sim_n_distinct":7.46733,"ope_dr":0.43813,"sim_ope_dr":0.50087,"sim_ope_true":0.47513,"sim_ope_bias":0.02575,"sim_mastery_gain":0.06522,"sim_nlg_recal":0.08734},"Uncertainty-0.5":{"auc":0.78845,"ece":0.00842,"sim_nlg":0.07908,"sim_stm":53.92061,"sim_auc":0.68576,"sim_ece":0.00918,"sim_frac_sel_mastered":0.74764,"sim_n_distinct":3.04333,"ope_dr":0.34767,"sim_ope_dr":0.29585,"sim_ope_true":0.25653,"sim_ope_bias":0.03932,"sim_mastery_gain":0.06494,"sim_nlg_recal":null},"DKVMN":{"auc":0.77219,"ece":0.00563,"sim_nlg":-0.0376,"sim_stm":55.96722,"sim_auc":0.73434,"sim_ece":0.00832,"sim_frac_sel_mastered":0.9343,"sim_n_distinct":8.15733,"ope_dr":0.41734,"sim_ope_dr":0.51547,"sim_ope_true":0.48295,"sim_ope_bias":0.03252,"sim_mastery_gain":-0.00367,"sim_nlg_recal":null},"SAKT":{"auc":0.76157,"ece":0.01207,"sim_nlg":-0.00726,"sim_stm":55.06711,"sim_auc":0.70738,"sim_ece":0.01515,"sim_frac_sel_mastered":0.90713,"sim_n_distinct":7.26733,"ope_dr":0.41014,"sim_ope_dr":0.50999,"sim_ope_true":0.47581,"sim_ope_bias":0.03418,"sim_mastery_gain":0.01383,"sim_nlg_recal":null},"AKT":{"auc":0.76596,"ece":0.01493,"sim_nlg":0.01576,"sim_stm":54.07389,"sim_auc":0.71417,"sim_ece":0.01438,"sim_frac_sel_mastered":0.88347,"sim_n_distinct":9.58333,"ope_dr":0.40517,"sim_ope_dr":0.51098,"sim_ope_true":0.47442,"sim_ope_bias":0.03656,"sim_mastery_gain":0.02722,"sim_nlg_recal":null},"simpleKT":{"auc":0.76129,"ece":0.01371,"sim_nlg":0.00828,"sim_stm":54.74039,"sim_auc":0.71638,"sim_ece":0.0146,"sim_frac_sel_mastered":0.89652,"sim_n_distinct":8.89333,"ope_dr":0.40655,"sim_ope_dr":0.50917,"sim_ope_true":0.46838,"sim_ope_bias":0.04079,"sim_mastery_gain":0.02244,"sim_nlg_recal":null},"DF-KT":{"auc":0.78819,"ece":0.00698,"sim_nlg":0.04841,"sim_stm":50.16289,"sim_auc":0.70086,"sim_ece":0.01158,"sim_frac_sel_mastered":0.86712,"sim_n_distinct":4.33533,"ope_dr":0.43332,"sim_ope_dr":0.49257,"sim_ope_true":0.43976,"sim_ope_bias":0.05281,"sim_mastery_gain":0.04022,"sim_nlg_recal":0.04863},"Safe-DFKT-AG":{"auc":0.78694,"ece":0.00934,"sim_nlg":0.0027,"sim_stm":50.30633,"sim_auc":0.6927,"sim_ece":0.01179,"sim_frac_sel_mastered":0.88019,"sim_n_distinct":4.41533,"ope_dr":0.49686,"sim_ope_dr":0.49892,"sim_ope_true":0.47549,"sim_ope_bias":0.02343,"sim_mastery_gain":0.01856,"sim_nlg_recal":0.00161},"Safe-DFKT":{"auc":0.78748,"ece":0.00818,"sim_nlg":-0.1249,"sim_stm":53.14822,"sim_auc":0.69461,"sim_ece":0.01188,"sim_frac_sel_mastered":0.95253,"sim_n_distinct":2.84067,"ope_dr":0.64947,"sim_ope_dr":0.74937,"sim_ope_true":0.71226,"sim_ope_bias":0.03711,"sim_mastery_gain":-0.05061,"sim_nlg_recal":-0.12466},"Safe-DFKT w/o policy head (two-stage deploy)":{"auc":0.78748,"ece":0.00818,"sim_nlg":0.12203,"sim_stm":47.62706,"sim_auc":0.69461,"sim_ece":0.01188,"sim_frac_sel_mastered":0.81804,"sim_n_distinct":8.40667,"ope_dr":0.4935,"sim_ope_dr":0.51518,"sim_ope_true":0.4862,"sim_ope_bias":0.02898,"sim_mastery_gain":0.07894,"sim_nlg_recal":0.12444},"Safe-DFKT w/o safety barrier":{"auc":0.78394,"ece":0.02122,"sim_nlg":-0.13234,"sim_stm":54.25956,"sim_auc":0.68429,"sim_ece":0.01249,"sim_frac_sel_mastered":0.97081,"sim_n_distinct":2.69533,"ope_dr":0.50156,"sim_ope_dr":0.75961,"sim_ope_true":0.72317,"sim_ope_bias":0.03644,"sim_mastery_gain":-0.05461,"sim_nlg_recal":null},"Safe-DFKT w/o NLG reward":{"auc":0.78964,"ece":0.00719,"sim_nlg":-0.06557,"sim_stm":50.729,"sim_auc":0.69716,"sim_ece":0.00891,"sim_frac_sel_mastered":0.92519,"sim_n_distinct":3.742,"ope_dr":0.37027,"sim_ope_dr":0.59531,"sim_ope_true":0.54862,"sim_ope_bias":0.04669,"sim_mastery_gain":-0.02189,"sim_nlg_recal":null},"Safe-DFKT w/o POEM":{"auc":0.78842,"ece":0.00951,"sim_nlg":-0.13077,"sim_stm":54.51539,"sim_auc":0.69238,"sim_ece":0.01232,"sim_frac_sel_mastered":0.96788,"sim_n_distinct":2.65333,"ope_dr":0.70952,"sim_ope_dr":0.79784,"sim_ope_true":0.75727,"sim_ope_bias":0.04057,"sim_mastery_gain":-0.05372,"sim_nlg_recal":null}},"junyi":{"LR":{"auc":0.8583,"ece":0.04887,"sim_nlg":-0.01899,"sim_stm":49.44383,"sim_auc":0.7371,"sim_ece":0.09143,"sim_frac_sel_mastered":0.66097,"sim_n_distinct":6.61333,"ope_dr":0.11859,"sim_ope_dr":0.42039,"sim_ope_true":0.22403,"sim_ope_bias":0.19636,"sim_mastery_gain":0.01689,"sim_nlg_recal":null},"PFA":{"auc":0.83272,"ece":0.07735,"sim_nlg":-0.15652,"sim_stm":53.29756,"sim_auc":0.82919,"sim_ece":0.17102,"sim_frac_sel_mastered":0.91928,"sim_n_distinct":4.254,"ope_dr":0.16573,"sim_ope_dr":0.4959,"sim_ope_true":0.3477,"sim_ope_bias":0.14819,"sim_mastery_gain":-0.04672,"sim_nlg_recal":null},"Heuristic-0.7":{"auc":0.85957,"ece":0.03982,"sim_nlg":-0.11803,"sim_stm":46.75356,"sim_auc":0.82963,"sim_ece":0.067,"sim_frac_sel_mastered":0.8274,"sim_n_distinct":11.98867,"ope_dr":0.27358,"sim_ope_dr":0.47073,"sim_ope_true":0.32369,"sim_ope_bias":0.14704,"sim_mastery_gain":-0.03333,"sim_nlg_recal":null},"Random":{"auc":null,"ece":null,"sim_nlg":-0.0018,"sim_stm":48.02778,"sim_auc":null,"sim_ece":null,"sim_frac_sel_mastered":0.55609,"sim_n_distinct":11.942,"ope_dr":-0.08174,"sim_ope_dr":0.3895,"sim_ope_true":0.21225,"sim_ope_bias":0.17725,"sim_mastery_gain":0.0235,"sim_nlg_recal":null},"DKT":{"auc":0.87667,"ece":0.01275,"sim_nlg":-0.01895,"sim_stm":45.41217,"sim_auc":0.80861,"sim_ece":0.03425,"sim_frac_sel_mastered":0.69899,"sim_n_distinct":9.508,"ope_dr":0.09068,"sim_ope_dr":0.47605,"sim_ope_true":0.30439,"sim_ope_bias":0.17166,"sim_mastery_gain":0.01261,"sim_nlg_recal":-0.02059},"Uncertainty-0.5":{"auc":0.87667,"ece":0.01275,"sim_nlg":0.04308,"sim_stm":51.42072,"sim_auc":0.80861,"sim_ece":0.03425,"sim_frac_sel_mastered":0.49164,"sim_n_distinct":11.40667,"ope_dr":-0.1162,"sim_ope_dr":0.20237,"sim_ope_true":-0.0007,"sim_ope_bias":0.20307,"sim_mastery_gain":0.04006,"sim_nlg_recal":null},"DKVMN":{"auc":0.87387,"ece":0.01381,"sim_nlg":-0.15458,"sim_stm":47.58728,"sim_auc":0.84536,"sim_ece":0.00659,"sim_frac_sel_mastered":0.88373,"sim_n_distinct":11.51933,"ope_dr":0.12487,"sim_ope_dr":0.59203,"sim_ope_true":0.4524,"sim_ope_bias":0.13963,"sim_mastery_gain":-0.04878,"sim_nlg_recal":null},"SAKT":{"auc":0.80426,"ece":0.04232,"sim_nlg":-0.1234,"sim_stm":53.20278,"sim_auc":0.82409,"sim_ece":0.01787,"sim_frac_sel_mastered":0.82107,"sim_n_distinct":9.79267,"ope_dr":0.18188,"sim_ope_dr":0.56696,"sim_ope_true":0.40469,"sim_ope_bias":0.16227,"sim_mastery_gain":-0.03256,"sim_nlg_recal":null},"AKT":{"auc":0.88172,"ece":0.01843,"sim_nlg":-0.11927,"sim_stm":51.90011,"sim_auc":0.82269,"sim_ece":0.02183,"sim_frac_sel_mastered":0.8195,"sim_n_distinct":11.65067,"ope_dr":0.2165,"sim_ope_dr":0.62462,"sim_ope_true":0.46451,"sim_ope_bias":0.16011,"sim_mastery_gain":-0.02878,"sim_nlg_recal":null},"simpleKT":{"auc":0.87934,"ece":0.01506,"sim_nlg":-0.12652,"sim_stm":51.41017,"sim_auc":0.82412,"sim_ece":0.02007,"sim_frac_sel_mastered":0.83217,"sim_n_distinct":11.52467,"ope_dr":0.2032,"sim_ope_dr":0.61893,"sim_ope_true":0.44145,"sim_ope_bias":0.17749,"sim_mastery_gain":-0.03289,"sim_nlg_recal":null},"DF-KT":{"auc":0.87649,"ece":0.01664,"sim_nlg":0.00161,"sim_stm":47.4205,"sim_auc":0.81451,"sim_ece":0.02257,"sim_frac_sel_mastered":0.7304,"sim_n_distinct":8.02267,"ope_dr":0.09755,"sim_ope_dr":0.46035,"sim_ope_true":0.30012,"sim_ope_bias":0.16023,"sim_mastery_gain":0.02528,"sim_nlg_recal":0.00147},"Safe-DFKT-AG":{"auc":0.87511,"ece":0.01285,"sim_nlg":-0.02035,"sim_stm":45.66428,"sim_auc":0.81026,"sim_ece":0.02202,"sim_frac_sel_mastered":0.69894,"sim_n_distinct":9.25,"ope_dr":0.15457,"sim_ope_dr":0.514,"sim_ope_true":0.34708,"sim_ope_bias":0.16693,"sim_mastery_gain":0.01278,"sim_nlg_recal":-0.00705},"Safe-DFKT":{"auc":0.87552,"ece":0.01025,"sim_nlg":-0.13745,"sim_stm":51.22483,"sim_auc":0.81347,"sim_ece":0.03558,"sim_frac_sel_mastered":0.89426,"sim_n_distinct":5.07333,"ope_dr":0.16211,"sim_ope_dr":0.63101,"sim_ope_true":0.47115,"sim_ope_bias":0.15986,"sim_mastery_gain":-0.04272,"sim_nlg_recal":-0.12237},"Safe-DFKT w/o policy head (two-stage deploy)":{"auc":0.87552,"ece":0.01025,"sim_nlg":-0.05365,"sim_stm":45.53089,"sim_auc":0.81347,"sim_ece":0.03558,"sim_frac_sel_mastered":0.76116,"sim_n_distinct":8.56533,"ope_dr":0.1165,"sim_ope_dr":0.55186,"sim_ope_true":0.38111,"sim_ope_bias":0.17075,"sim_mastery_gain":-0.00383,"sim_nlg_recal":-0.03839},"Safe-DFKT w/o safety barrier":{"auc":0.87477,"ece":0.00911,"sim_nlg":-0.17387,"sim_stm":53.38439,"sim_auc":0.80757,"sim_ece":0.10881,"sim_frac_sel_mastered":0.93938,"sim_n_distinct":3.41,"ope_dr":0.166,"sim_ope_dr":0.75694,"sim_ope_true":0.60018,"sim_ope_bias":0.15676,"sim_mastery_gain":-0.05661,"sim_nlg_recal":null},"Safe-DFKT w/o NLG reward":{"auc":0.87651,"ece":0.01577,"sim_nlg":0.02136,"sim_stm":45.63894,"sim_auc":0.8141,"sim_ece":0.03418,"sim_frac_sel_mastered":0.68986,"sim_n_distinct":8.61133,"ope_dr":0.09287,"sim_ope_dr":0.45265,"sim_ope_true":0.28495,"sim_ope_bias":0.1677,"sim_mastery_gain":0.03133,"sim_nlg_recal":null},"Safe-DFKT w/o POEM":{"auc":0.87556,"ece":0.01206,"sim_nlg":-0.10478,"sim_stm":49.04028,"sim_auc":0.81202,"sim_ece":0.03369,"sim_frac_sel_mastered":0.84162,"sim_n_distinct":6.33733,"ope_dr":0.20937,"sim_ope_dr":0.63063,"sim_ope_true":0.4625,"sim_ope_bias":0.16812,"sim_mastery_gain":-0.02717,"sim_nlg_recal":null}}},"sims":{"assist2009":{"p0":[0.7,0.7,0.9,0.7,0.5,0.7,0.9,0.9,0.7,0.3,0.7,0.7],"learn":[0.12,0.12,0.06,0.12,0.12,0.12,0.06,0.06,0.25,0.12,0.12,0.12],"guess":[0.3,0.2,0.2,0.1,0.3,0.3,0.2,0.1,0.3,0.1,0.3,0.3],"slip":[0.2,0.2,0.2,0.2,0.12,0.2,0.12,0.2,0.05,0.12,0.2,0.12],"forget_per_attempt":[0.05,0.05,0.05,0.0,0.05,0.05,0.0,0.0,0.05,0.0,0.0,0.0],"forget_per_step":[0.003,0.003,0.003,0.0,0.003,0.003,0.0,0.0,0.003,0.0,0.0,0.0],"ref_random":{"nlg":0.1433777901620283,"stm":47.08638888888889,"ret20":0.983299663682764},"n":[3841,248069,145],"align":{"spearman_Qnlg_vs_true_gain":-0.37325,"spearman_Qgain_vs_true_gain":0.84509,"frac_rnlg_post_discrete":0.77938}},"ednet":{"p0":[0.7,0.5,0.9,0.7,0.7,0.3,0.3,0.5,0.5,0.5,0.5,0.5],"learn":[0.25,0.12,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.12,0.06],"guess":[0.3,0.3,0.3,0.3,0.3,0.3,0.3,0.3,0.3,0.3,0.3,0.3],"slip":[0.2,0.2,0.12,0.2,0.2,0.2,0.2,0.2,0.2,0.2,0.2,0.2],"forget_per_attempt":[0.05,0.05,0.05,0.05,0.05,0.15,0.15,0.05,0.15,0.15,0.15,0.15],"forget_per_step":[0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.0028,0.003,0.003,0.003,0.003],"ref_random":{"nlg":0.21514825734143211,"stm":49.14555555555556,"ret20":0.9698904518541376},"n":[5000,500000,98],"align":{"spearman_Qnlg_vs_true_gain":-0.13525,"spearman_Qgain_vs_true_gain":0.76169,"frac_rnlg_post_discrete":0.73551}},"algebra2005":{"p0":[0.9,0.7,0.3,0.9,0.9,0.7,0.9,0.7,0.9,0.1,0.7,0.7],"learn":[0.25,0.12,0.12,0.25,0.25,0.25,0.06,0.25,0.25,0.12,0.25,0.12],"guess":[0.3,0.3,0.3,0.3,0.3,0.3,0.3,0.3,0.3,0.3,0.3,0.3],"slip":[0.12,0.12,0.2,0.12,0.2,0.12,0.05,0.12,0.05,0.2,0.05,0.12],"forget_per_attempt":[0.05,0.05,0.15,0.05,0.05,0.05,0.0,0.0,0.0,0.15,0.05,0.0],"forget_per_step":[0.003,0.003,0.003,0.003,0.003,0.003,0.0,0.0,0.0,0.003,0.003,0.0],"ref_random":{"nlg":0.1998048667869169,"stm":44.91805555555556,"ret20":0.9806534263414987},"n":[574,209710,107],"align":{"spearman_Qnlg_vs_true_gain":-0.33392,"spearman_Qgain_vs_true_gain":0.75221,"frac_rnlg_post_discrete":0.81771}},"junyi":{"p0":[0.5,0.5,0.5,0.5,0.7,0.5,0.5,0.7,0.7,0.5,0.5,0.5],"learn":[0.06,0.12,0.12,0.06,0.12,0.02,0.02,0.12,0.12,0.02,0.06,0.12],"guess":[0.1,0.1,0.1,0.2,0.1,0.1,0.1,0.1,0.2,0.1,0.2,0.1],"slip":[0.2,0.05,0.05,0.05,0.05,0.05,0.05,0.05,0.05,0.12,0.05,0.05],"forget_per_attempt":[0.05,0.15,0.15,0.05,0.05,0.05,0.05,0.15,0.05,0.05,0.05,0.15],"forget_per_step":[0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.003],"ref_random":{"nlg":-0.013875290168931619,"stm":47.99722222222222,"ret20":0.9520882967919552},"n":[5000,388509,681],"align":{"spearman_Qnlg_vs_true_gain":0.69386,"spearman_Qgain_vs_true_gain":0.88148,"frac_rnlg_post_discrete":0.8765}}},"group":{"LR":"main","PFA":"main","Heuristic-0.7":"main","Random":"main","DKT":"main","Uncertainty-0.5":"main","DKVMN":"main","SAKT":"main","AKT":"main","simpleKT":"main","DF-KT":"main","Safe-DFKT-AG":"main","Safe-DFKT":"ablation","Safe-DFKT w/o policy head (two-stage deploy)":"ablation","Safe-DFKT w/o safety barrier":"ablation","Safe-DFKT w/o NLG reward":"ablation","Safe-DFKT w/o POEM":"ablation"},"cross":{"LR":{"sim_nlg":0.06563,"sim_nlg_std":0.07329,"sim_stm":48.53626,"sim_stm_std":2.40995,"sim_retention":0.97228,"sim_retention_std":0.00093,"sim_mastery_gain":0.05615,"sim_mastery_gain_std":0.04404,"sim_auc":0.64101,"sim_auc_std":0.04138,"sim_ece":0.04259,"sim_ece_std":0.01024,"auc":0.72112,"auc_std":0.01408,"ece":0.03072,"ece_std":0.00271,"ope_dr":0.2948,"ope_dr_std":0.01633,"sim_ope_bias":0.07679,"sim_ope_bias_std":0.01111,"sim_pct_sel_mastered":76.19944,"sim_pct_sel_mastered_std":7.95435,"ope_dr_imm":0.65184,"ope_dr_imm_std":0.00912,"sim_ope_bias_imm":0.05965,"sim_ope_bias_imm_std":0.00397,"dec_sim_nlg":null,"dec_sim_nlg_std":0.0,"dec_sim_pct_sel_mastered":null,"dec_sim_pct_sel_mastered_std":0.0,"dec_auc":null,"dec_auc_std":0.0,"dec_ece":null,"dec_ece_std":0.0,"dec_epoch_sim":null,"dec_epoch_sim_std":0.0,"dec_epoch_real":null,"dec_epoch_real_std":0.0,"n_seeds":5,"sim_nlg_minus_dkt":0.00548,"sim_ece_minus_dkt_pp":2.81829,"ece_minus_dkt_pp":2.12945},"PFA":{"sim_nlg":-0.03823,"sim_nlg_std":0.00678,"sim_stm":50.45397,"sim_stm_std":0.12853,"sim_retention":0.97315,"sim_retention_std":0.00132,"sim_mastery_gain":-0.00211,"sim_mastery_gain_std":0.00353,"sim_auc":0.69154,"sim_auc_std":7e-05,"sim_ece":0.09703,"sim_ece_std":0.0009,"auc":0.71156,"auc_std":0.00023,"ece":0.05617,"ece_std":0.00034,"ope_dr":0.33173,"ope_dr_std":0.00052,"sim_ope_bias":0.06979,"sim_ope_bias_std":0.00775,"sim_pct_sel_mastered":89.96417,"sim_pct_sel_mastered_std":0.29922,"ope_dr_imm":0.67977,"ope_dr_imm_std":0.0003,"sim_ope_bias_imm":0.05152,"sim_ope_bias_imm_std":0.00613,"dec_sim_nlg":null,"dec_sim_nlg_std":0.0,"dec_sim_pct_sel_mastered":null,"dec_sim_pct_sel_mastered_std":0.0,"dec_auc":null,"dec_auc_std":0.0,"dec_ece":null,"dec_ece_std":0.0,"dec_epoch_sim":null,"dec_epoch_sim_std":0.0,"dec_epoch_real":null,"dec_epoch_real_std":0.0,"n_seeds":5,"sim_nlg_minus_dkt":-0.09838,"sim_ece_minus_dkt_pp":8.2617,"ece_minus_dkt_pp":4.67376},"Heuristic-0.7":{"sim_nlg":-0.02525,"sim_nlg_std":0.00771,"sim_stm":50.54928,"sim_stm_std":0.1799,"sim_retention":0.9732,"sim_retention_std":0.00175,"sim_mastery_gain":0.00643,"sim_mastery_gain_std":0.00371,"sim_auc":0.71524,"sim_auc_std":0.0,"sim_ece":0.04204,"sim_ece_std":0.0,"auc":0.7303,"auc_std":0.0,"ece":0.0509,"ece_std":0.0,"ope_dr":0.34233,"ope_dr_std":0.0,"sim_ope_bias":0.06757,"sim_ope_bias_std":0.01096,"sim_pct_sel_mastered":87.04111,"sim_pct_sel_mastered_std":0.27786,"ope_dr_imm":0.67956,"ope_dr_imm_std":0.0,"sim_ope_bias_imm":0.04754,"sim_ope_bias_imm_std":0.00341,"dec_sim_nlg":null,"dec_sim_nlg_std":0.0,"dec_sim_pct_sel_mastered":null,"dec_sim_pct_sel_mastered_std":0.0,"dec_auc":null,"dec_auc_std":0.0,"dec_ece":null,"dec_ece_std":0.0,"dec_epoch_sim":null,"dec_epoch_sim_std":0.0,"dec_epoch_real":null,"dec_epoch_real_std":0.0,"n_seeds":5,"sim_nlg_minus_dkt":-0.0854,"sim_ece_minus_dkt_pp":2.76269,"ece_minus_dkt_pp":4.1474},"Random":{"sim_nlg":0.13529,"sim_nlg_std":0.00487,"sim_stm":47.2386,"sim_stm_std":0.15395,"sim_retention":0.97144,"sim_retention_std":0.00087,"sim_mastery_gain":0.10483,"sim_mastery_gain_std":0.00215,"sim_auc":null,"sim_auc_std":0.0,"sim_ece":null,"sim_ece_std":0.0,"auc":null,"auc_std":0.0,"ece":null,"ece_std":0.0,"ope_dr":0.22457,"ope_dr_std":0.0,"sim_ope_bias":0.07541,"sim_ope_bias_std":0.0076,"sim_pct_sel_mastered":67.76028,"sim_pct_sel_mastered_std":0.39877,"ope_dr_imm":0.6108,"ope_dr_imm_std":0.0,"sim_ope_bias_imm":0.05475,"sim_ope_bias_imm_std":0.00483,"dec_sim_nlg":null,"dec_sim_nlg_std":0.0,"dec_sim_pct_sel_mastered":null,"dec_sim_pct_sel_mastered_std":0.0,"dec_auc":null,"dec_auc_std":0.0,"dec_ece":null,"dec_ece_std":0.0,"dec_epoch_sim":null,"dec_epoch_sim_std":0.0,"dec_epoch_real":null,"dec_epoch_real_std":0.0,"n_seeds":5,"sim_nlg_minus_dkt":0.07514,"sim_ece_minus_dkt_pp":null,"ece_minus_dkt_pp":null},"DKT":{"sim_nlg":0.06015,"sim_nlg_std":0.0089,"sim_stm":47.30681,"sim_stm_std":0.07825,"sim_retention":0.97207,"sim_retention_std":0.00155,"sim_mastery_gain":0.05746,"sim_mastery_gain_std":0.00545,"sim_auc":0.6962,"sim_auc_std":0.00132,"sim_ece":0.01441,"sim_ece_std":0.00109,"auc":0.77319,"auc_std":0.00042,"ece":0.00943,"ece_std":0.0007,"ope_dr":0.30722,"ope_dr_std":0.00158,"sim_ope_bias":0.06828,"sim_ope_bias_std":0.01029,"sim_pct_sel_mastered":78.11778,"sim_pct_sel_mastered_std":0.76406,"ope_dr_imm":0.66678,"ope_dr_imm_std":0.00089,"sim_ope_bias_imm":0.05486,"sim_ope_bias_imm_std":0.00368,"dec_sim_nlg":null,"dec_sim_nlg_std":0.0,"dec_sim_pct_sel_mastered":null,"dec_sim_pct_sel_mastered_std":0.0,"dec_auc":null,"dec_auc_std":0.0,"dec_ece":null,"dec_ece_std":0.0,"dec_epoch_sim":null,"dec_epoch_sim_std":0.0,"dec_epoch_real":null,"dec_epoch_real_std":0.0,"n_seeds":5,"sim_nlg_minus_dkt":0.0,"sim_ece_minus_dkt_pp":0.0,"ece_minus_dkt_pp":0.0},"Uncertainty-0.5":{"sim_nlg":0.13527,"sim_nlg_std":0.0097,"sim_stm":51.94321,"sim_stm_std":0.15677,"sim_retention":0.97064,"sim_retention_std":0.0017,"sim_mastery_gain":0.10915,"sim_mastery_gain_std":0.0048,"sim_auc":0.6962,"sim_auc_std":0.00132,"sim_ece":0.01441,"sim_ece_std":0.00109,"auc":0.77319,"auc_std":0.00042,"ece":0.00943,"ece_std":0.0007,"ope_dr":0.18831,"ope_dr_std":0.00173,"sim_ope_bias":0.08946,"sim_ope_bias_std":0.0136,"sim_pct_sel_mastered":62.79694,"sim_pct_sel_mastered_std":0.76403,"ope_dr_imm":0.58692,"ope_dr_imm_std":0.00042,"sim_ope_bias_imm":0.06434,"sim_ope_bias_imm_std":0.01019,"dec_sim_nlg":null,"dec_sim_nlg_std":0.0,"dec_sim_pct_sel_mastered":null,"dec_sim_pct_sel_mastered_std":0.0,"dec_auc":null,"dec_auc_std":0.0,"dec_ece":null,"dec_ece_std":0.0,"dec_epoch_sim":null,"dec_epoch_sim_std":0.0,"dec_epoch_real":null,"dec_epoch_real_std":0.0,"n_seeds":5,"sim_nlg_minus_dkt":0.07513,"sim_ece_minus_dkt_pp":0.0,"ece_minus_dkt_pp":0.0},"DKVMN":{"sim_nlg":-0.0634,"sim_nlg_std":0.01076,"sim_stm":51.19747,"sim_stm_std":0.67946,"sim_retention":0.9737,"sim_retention_std":0.00149,"sim_mastery_gain":-0.01787,"sim_mastery_gain_std":0.00418,"sim_auc":0.73451,"sim_auc_std":0.00056,"sim_ece":0.00714,"sim_ece_std":0.00065,"auc":0.76402,"auc_std":0.00029,"ece":0.00864,"ece_std":0.00067,"ope_dr":0.30674,"ope_dr_std":0.00271,"sim_ope_bias":0.05868,"sim_ope_bias_std":0.00898,"sim_pct_sel_mastered":91.50194,"sim_pct_sel_mastered_std":0.69382,"ope_dr_imm":0.66118,"ope_dr_imm_std":0.00121,"sim_ope_bias_imm":0.04442,"sim_ope_bias_imm_std":0.00724,"dec_sim_nlg":null,"dec_sim_nlg_std":0.0,"dec_sim_pct_sel_mastered":null,"dec_sim_pct_sel_mastered_std":0.0,"dec_auc":null,"dec_auc_std":0.0,"dec_ece":null,"dec_ece_std":0.0,"dec_epoch_sim":null,"dec_epoch_sim_std":0.0,"dec_epoch_real":null,"dec_epoch_real_std":0.0,"n_seeds":5,"sim_nlg_minus_dkt":-0.12354,"sim_ece_minus_dkt_pp":-0.72702,"ece_minus_dkt_pp":-0.0784},"SAKT":{"sim_nlg":-0.0369,"sim_nlg_std":0.01134,"sim_stm":53.74014,"sim_stm_std":0.53456,"sim_retention":0.973,"sim_retention_std":0.00117,"sim_mastery_gain":-0.00094,"sim_mastery_gain_std":0.00747,"sim_auc":0.71037,"sim_auc_std":0.00296,"sim_ece":0.01326,"sim_ece_std":0.00129,"auc":0.74042,"auc_std":0.00139,"ece":0.02036,"ece_std":0.00133,"ope_dr":0.31833,"ope_dr_std":0.00402,"sim_ope_bias":0.07061,"sim_ope_bias_std":0.00684,"sim_pct_sel_mastered":87.04861,"sim_pct_sel_mastered_std":1.31421,"ope_dr_imm":0.65906,"ope_dr_imm_std":0.00169,"sim_ope_bias_imm":0.0513,"sim_ope_bias_imm_std":0.00562,"dec_sim_nlg":null,"dec_sim_nlg_std":0.0,"dec_sim_pct_sel_mastered":null,"dec_sim_pct_sel_mastered_std":0.0,"dec_auc":null,"dec_auc_std":0.0,"dec_ece":null,"dec_ece_std":0.0,"dec_epoch_sim":null,"dec_epoch_sim_std":0.0,"dec_epoch_real":null,"dec_epoch_real_std":0.0,"n_seeds":5,"sim_nlg_minus_dkt":-0.09705,"sim_ece_minus_dkt_pp":-0.11463,"ece_minus_dkt_pp":1.09365},"AKT":{"sim_nlg":0.00277,"sim_nlg_std":0.01063,"sim_stm":51.41707,"sim_stm_std":0.37753,"sim_retention":0.97246,"sim_retention_std":0.00087,"sim_mastery_gain":0.02776,"sim_mastery_gain_std":0.00614,"sim_auc":0.71119,"sim_auc_std":0.00117,"sim_ece":0.01587,"sim_ece_std":0.00166,"auc":0.76275,"auc_std":0.00027,"ece":0.01422,"ece_std":0.00145,"ope_dr":0.32023,"ope_dr_std":0.00772,"sim_ope_bias":0.07054,"sim_ope_bias_std":0.01001,"sim_pct_sel_mastered":84.19556,"sim_pct_sel_mastered_std":0.5225,"ope_dr_imm":0.66022,"ope_dr_imm_std":0.00467,"sim_ope_bias_imm":0.05199,"sim_ope_bias_imm_std":0.00415,"dec_sim_nlg":null,"dec_sim_nlg_std":0.0,"dec_sim_pct_sel_mastered":null,"dec_sim_pct_sel_mastered_std":0.0,"dec_auc":null,"dec_auc_std":0.0,"dec_ece":null,"dec_ece_std":0.0,"dec_epoch_sim":null,"dec_epoch_sim_std":0.0,"dec_epoch_real":null,"dec_epoch_real_std":0.0,"n_seeds":5,"sim_nlg_minus_dkt":-0.05738,"sim_ece_minus_dkt_pp":0.14611,"ece_minus_dkt_pp":0.47952},"simpleKT":{"sim_nlg":-0.00603,"sim_nlg_std":0.00768,"sim_stm":51.64368,"sim_stm_std":0.31623,"sim_retention":0.97258,"sim_retention_std":0.00133,"sim_mastery_gain":0.021,"sim_mastery_gain_std":0.0048,"sim_auc":0.71335,"sim_auc_std":0.00161,"sim_ece":0.01534,"sim_ece_std":0.00191,"auc":0.76005,"auc_std":0.00055,"ece":0.01132,"ece_std":0.00148,"ope_dr":0.31973,"ope_dr_std":0.00554,"sim_ope_bias":0.07634,"sim_ope_bias_std":0.01602,"sim_pct_sel_mastered":85.22528,"sim_pct_sel_mastered_std":0.31018,"ope_dr_imm":0.66076,"ope_dr_imm_std":0.00245,"sim_ope_bias_imm":0.05233,"sim_ope_bias_imm_std":0.00449,"dec_sim_nlg":null,"dec_sim_nlg_std":0.0,"dec_sim_pct_sel_mastered":null,"dec_sim_pct_sel_mastered_std":0.0,"dec_auc":null,"dec_auc_std":0.0,"dec_ece":null,"dec_ece_std":0.0,"dec_epoch_sim":null,"dec_epoch_sim_std":0.0,"dec_epoch_real":null,"dec_epoch_real_std":0.0,"n_seeds":5,"sim_nlg_minus_dkt":-0.06618,"sim_ece_minus_dkt_pp":0.09321,"ece_minus_dkt_pp":0.18908},"DF-KT":{"sim_nlg":0.04752,"sim_nlg_std":0.02134,"sim_stm":49.60211,"sim_stm_std":0.35162,"sim_retention":0.97183,"sim_retention_std":0.00155,"sim_mastery_gain":0.04603,"sim_mastery_gain_std":0.01143,"sim_auc":0.70382,"sim_auc_std":0.00137,"sim_ece":0.0126,"sim_ece_std":0.00087,"auc":0.77254,"auc_std":0.00025,"ece":0.01096,"ece_std":0.00196,"ope_dr":0.30601,"ope_dr_std":0.00213,"sim_ope_bias":0.07903,"sim_ope_bias_std":0.00885,"sim_pct_sel_mastered":81.89056,"sim_pct_sel_mastered_std":1.90437,"ope_dr_imm":0.65875,"ope_dr_imm_std":0.0025,"sim_ope_bias_imm":0.06037,"sim_ope_bias_imm_std":0.00551,"dec_sim_nlg":0.08553,"dec_sim_nlg_std":0.01125,"dec_sim_pct_sel_mastered":77.76778,"dec_sim_pct_sel_mastered_std":0.91123,"dec_auc":0.77203,"dec_auc_std":0.00032,"dec_ece":0.01211,"dec_ece_std":0.00173,"dec_epoch_sim":4.25,"dec_epoch_sim_std":1.44698,"dec_epoch_real":0.8,"dec_epoch_real_std":0.32596,"n_seeds":5,"sim_nlg_minus_dkt":-0.01263,"sim_ece_minus_dkt_pp":-0.18116,"ece_minus_dkt_pp":0.15322},"Safe-DFKT-AG":{"sim_nlg":-0.00988,"sim_nlg_std":0.00991,"sim_stm":49.07272,"sim_stm_std":0.25153,"sim_retention":0.97332,"sim_retention_std":0.00144,"sim_mastery_gain":0.01049,"sim_mastery_gain_std":0.00594,"sim_auc":0.69979,"sim_auc_std":0.00165,"sim_ece":0.01644,"sim_ece_std":0.00167,"auc":0.77186,"auc_std":0.0005,"ece":0.01214,"ece_std":0.00132,"ope_dr":0.34902,"ope_dr_std":0.00713,"sim_ope_bias":0.07818,"sim_ope_bias_std":0.02203,"sim_pct_sel_mastered":83.90111,"sim_pct_sel_mastered_std":0.61613,"ope_dr_imm":0.67808,"ope_dr_imm_std":0.00237,"sim_ope_bias_imm":0.05503,"sim_ope_bias_imm_std":0.00515,"dec_sim_nlg":0.03041,"dec_sim_nlg_std":0.00834,"dec_sim_pct_sel_mastered":81.23694,"dec_sim_pct_sel_mastered_std":0.98815,"dec_auc":0.76933,"dec_auc_std":0.00098,"dec_ece":0.01176,"dec_ece_std":0.00132,"dec_epoch_sim":3.9,"dec_epoch_sim_std":2.45331,"dec_epoch_real":13.25,"dec_epoch_real_std":0.61237,"n_seeds":5,"sim_nlg_minus_dkt":-0.07003,"sim_ece_minus_dkt_pp":0.20331,"ece_minus_dkt_pp":0.27162},"Safe-DFKT":{"sim_nlg":-0.09192,"sim_nlg_std":0.00988,"sim_stm":53.46696,"sim_stm_std":1.15699,"sim_retention":0.97397,"sim_retention_std":0.0015,"sim_mastery_gain":-0.03904,"sim_mastery_gain_std":0.00521,"sim_auc":0.70042,"sim_auc_std":0.00233,"sim_ece":0.01921,"sim_ece_std":0.00254,"auc":0.77207,"auc_std":0.00031,"ece":0.01046,"ece_std":0.00168,"ope_dr":0.44695,"ope_dr_std":0.06958,"sim_ope_bias":0.07286,"sim_ope_bias_std":0.01527,"sim_pct_sel_mastered":93.93667,"sim_pct_sel_mastered_std":1.97857,"ope_dr_imm":0.73401,"ope_dr_imm_std":0.03444,"sim_ope_bias_imm":0.05085,"sim_ope_bias_imm_std":0.00372,"dec_sim_nlg":0.02829,"dec_sim_nlg_std":0.01098,"dec_sim_pct_sel_mastered":82.92722,"dec_sim_pct_sel_mastered_std":0.75156,"dec_auc":0.77111,"dec_auc_std":0.00047,"dec_ece":0.01139,"dec_ece_std":0.00112,"dec_epoch_sim":0.15,"dec_epoch_sim_std":0.13693,"dec_epoch_real":13.95,"dec_epoch_real_std":0.1118,"n_seeds":5,"sim_nlg_minus_dkt":-0.15207,"sim_ece_minus_dkt_pp":0.4805,"ece_minus_dkt_pp":0.103},"Safe-DFKT w/o policy head (two-stage deploy)":{"sim_nlg":0.04995,"sim_nlg_std":0.01395,"sim_stm":47.23258,"sim_stm_std":0.49989,"sim_retention":0.97224,"sim_retention_std":0.00126,"sim_mastery_gain":0.0499,"sim_mastery_gain_std":0.00945,"sim_auc":0.70042,"sim_auc_std":0.00233,"sim_ece":0.01921,"sim_ece_std":0.00254,"auc":0.77207,"auc_std":0.00031,"ece":0.01046,"ece_std":0.00168,"ope_dr":0.33593,"ope_dr_std":0.00485,"sim_ope_bias":0.06987,"sim_ope_bias_std":0.01005,"sim_pct_sel_mastered":80.10194,"sim_pct_sel_mastered_std":1.50902,"ope_dr_imm":0.68075,"ope_dr_imm_std":0.00249,"sim_ope_bias_imm":0.05321,"sim_ope_bias_imm_std":0.00177,"dec_sim_nlg":null,"dec_sim_nlg_std":0.0,"dec_sim_pct_sel_mastered":null,"dec_sim_pct_sel_mastered_std":0.0,"dec_auc":null,"dec_auc_std":0.0,"dec_ece":null,"dec_ece_std":0.0,"dec_epoch_sim":null,"dec_epoch_sim_std":0.0,"dec_epoch_real":null,"dec_epoch_real_std":0.0,"n_seeds":5,"sim_nlg_minus_dkt":-0.01019,"sim_ece_minus_dkt_pp":0.4805,"ece_minus_dkt_pp":0.103},"Safe-DFKT w/o safety barrier":{"sim_nlg":-0.11041,"sim_nlg_std":0.01429,"sim_stm":54.43493,"sim_stm_std":1.12924,"sim_retention":0.97393,"sim_retention_std":0.00175,"sim_mastery_gain":-0.04769,"sim_mastery_gain_std":0.00909,"sim_auc":0.69367,"sim_auc_std":0.00333,"sim_ece":0.04776,"sim_ece_std":0.00307,"auc":0.76616,"auc_std":0.00048,"ece":0.01358,"ece_std":0.00079,"ope_dr":0.54865,"ope_dr_std":0.00442,"sim_ope_bias":0.07269,"sim_ope_bias_std":0.00994,"sim_pct_sel_mastered":95.8525,"sim_pct_sel_mastered_std":1.59645,"ope_dr_imm":0.78787,"ope_dr_imm_std":0.00188,"sim_ope_bias_imm":0.0536,"sim_ope_bias_imm_std":0.00309,"dec_sim_nlg":null,"dec_sim_nlg_std":0.0,"dec_sim_pct_sel_mastered":null,"dec_sim_pct_sel_mastered_std":0.0,"dec_auc":null,"dec_auc_std":0.0,"dec_ece":null,"dec_ece_std":0.0,"dec_epoch_sim":null,"dec_epoch_sim_std":0.0,"dec_epoch_real":null,"dec_epoch_real_std":0.0,"n_seeds":5,"sim_nlg_minus_dkt":-0.17056,"sim_ece_minus_dkt_pp":3.33504,"ece_minus_dkt_pp":0.41521},"Safe-DFKT w/o NLG reward":{"sim_nlg":0.02559,"sim_nlg_std":0.01018,"sim_stm":48.53908,"sim_stm_std":0.57737,"sim_retention":0.97239,"sim_retention_std":0.00172,"sim_mastery_gain":0.03329,"sim_mastery_gain_std":0.00596,"sim_auc":0.70253,"sim_auc_std":0.00125,"sim_ece":0.01494,"sim_ece_std":0.0004,"auc":0.77321,"auc_std":0.00035,"ece":0.01027,"ece_std":0.00179,"ope_dr":0.28631,"ope_dr_std":0.01128,"sim_ope_bias":0.07928,"sim_ope_bias_std":0.01002,"sim_pct_sel_mastered":82.24833,"sim_pct_sel_mastered_std":0.65829,"ope_dr_imm":0.63467,"ope_dr_imm_std":0.01903,"sim_ope_bias_imm":0.05502,"sim_ope_bias_imm_std":0.00713,"dec_sim_nlg":null,"dec_sim_nlg_std":0.0,"dec_sim_pct_sel_mastered":null,"dec_sim_pct_sel_mastered_std":0.0,"dec_auc":null,"dec_auc_std":0.0,"dec_ece":null,"dec_ece_std":0.0,"dec_epoch_sim":null,"dec_epoch_sim_std":0.0,"dec_epoch_real":null,"dec_epoch_real_std":0.0,"n_seeds":5,"sim_nlg_minus_dkt":-0.03455,"sim_ece_minus_dkt_pp":0.05293,"ece_minus_dkt_pp":0.08428},"Safe-DFKT w/o POEM":{"sim_nlg":-0.07263,"sim_nlg_std":0.02071,"sim_stm":51.91562,"sim_stm_std":1.06737,"sim_retention":0.97354,"sim_retention_std":0.00133,"sim_mastery_gain":-0.02679,"sim_mastery_gain_std":0.01042,"sim_auc":0.69921,"sim_auc_std":0.00228,"sim_ece":0.01794,"sim_ece_std":0.00141,"auc":0.77272,"auc_std":0.00022,"ece":0.0108,"ece_std":0.00076,"ope_dr":0.46737,"ope_dr_std":0.05373,"sim_ope_bias":0.08472,"sim_ope_bias_std":0.01708,"sim_pct_sel_mastered":91.39583,"sim_pct_sel_mastered_std":2.15261,"ope_dr_imm":0.74287,"ope_dr_imm_std":0.0253,"sim_ope_bias_imm":0.05119,"sim_ope_bias_imm_std":0.00651,"dec_sim_nlg":null,"dec_sim_nlg_std":0.0,"dec_sim_pct_sel_mastered":null,"dec_sim_pct_sel_mastered_std":0.0,"dec_auc":null,"dec_auc_std":0.0,"dec_ece":null,"dec_ece_std":0.0,"dec_epoch_sim":null,"dec_epoch_sim_std":0.0,"dec_epoch_real":null,"dec_epoch_real_std":0.0,"n_seeds":5,"sim_nlg_minus_dkt":-0.13278,"sim_ece_minus_dkt_pp":0.35288,"ece_minus_dkt_pp":0.13764}},"target":[{"c_target":0.3,"method":"DKT","sim_nlg":0.1501,"sim_pct_sel_mastered":57.85972},{"c_target":0.3,"method":"Safe-DFKT","sim_nlg":0.14429,"sim_pct_sel_mastered":65.40046},{"c_target":0.3,"method":"Safe-DFKT-AG","sim_nlg":0.14895,"sim_pct_sel_mastered":64.84352},{"c_target":0.3,"method":"Safe-DFKT w/o policy head (two-stage deploy)","sim_nlg":0.17661,"sim_pct_sel_mastered":57.33056},{"c_target":0.5,"method":"DKT","sim_nlg":0.1318,"sim_pct_sel_mastered":63.14815},{"c_target":0.5,"method":"Safe-DFKT","sim_nlg":-0.00461,"sim_pct_sel_mastered":80.40648},{"c_target":0.5,"method":"Safe-DFKT-AG","sim_nlg":0.05063,"sim_pct_sel_mastered":76.58194},{"c_target":0.5,"method":"Safe-DFKT w/o policy head (two-stage deploy)","sim_nlg":0.13516,"sim_pct_sel_mastered":63.5787},{"c_target":0.7,"method":"DKT","sim_nlg":0.06253,"sim_pct_sel_mastered":77.92593},{"c_target":0.7,"method":"Safe-DFKT","sim_nlg":-0.09017,"sim_pct_sel_mastered":93.28981},{"c_target":0.7,"method":"Safe-DFKT-AG","sim_nlg":-0.00971,"sim_pct_sel_mastered":83.66019},{"c_target":0.7,"method":"Safe-DFKT w/o policy head (two-stage deploy)","sim_nlg":0.04947,"sim_pct_sel_mastered":79.64815}],"eps":[{"epsilon":0.0,"sim_nlg":0.00379,"auc":0.77217,"ece":0.01158,"sim_pct_sel_mastered":83.0},{"epsilon":0.005,"sim_nlg":-0.00971,"auc":0.77167,"ece":0.01179,"sim_pct_sel_mastered":83.66019},{"epsilon":0.01,"sim_nlg":0.00973,"auc":0.77159,"ece":0.01253,"sim_pct_sel_mastered":83.36736},{"epsilon":0.02,"sim_nlg":-0.01788,"auc":0.76998,"ece":0.01119,"sim_pct_sel_mastered":85.05625},{"epsilon":0.05,"sim_nlg":-0.02415,"auc":0.76833,"ece":0.02229,"sim_pct_sel_mastered":85.80625}],"trace":[{"method":"DF-KT","world":"sim","epoch":0,"val_dr":-0.00091,"val_dec":0.067},{"method":"DF-KT","world":"sim","epoch":1,"val_dr":-0.00077,"val_dec":0.05946},{"method":"DF-KT","world":"sim","epoch":2,"val_dr":-0.00053,"val_dec":0.05602},{"method":"DF-KT","world":"sim","epoch":3,"val_dr":-0.00027,"val_dec":0.05527},{"method":"DF-KT","world":"sim","epoch":4,"val_dr":-0.00013,"val_dec":0.0545},{"method":"DF-KT","world":"sim","epoch":5,"val_dr":8e-05,"val_dec":0.04907},{"method":"DF-KT","world":"sim","epoch":6,"val_dr":0.00017,"val_dec":0.04673},{"method":"DF-KT","world":"sim","epoch":7,"val_dr":0.00047,"val_dec":0.04328},{"method":"DF-KT","world":"sim","epoch":8,"val_dr":0.0005,"val_dec":0.03652},{"method":"DF-KT","world":"sim","epoch":9,"val_dr":0.0007,"val_dec":0.03311},{"method":"DF-KT","world":"sim","epoch":10,"val_dr":0.00093,"val_dec":0.02883},{"method":"DF-KT","world":"sim","epoch":11,"val_dr":0.00096,"val_dec":0.03107},{"method":"DF-KT","world":"sim","epoch":12,"val_dr":0.00107,"val_dec":0.02774},{"method":"DF-KT","world":"sim","epoch":13,"val_dr":0.00146,"val_dec":0.03013},{"method":"DF-KT","world":"sim","epoch":14,"val_dr":0.00145,"val_dec":0.02393},{"method":"DF-KT","world":"real","epoch":0,"val_dr":0.05335,"val_dec":0.30232},{"method":"DF-KT","world":"real","epoch":1,"val_dr":0.06159,"val_dec":0.3008},{"method":"DF-KT","world":"real","epoch":2,"val_dr":0.07121,"val_dec":0.29663},{"method":"DF-KT","world":"real","epoch":3,"val_dr":0.084,"val_dec":0.28776},{"method":"DF-KT","world":"real","epoch":4,"val_dr":0.09951,"val_dec":0.27726},{"method":"DF-KT","world":"real","epoch":5,"val_dr":0.118,"val_dec":0.25896},{"method":"DF-KT","world":"real","epoch":6,"val_dr":0.13613,"val_dec":0.22901},{"method":"DF-KT","world":"real","epoch":7,"val_dr":0.15371,"val_dec":0.18526},{"method":"DF-KT","world":"real","epoch":8,"val_dr":0.16718,"val_dec":0.14652},{"method":"DF-KT","world":"real","epoch":9,"val_dr":0.17803,"val_dec":0.13185},{"method":"DF-KT","world":"real","epoch":10,"val_dr":0.18889,"val_dec":0.13095},{"method":"DF-KT","world":"real","epoch":11,"val_dr":0.19591,"val_dec":0.13406},{"method":"DF-KT","world":"real","epoch":12,"val_dr":0.20012,"val_dec":0.13624},{"method":"DF-KT","world":"real","epoch":13,"val_dr":0.20253,"val_dec":0.13478},{"method":"DF-KT","world":"real","epoch":14,"val_dr":0.20407,"val_dec":0.13452},{"method":"Safe-DFKT","world":"sim","epoch":0,"val_dr":0.4699,"val_dec":0.02251},{"method":"Safe-DFKT","world":"sim","epoch":1,"val_dr":0.48481,"val_dec":-0.00131},{"method":"Safe-DFKT","world":"sim","epoch":2,"val_dr":0.5045,"val_dec":-0.03075},{"method":"Safe-DFKT","world":"sim","epoch":3,"val_dr":0.51832,"val_dec":-0.03757},{"method":"Safe-DFKT","world":"sim","epoch":4,"val_dr":0.53785,"val_dec":-0.04886},{"method":"Safe-DFKT","world":"sim","epoch":5,"val_dr":0.55042,"val_dec":-0.06969},{"method":"Safe-DFKT","world":"sim","epoch":6,"val_dr":0.56932,"val_dec":-0.08486},{"method":"Safe-DFKT","world":"sim","epoch":7,"val_dr":0.5855,"val_dec":-0.09301},{"method":"Safe-DFKT","world":"sim","epoch":8,"val_dr":0.59579,"val_dec":-0.09559},{"method":"Safe-DFKT","world":"sim","epoch":9,"val_dr":0.60819,"val_dec":-0.10253},{"method":"Safe-DFKT","world":"sim","epoch":10,"val_dr":0.61798,"val_dec":-0.10521},{"method":"Safe-DFKT","world":"sim","epoch":11,"val_dr":0.62437,"val_dec":-0.1094},{"method":"Safe-DFKT","world":"sim","epoch":12,"val_dr":0.62751,"val_dec":-0.11345},{"method":"Safe-DFKT","world":"sim","epoch":13,"val_dr":0.63419,"val_dec":-0.1164},{"method":"Safe-DFKT","world":"sim","epoch":14,"val_dr":0.63373,"val_dec":-0.11917},{"method":"Safe-DFKT","world":"real","epoch":0,"val_dr":0.33928,"val_dec":0.33928},{"method":"Safe-DFKT","world":"real","epoch":1,"val_dr":0.36752,"val_dec":0.36752},{"method":"Safe-DFKT","world":"real","epoch":2,"val_dr":0.39614,"val_dec":0.39614},{"method":"Safe-DFKT","world":"real","epoch":3,"val_dr":0.43119,"val_dec":0.43119},{"method":"Safe-DFKT","world":"real","epoch":4,"val_dr":0.47421,"val_dec":0.47421},{"method":"Safe-DFKT","world":"real","epoch":5,"val_dr":0.52236,"val_dec":0.52236},{"method":"Safe-DFKT","world":"real","epoch":6,"val_dr":0.57292,"val_dec":0.57292},{"method":"Safe-DFKT","world":"real","epoch":7,"val_dr":0.62617,"val_dec":0.62617},{"method":"Safe-DFKT","world":"real","epoch":8,"val_dr":0.68431,"val_dec":0.68431},{"method":"Safe-DFKT","world":"real","epoch":9,"val_dr":0.7229,"val_dec":0.7229},{"method":"Safe-DFKT","world":"real","epoch":10,"val_dr":0.75356,"val_dec":0.75356},{"method":"Safe-DFKT","world":"real","epoch":11,"val_dr":0.77387,"val_dec":0.77387},{"method":"Safe-DFKT","world":"real","epoch":12,"val_dr":0.78339,"val_dec":0.78339},{"method":"Safe-DFKT","world":"real","epoch":13,"val_dr":0.79378,"val_dec":0.79378},{"method":"Safe-DFKT","world":"real","epoch":14,"val_dr":0.80314,"val_dec":0.80314},{"method":"Safe-DFKT-AG","world":"sim","epoch":0,"val_dr":0.45199,"val_dec":0.01761},{"method":"Safe-DFKT-AG","world":"sim","epoch":1,"val_dr":0.44841,"val_dec":0.00425},{"method":"Safe-DFKT-AG","world":"sim","epoch":2,"val_dr":0.45907,"val_dec":-0.00846},{"method":"Safe-DFKT-AG","world":"sim","epoch":3,"val_dr":0.46141,"val_dec":-0.01749},{"method":"Safe-DFKT-AG","world":"sim","epoch":4,"val_dr":0.46395,"val_dec":-0.02261},{"method":"Safe-DFKT-AG","world":"sim","epoch":5,"val_dr":0.45971,"val_dec":-0.02037},{"method":"Safe-DFKT-AG","world":"sim","epoch":6,"val_dr":0.46085,"val_dec":-0.02135},{"method":"Safe-DFKT-AG","world":"sim","epoch":7,"val_dr":0.46776,"val_dec":-0.02544},{"method":"Safe-DFKT-AG","world":"sim","epoch":8,"val_dr":0.46923,"val_dec":-0.02091},{"method":"Safe-DFKT-AG","world":"sim","epoch":9,"val_dr":0.46116,"val_dec":-0.01265},{"method":"Safe-DFKT-AG","world":"sim","epoch":10,"val_dr":0.46048,"val_dec":-0.00783},{"method":"Safe-DFKT-AG","world":"sim","epoch":11,"val_dr":0.46831,"val_dec":-0.01392},{"method":"Safe-DFKT-AG","world":"sim","epoch":12,"val_dr":0.46562,"val_dec":-0.00883},{"method":"Safe-DFKT-AG","world":"sim","epoch":13,"val_dr":0.46936,"val_dec":-0.00485},{"method":"Safe-DFKT-AG","world":"sim","epoch":14,"val_dr":0.47298,"val_dec":-0.0067},{"method":"Safe-DFKT-AG","world":"real","epoch":0,"val_dr":0.33096,"val_dec":0.33096},{"method":"Safe-DFKT-AG","world":"real","epoch":1,"val_dr":0.3511,"val_dec":0.3511},{"method":"Safe-DFKT-AG","world":"real","epoch":2,"val_dr":0.37122,"val_dec":0.37122},{"method":"Safe-DFKT-AG","world":"real","epoch":3,"val_dr":0.39498,"val_dec":0.39498},{"method":"Safe-DFKT-AG","world":"real","epoch":4,"val_dr":0.433,"val_dec":0.433},{"method":"Safe-DFKT-AG","world":"real","epoch":5,"val_dr":0.48113,"val_dec":0.48113},{"method":"Safe-DFKT-AG","world":"real","epoch":6,"val_dr":0.52701,"val_dec":0.52701},{"method":"Safe-DFKT-AG","world":"real","epoch":7,"val_dr":0.57437,"val_dec":0.57437},{"method":"Safe-DFKT-AG","world":"real","epoch":8,"val_dr":0.61923,"val_dec":0.61923},{"method":"Safe-DFKT-AG","world":"real","epoch":9,"val_dr":0.65506,"val_dec":0.65506},{"method":"Safe-DFKT-AG","world":"real","epoch":10,"val_dr":0.67573,"val_dec":0.67573},{"method":"Safe-DFKT-AG","world":"real","epoch":11,"val_dr":0.6826,"val_dec":0.6826},{"method":"Safe-DFKT-AG","world":"real","epoch":12,"val_dr":0.6919,"val_dec":0.6919},{"method":"Safe-DFKT-AG","world":"real","epoch":13,"val_dr":0.69826,"val_dec":0.69826},{"method":"Safe-DFKT-AG","world":"real","epoch":14,"val_dr":0.7059,"val_dec":0.7059}],"dd":[{"dataset":"assist2009","dkt_sim_nlg":0.07532,"two_stage_deploy_sim_nlg":0.06655,"safe_dfkt_sim_nlg":-0.0329,"frac_head":0.91894,"flip_rate_head":0.94805},{"dataset":"ednet","dkt_sim_nlg":0.09256,"two_stage_deploy_sim_nlg":0.06487,"safe_dfkt_sim_nlg":-0.07242,"frac_head":0.83219,"flip_rate_head":0.93439},{"dataset":"algebra2005","dkt_sim_nlg":0.09166,"two_stage_deploy_sim_nlg":0.12203,"safe_dfkt_sim_nlg":-0.1249,"frac_head":1.14025,"flip_rate_head":0.99281},{"dataset":"junyi","dkt_sim_nlg":-0.01895,"two_stage_deploy_sim_nlg":-0.05365,"safe_dfkt_sim_nlg":-0.13745,"frac_head":0.70725,"flip_rate_head":0.58811},{"dataset":"pooled","dkt_sim_nlg":0.06015,"two_stage_deploy_sim_nlg":0.04995,"safe_dfkt_sim_nlg":-0.09192,"frac_head":0.93296,"flip_rate_head":0.86584}],"scale":[{"n_skills":12,"method":"Random","sim_nlg":0.13554},{"n_skills":12,"method":"Heuristic-0.7","sim_nlg":-0.02736},{"n_skills":12,"method":"DKT","sim_nlg":0.06253},{"n_skills":12,"method":"Uncertainty-0.5","sim_nlg":0.1318},{"n_skills":12,"method":"DF-KT","sim_nlg":0.04334},{"n_skills":12,"method":"Safe-DFKT-AG","sim_nlg":-0.00971},{"n_skills":12,"method":"Safe-DFKT","sim_nlg":-0.09017},{"n_skills":12,"method":"Safe-DFKT w/o NLG reward","sim_nlg":0.0237},{"n_skills":24,"method":"Random","sim_nlg":0.08622},{"n_skills":24,"method":"Heuristic-0.7","sim_nlg":-0.02295},{"n_skills":24,"method":"DKT","sim_nlg":0.01118},{"n_skills":24,"method":"Uncertainty-0.5","sim_nlg":0.08222},{"n_skills":24,"method":"DF-KT","sim_nlg":0.00612},{"n_skills":24,"method":"Safe-DFKT-AG","sim_nlg":-0.02858},{"n_skills":24,"method":"Safe-DFKT","sim_nlg":-0.05639},{"n_skills":24,"method":"Safe-DFKT w/o NLG reward","sim_nlg":-0.01289}],"params":[{"dataset":"assist2009","K":145,"d":64,"model":"DKT","total_numel":61265,"pf_count":61265,"emb":18560,"lstm":33280,"out":9425,"policy_head_g":0,"expected_policy_head_dK_plus_K":9425},{"dataset":"assist2009","K":145,"d":64,"model":"Safe-DFKT / DF-KT / ablations","total_numel":70690,"pf_count":70690,"emb":18560,"lstm":33280,"out":9425,"policy_head_g":9425,"expected_policy_head_dK_plus_K":9425},{"dataset":"ednet","K":98,"d":64,"model":"DKT","total_numel":52194,"pf_count":52194,"emb":12544,"lstm":33280,"out":6370,"policy_head_g":0,"expected_policy_head_dK_plus_K":6370},{"dataset":"ednet","K":98,"d":64,"model":"Safe-DFKT / DF-KT / ablations","total_numel":58564,"pf_count":58564,"emb":12544,"lstm":33280,"out":6370,"policy_head_g":6370,"expected_policy_head_dK_plus_K":6370},{"dataset":"algebra2005","K":107,"d":64,"model":"DKT","total_numel":53931,"pf_count":53931,"emb":13696,"lstm":33280,"out":6955,"policy_head_g":0,"expected_policy_head_dK_plus_K":6955},{"dataset":"algebra2005","K":107,"d":64,"model":"Safe-DFKT / DF-KT / ablations","total_numel":60886,"pf_count":60886,"emb":13696,"lstm":33280,"out":6955,"policy_head_g":6955,"expected_policy_head_dK_plus_K":6955},{"dataset":"junyi","K":681,"d":64,"model":"DKT","total_numel":164713,"pf_count":164713,"emb":87168,"lstm":33280,"out":44265,"policy_head_g":0,"expected_policy_head_dK_plus_K":44265},{"dataset":"junyi","K":681,"d":64,"model":"Safe-DFKT / DF-KT / ablations","total_numel":208978,"pf_count":208978,"emb":87168,"lstm":33280,"out":44265,"policy_head_g":44265,"expected_policy_head_dK_plus_K":44265},{"dataset":"mean_over_datasets","K":257.75,"d":64,"model":"DKT","total_numel":83025.75,"pf_count":83025.75,"emb":32992.0,"lstm":33280.0,"out":16753.75,"policy_head_g":0.0,"expected_policy_head_dK_plus_K":16753.75},{"dataset":"mean_over_datasets","K":257.75,"d":64,"model":"Safe-DFKT / DF-KT / ablations","total_numel":99779.5,"pf_count":99779.5,"emb":32992.0,"lstm":33280.0,"out":16753.75,"policy_head_g":16753.75,"expected_policy_head_dK_plus_K":16753.75}]}</script>
+<script>
+// ============ 第 8 章 论文实验室 ============
+(function(){
+const P=JSON.parse(document.getElementById('paperData').textContent);
+const DS=['assist2009','ednet','algebra2005','junyi'];
+const DSN={assist2009:'ASSISTments 2009',ednet:'EdNet',algebra2005:'Algebra 2005',junyi:'Junyi',all:'4 个数据集平均'};
+const MAIN=['Safe-DFKT-AG','DKT','Uncertainty-0.5','Random','LR','PFA','Heuristic-0.7','DKVMN','SAKT','AKT','simpleKT','DF-KT'];
+const ABL=['Safe-DFKT','Safe-DFKT w/o policy head (two-stage deploy)','Safe-DFKT w/o safety barrier','Safe-DFKT w/o NLG reward','Safe-DFKT w/o POEM'];
+const LABEL={'Safe-DFKT-AG':'Safe-DFKT-AG（本文）','Safe-DFKT w/o policy head (two-stage deploy)':'Safe-DFKT 去掉策略头','Safe-DFKT w/o safety barrier':'Safe-DFKT 去掉护栏','Safe-DFKT w/o NLG reward':'Safe-DFKT 奖励换 r_gain','Safe-DFKT w/o POEM':'Safe-DFKT 去掉方差惩罚'};
+const lab=m=>LABEL[m]||m;
+const DESC={
+ 'Safe-DFKT-AG':['本文提出的方法','DKT 骨干 + 策略头 g。损失 = BCE − λ·DR 价值 + 安全护栏 + 方差惩罚 + 防刷分惩罚。目标是在不损失预测准确度的前提下，直接朝“学生学得更多”训练。'],
+ 'DKT':['深度知识追踪（2015）','用 LSTM 读做题序列，d = 64。先用 BCE 训练好预测，再按“挑预测正确率最接近 0.7 的技能”出题。论文的主要对照组，也是 Safe-DFKT 的出发点。'],
+ 'Uncertainty-0.5':['同一个 DKT，换个出题规则','模型和 DKT 完全一样，只是挑预测正确率最接近 0.5 的技能，也就是模型最拿不准的那个。预测指标和 DKT 一模一样，NLG 却是最高的之一。'],
+ 'Random':['随机出题（参照组）','什么模型都不用，12 个技能里随机挑。没有预测，所以没有 AUC、ECE。'],
+ 'LR':['逻辑回归','只看“哪个技能 + 做过几次”，最简单的统计模型，只有 263 个参数。'],
+ 'PFA':['表现因素分析','每个技能一个难度，再按做对次数、做错次数分别加权。经典教育统计模型。'],
+ 'Heuristic-0.7':['经验正确率规则','不用任何模型，只看学生在每个技能上的历史正确率（加了平滑），挑最接近 70% 的。'],
+ 'DKVMN':['动态键值记忆网络（2017）','有 20 个记忆槽，每个槽存一类知识的掌握程度。模拟器里它的校准和 AUC 最好，NLG 却最差。'],
+ 'SAKT':['自注意力知识追踪（2019）','第 5 章那种注意力，用“要预测的技能”去查询过去的做题记录。论文里是 1 层、2 头的简化版。'],
+ 'AKT':['上下文感知注意力（2020）','注意力加上随时间单调衰减和 Rasch 难度嵌入。论文里是简化版。'],
+ 'simpleKT':['极简注意力模型（2023）','只有一层普通点积注意力，以“简单但很难被打败”出名。论文里是简化版。'],
+ 'DF-KT':['早期的决策导向 KT','损失 = BCE − λ·DR 价值，奖励用 r_gain，没有护栏、没有方差惩罚、没有防刷分。'],
+ 'Safe-DFKT':['消融：去掉防刷分项','和本文方法相同，只是 η = ρ = 0。它把 93.94% 的步数花在已经会的技能上。'],
+ 'Safe-DFKT w/o policy head (two-stage deploy)':['部署时消融：去掉策略头','不重新训练。拿同一个微调后的 Safe-DFKT 骨干，丢掉策略头 g，改用普通“最接近 0.7”规则出题。'],
+ 'Safe-DFKT w/o safety barrier':['消融：去掉安全护栏','γ = 0，BCE 不再被拉住。AUC 掉到 76.62%，NLG 是所有变体里最差的。'],
+ 'Safe-DFKT w/o NLG reward':['消融：奖励换回 r_gain','把 NLG 奖励换成更简单的 r_gain，结果反而是消融里最好的（0.0256）。'],
+ 'Safe-DFKT w/o POEM':['消融：去掉方差惩罚','β = 0。结果和 Safe-DFKT 在误差范围内一样，说明方差惩罚影响不大。'],
+};
+const MET={
+ sim_nlg:{n:'学习增益 NLG（模拟器）',hi:true,f:v=>v.toFixed(4),note:'越高越好。学生练完 60 题，全部 12 个技能的平均表现提高了多少（按还能提高的空间归一化）。论文的主指标。'},
+ auc:{n:'AUC（真实数据，%）',hi:true,k:100,f:v=>v.toFixed(2),note:'越高越好。预测“下一题做对没”的能力，50% 等于瞎猜。这是知识追踪领域平时比的指标。'},
+ ece:{n:'ECE 校准误差（真实数据，%）',hi:false,k:100,f:v=>v.toFixed(2),note:'越低越好。模型说“70% 会做对”时，实际是不是真有 70% 做对。'},
+ sim_stm:{n:'掌握所需步数（模拟器）',hi:false,f:v=>v.toFixed(2),note:'越低越好。连续答对 3 题算掌握一个技能，平均第几步做到。'},
+ sim_frac_sel_mastered:{n:'练已会技能的步数占比（%）',hi:false,k:100,f:v=>v.toFixed(2),note:'越低越好。60 步里有多少步花在学生早就会的技能上。论文靠这个指标诊断出“刷分”。'},
+ sim_n_distinct:{n:'练过几个不同技能',hi:true,f:v=>v.toFixed(2),note:'60 步里一共练了几个不同技能，满分 12。'},
+ sim_ope_bias:{n:'离线 DR 估计偏高了多少',hi:false,f:v=>v.toFixed(4),note:'DR 离线估计减去模拟器真实值。大于 0 表示被高估。'},
+};
+function get(ds,m,k){const one=d=>{const r=P.per[d][m];return r?r[k]:null};
+  if(ds!=='all'){const v=one(ds);return v==null?null:v*(MET[k]&&MET[k].k||1)}
+  const vs=DS.map(one);if(vs.some(v=>v==null))return null;return vs.reduce((a,b)=>a+b,0)/vs.length*(MET[k]&&MET[k].k||1)}
+
+// ---------- 图表 ----------
+function bindHover(cv){if(cv._bound)return;cv._bound=1;
+  const h=e=>{const r=cv.getBoundingClientRect(),t=cv._hit&&cv._hit(e.clientX-r.left,e.clientY-r.top);t?showTip(e,t):hideTip()};
+  cv.addEventListener('mousemove',h);cv.addEventListener('mouseleave',hideTip);cv.addEventListener('click',e=>{h(e);const r=cv.getBoundingClientRect();cv._click&&cv._click(e.clientX-r.left,e.clientY-r.top)})}
+function niceTicks(lo,hi,n=4){const span=hi-lo||1,step0=span/n,mag=10**Math.floor(Math.log10(step0)),err=step0/mag,step=(err>=7.5?10:err>=3.5?5:err>=1.5?2:1)*mag;const t=[];for(let v=Math.ceil(lo/step)*step;v<=hi+step*1e-6;v+=step)t.push(+v.toFixed(10));return t}
+function tickFmt(v,t){const st=t.length>1?Math.abs(t[1]-t[0]):1;const d=Math.max(0,-Math.floor(Math.log10(st)));return v.toFixed(Math.min(4,d))}
+const MONO='11px "JetBrains Mono",ui-monospace,monospace';
+function bodyFont(px){return`${px}px ${getComputedStyle(document.body).fontFamily}`}
+function rrect(ctx,x,y,w,h,r){if(w<0){x+=w;w=-w}r=Math.min(r,w/2,h/2);ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath()}
+function colorOf(m,C){if(m==='Safe-DFKT-AG')return C.accent;if(m==='DKT')return C.neg;if(m==='Random')return C.pos;return mixRgb(C.rgb.surface,C.rgb.muted,.55)}
+
+function hbar(cv,items,o={}){const C=colors(),W=Math.max(280,cv.parentElement.clientWidth),rowH=26,lw=Math.min(200,Math.round(W*.42)),pr=64,pt=8,pb=22;
+  const H=pt+items.length*rowH+pb,ctx=fitCanvas(cv,W,H);
+  const vals=items.map(i=>i.v).filter(v=>v!=null&&Number.isFinite(v));let lo=Math.min(0,...vals),hi=Math.max(0,...vals);if(o.lo!=null)lo=Math.min(lo,o.lo);if(lo===hi)hi=lo+1;
+  const ticks=niceTicks(lo,hi,4);lo=Math.min(lo,ticks[0]);hi=Math.max(hi,ticks[ticks.length-1]);
+  const sx=v=>lw+(v-lo)/(hi-lo)*(W-lw-pr);
+  ctx.font=MONO;ctx.fillStyle=C.muted;ctx.textAlign='center';ctx.textBaseline='top';ctx.strokeStyle=C.line;ctx.lineWidth=1;
+  for(const t of ticks){const x=Math.round(sx(t))+.5;ctx.beginPath();ctx.moveTo(x,pt);ctx.lineTo(x,H-pb);ctx.stroke();ctx.fillText(tickFmt(t,ticks),x,H-pb+5)}
+  ctx.strokeStyle=C.muted;const x0=Math.round(sx(0))+.5;ctx.beginPath();ctx.moveTo(x0,pt);ctx.lineTo(x0,H-pb);ctx.stroke();
+  const hits=[];
+  items.forEach((it,i)=>{const y=pt+i*rowH,cy=y+rowH/2;
+    ctx.font=bodyFont(12.5);ctx.fillStyle=it.dim?C.muted:C.ink;ctx.textAlign='right';ctx.textBaseline='middle';
+    let name=it.label;while(ctx.measureText(name).width>lw-12&&name.length>4)name=name.slice(0,-2)+'…';
+    if(it.bold)ctx.font=`600 ${bodyFont(12.5)}`;ctx.fillText(name,lw-10,cy);
+    if(it.sel){ctx.fillStyle=mixRgb(C.rgb.surface,C.rgb.accent,.12);ctx.fillRect(0,y+1,W,rowH-2)}
+    if(it.v==null||!Number.isFinite(it.v)){ctx.font=MONO;ctx.fillStyle=C.muted;ctx.textAlign='left';ctx.fillText(it.na||'—',x0+6,cy)}
+    else{const xa=sx(0),xb=sx(it.v);ctx.fillStyle=it.color;rrect(ctx,Math.min(xa,xb),cy-7,Math.max(2,Math.abs(xb-xa)),14,3);ctx.fill();
+      ctx.font=MONO;ctx.fillStyle=C.ink;ctx.textBaseline='middle';ctx.textAlign='left';ctx.fillText(o.f?o.f(it.v):fmt(it.v),(it.v>=0?xb:xa)+6,cy)}
+    hits.push({y0:y,y1:y+rowH,it})});
+  cv._hit=(x,y)=>{const h=hits.find(h=>y>=h.y0&&y<h.y1);return h?`${h.it.label}\n${h.it.v==null?(h.it.na||'无数据'):(o.f?o.f(h.it.v):fmt(h.it.v))}${h.it.extra?'\n'+h.it.extra:''}`:null};
+  cv._click=(x,y)=>{const h=hits.find(h=>y>=h.y0&&y<h.y1);if(h&&o.onClick)o.onClick(h.it)};bindHover(cv)}
+
+function lineChart(cv,series,o={}){const C=colors(),W=Math.max(260,cv.parentElement.clientWidth),H=o.h||220,pl=48,pr=o.pr!=null?o.pr:(series.length>1?118:14),pt=12,pb=30;const ctx=fitCanvas(cv,W,H);
+  const xs=[...new Set(series.flatMap(s=>s.pts.map(p=>p[0])))].sort((a,b)=>a-b);
+  let ys=series.flatMap(s=>s.pts.map(p=>p[1]));if(o.ref)ys.push(o.ref.y);let lo=Math.min(...ys),hi=Math.max(...ys);const pad=(hi-lo||Math.abs(hi)||1)*.12;lo-=pad;hi+=pad;
+  const yt=niceTicks(lo,hi,4);const xlo=xs[0],xhi=xs[xs.length-1];
+  const sx=x=>pl+(xhi===xlo?.5:(x-xlo)/(xhi-xlo))*(W-pl-pr),sy=y=>pt+(hi-y)/(hi-lo)*(H-pt-pb);
+  ctx.font=MONO;ctx.fillStyle=C.muted;ctx.strokeStyle=C.line;ctx.lineWidth=1;ctx.textAlign='right';ctx.textBaseline='middle';
+  for(const t of yt){if(t<lo||t>hi)continue;const y=Math.round(sy(t))+.5;ctx.beginPath();ctx.moveTo(pl,y);ctx.lineTo(W-pr,y);ctx.stroke();ctx.fillText(tickFmt(t,yt),pl-6,y)}
+  ctx.textAlign='center';ctx.textBaseline='top';const xt=o.xTicks||xs;for(const x of xt)ctx.fillText(o.xf?o.xf(x):String(x),sx(x),H-pb+6);
+  if(o.xname){ctx.textAlign='right';ctx.fillText(o.xname,W-pr,H-12)}
+  if(lo<0&&hi>0){ctx.strokeStyle=C.muted;ctx.beginPath();ctx.moveTo(pl,Math.round(sy(0))+.5);ctx.lineTo(W-pr,Math.round(sy(0))+.5);ctx.stroke()}
+  if(o.ref){ctx.strokeStyle=C.pos;ctx.setLineDash([5,4]);ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(pl,sy(o.ref.y));ctx.lineTo(W-pr,sy(o.ref.y));ctx.stroke();ctx.setLineDash([]);ctx.fillStyle=C.ink;ctx.textAlign='left';ctx.textBaseline='bottom';ctx.font=bodyFont(11.5);ctx.fillText(o.ref.label,pl+4,sy(o.ref.y)-3)}
+  const ends=[];
+  for(const s of series){ctx.strokeStyle=s.color;ctx.lineWidth=2;ctx.beginPath();s.pts.forEach((p,i)=>i?ctx.lineTo(sx(p[0]),sy(p[1])):ctx.moveTo(sx(p[0]),sy(p[1])));ctx.stroke();
+    if(s.pts.length<=8)for(const p of s.pts){ctx.beginPath();ctx.arc(sx(p[0]),sy(p[1]),4,0,7);ctx.fillStyle=s.color;ctx.fill();ctx.strokeStyle=C.surface;ctx.lineWidth=2;ctx.stroke()}
+    const lp=s.pts[s.pts.length-1];ends.push({y:sy(lp[1]),s})}
+  if(series.length>1){ends.sort((a,b)=>a.y-b.y);for(let i=1;i<ends.length;i++)if(ends[i].y-ends[i-1].y<15)ends[i].y=ends[i-1].y+15;
+    ctx.font=bodyFont(11.5);ctx.textAlign='left';ctx.textBaseline='middle';for(const e of ends){ctx.fillStyle=e.s.color;ctx.fillRect(W-pr+8,e.y-4,8,8);ctx.fillStyle=C.ink;ctx.fillText(e.s.name,W-pr+20,e.y)}}
+  cv._hit=(x)=>{if(x<pl-10||x>W-pr+10)return null;let best=xs[0];for(const v of xs)if(Math.abs(sx(v)-x)<Math.abs(sx(best)-x))best=v;
+    return`${o.xname||'x'} = ${o.xf?o.xf(best):best}\n`+series.map(s=>{const p=s.pts.find(p=>p[0]===best);return`${s.name}: ${p?(o.yf?o.yf(p[1]):fmt(p[1],4)):'—'}`}).join('\n')+(o.ref?`\n${o.ref.label}`:'')};bindHover(cv)}
+
+function scatter(cv,pts,o={}){const C=colors(),W=Math.max(260,cv.parentElement.clientWidth),H=o.h||260,pl=50,pr=16,pt=12,pb=38,ctx=fitCanvas(cv,W,H);
+  const X=pts.map(p=>p.x),Y=pts.map(p=>p.y);let xl=Math.min(...X),xh=Math.max(...X),yl=Math.min(...Y),yh=Math.max(...Y);const px=(xh-xl||1)*.1,py=(yh-yl||1)*.12;xl-=px;xh+=px;yl-=py;yh+=py;
+  const xt=niceTicks(xl,xh,4),yt=niceTicks(yl,yh,4);const sx=x=>pl+(x-xl)/(xh-xl)*(W-pl-pr),sy=y=>pt+(yh-y)/(yh-yl)*(H-pt-pb);
+  ctx.font=MONO;ctx.fillStyle=C.muted;ctx.strokeStyle=C.line;ctx.lineWidth=1;
+  ctx.textAlign='right';ctx.textBaseline='middle';for(const t of yt){if(t<yl||t>yh)continue;const y=Math.round(sy(t))+.5;ctx.beginPath();ctx.moveTo(pl,y);ctx.lineTo(W-pr,y);ctx.stroke();ctx.fillText(tickFmt(t,yt),pl-6,y)}
+  ctx.textAlign='center';ctx.textBaseline='top';for(const t of xt){if(t<xl||t>xh)continue;const x=Math.round(sx(t))+.5;ctx.beginPath();ctx.moveTo(x,pt);ctx.lineTo(x,H-pb);ctx.stroke();ctx.fillText(tickFmt(t,xt),x,H-pb+5)}
+  ctx.font=bodyFont(11.5);ctx.fillText(o.xname||'',(pl+W-pr)/2,H-16);ctx.save();ctx.translate(12,(pt+H-pb)/2);ctx.rotate(-Math.PI/2);ctx.textBaseline='middle';ctx.fillText(o.yname||'',0,0);ctx.restore();
+  const order=[...pts].sort((a,b)=>(a.big?1:0)-(b.big?1:0));
+  for(const p of order){ctx.beginPath();ctx.arc(sx(p.x),sy(p.y),p.big?6.5:5,0,7);ctx.fillStyle=p.color;ctx.fill();ctx.strokeStyle=C.surface;ctx.lineWidth=2;ctx.stroke()}
+  ctx.font=bodyFont(11.5);ctx.fillStyle=C.ink;ctx.textBaseline='middle';
+  for(const p of pts)if(p.tag){const x=sx(p.x),y=sy(p.y);ctx.textAlign=x>W-90?'right':'left';ctx.fillText(p.tag,x+(ctx.textAlign==='left'?9:-9),y-(p.dy||0))}
+  cv._hit=(x,y)=>{let b=null,bd=14;for(const p of pts){const d=Math.hypot(sx(p.x)-x,sy(p.y)-y);if(d<bd){bd=d;b=p}}return b?`${b.label}\n${o.xname}: ${o.xf?o.xf(b.x):fmt(b.x)}\n${o.yname}: ${o.yf?o.yf(b.y):fmt(b.y,4)}`:null};bindHover(cv)}
+
+// ---------- 8.1 DKT 形状 ----------
+function p8FlowRender(){const ds=$('#p8Ds').value,K=P.sims[ds].n[2],[ns,nt]=P.sims[ds].n;
+  const pa=P.params.find(p=>p.dataset===ds&&p.model==='DKT'),pg=P.params.find(p=>p.dataset===ds&&p.model!=='DKT');
+  $('#p8DsInfo').textContent=`${ns.toLocaleString()} 个学生，${nt.toLocaleString()} 条做题记录，K = ${K} 个技能`;
+  const rows=[
+    [`输入：256 个学生 × 100 步，每步是“技能编号 + 对/错”合成的一个 token（共 2K = ${2*K} 种）`,[['B',256],['T',100]]],
+    [`查嵌入表 <span class="shape">${shapeHtml([['V',2*K],['d',64]])}</span>（第 5 章第 2 步）`,[['B',256],['T',100],['d',64]]],
+    ['LSTM 一步步往后读，每步输出一个 64 维的“知识状态” z_t',[['B',256],['T',100],['d',64]]],
+    [`@ W <span class="shape">${shapeHtml([['d',64],['K',K]])}</span> + b，对每个技能打分`,[['B',256],['T',100],['K',K]]],
+    ['sigmoid → 每个技能下一题做对的概率 p̂',[['B',256],['T',100],['K',K]]],
+    ['只取“下一题真正做的那个技能”的 p̂，和真实对错算 BCE',[]],
+    [`（Safe-DFKT 才有）策略头 g：z_t @ <span class="shape">${shapeHtml([['d',64],['K',K]])}</span>，给每个技能加分`,[['B',256],['T',100],['K',K]]],
+  ];
+  $('#p8Flow').innerHTML=rows.map(([a,d])=>`<div><span>${a}</span><span class="shape">${d.length?shapeHtml(d):'标量 []'}</span></div>`).join('');
+  $('#p8ParamNote').innerHTML=`DKT 参数 = 嵌入 ${pa.emb.toLocaleString()}（${2*K}×64）+ LSTM ${pa.lstm.toLocaleString()}（4 个门 × (64×64 + 64×64 + 64 + 64)）+ 输出层 ${pa.out.toLocaleString()}（64×${K} + ${K}）= <b>${pa.total_numel.toLocaleString()}</b>。Safe-DFKT 多一个策略头 ${pg.policy_head_g.toLocaleString()} 个参数，合计 <b>${pg.total_numel.toLocaleString()}</b>。论文表 1 里的 83.0K 和 99.8K 是 4 个数据集的平均。你在 PyTorch 里 <code>print(z.shape)</code> 会看到 <code>[256, 100, 64]</code>，取一个学生就是 <code>[100, 64]</code>，跟第 1 章的 <code>[24, 64]</code> 是同一种东西。`}
+$('#p8Ds').onchange=p8FlowRender;
+
+// ---------- 模拟器（与论文 rollout 相同的规则） ----------
+const sg=x=>1/(1+Math.exp(-x)),lgt=p=>Math.log(p/(1-p));
+function newStudent(sim,r){const th=randn(r)*0.7;return{th,L:sim.p0.map(p=>r()<sg(lgt(p)+th)),le:sim.learn.map(l=>sg(lgt(l)+0.5*th))}}
+const perf=(sim,L)=>L.reduce((a,m,k)=>a+(m?1-sim.slip[k]:sim.guess[k]),0)/L.length;
+const pcOf=(sim,pL,k)=>pL[k]*(1-sim.slip[k])+(1-pL[k])*sim.guess[k];
+function estUpdate(sim,pL,k,y){const pk=pL[k],pc=pcOf(sim,pL,k),post=y?pk*(1-sim.slip[k])/pc:pk*sim.slip[k]/(1-pc);pL[k]=post+(1-post)*sim.learn[k]}
+function practice(sim,st,a,r){const Lk=st.L[a],p=Lk?1-sim.slip[a]:sim.guess[a],y=r()<p,learn=!Lk&&r()<st.le[a];
+  for(let k=0;k<st.L.length;k++)if(k!==a&&st.L[k]&&r()<sim.forget_per_step[k])st.L[k]=false;if(learn)st.L[a]=true;return{y,Lk,learn}}
+function pickKT(sim,pL,c,h,ag,r){let b=0,bs=-Infinity;for(let k=0;k<pL.length;k++){const pc=pcOf(sim,pL,k);let s=-Math.abs(pc-c)/0.05+h*pc;if(ag&&pc>0.85)s-=0.7*h;s+=r()*1e-6;if(s>bs){bs=s;b=k}}return b}
+
+// ---------- 8.2 单个学生 ----------
+const stu={};
+function stuNew(){const ds=$('#p8RDs').value;stu.ds=ds;stu.sim=P.sims[ds];stu.r=mulberry32((Date.now()%1e6)|0);stu.st=newStudent(stu.sim,stu.r);stu.pL=stu.sim.p0.slice();stu.t=0;stu.log=[];stu.pre=perf(stu.sim,stu.st.L);stu.selm=0;stu.last=null;stuRender()}
+function stuDo(a){if(stu.t>=60)return;const res=practice(stu.sim,stu.st,a,stu.r);stu.t++;if(res.Lk)stu.selm++;stu.last=a;
+  const pc=pcOf(stu.sim,stu.pL,a);estUpdate(stu.sim,stu.pL,a,res.y);
+  stu.log.unshift(`第 ${String(stu.t).padStart(2)} 题  技能 ${String(a+1).padStart(2)}  ${res.y?'答对':'答错'}  （模型事先估计 ${(pc*100).toFixed(0)}% 能对；他其实${res.Lk?'早就会':(res.learn?'不会，这次学会了':'不会，这次也没学会')}）`);stuRender()}
+function stuRender(){const sim=stu.sim,peek=$('#p8Peek').checked,L=stu.st.L;
+  $('#p8Skills').innerHTML=sim.p0.map((p0,k)=>{const pc=pcOf(sim,stu.pL,k);return`<button class="sk${stu.last===k?' last':''}" data-k="${k}"><span class="top"><b>技能 ${k+1}</b><span class="state${peek?(L[k]?' yes':' no'):''}">${peek?(L[k]?'真会':'真不会'):'？'}</span></span>
+    <span class="meter"><i style="width:${(pc*100).toFixed(1)}%"></i></span><span class="top small"><span class="muted">模型估计 p̂</span><span class="mono">${(pc*100).toFixed(0)}%</span></span>
+    <span class="par">p0 ${p0} · learn ${sim.learn[k]} · guess ${sim.guess[k]} · slip ${sim.slip[k]}</span></button>`}).join('');
+  $('#p8Skills').querySelectorAll('.sk').forEach(b=>b.onclick=()=>stuDo(+b.dataset.k));
+  const post=perf(sim,L),nlg=(post-stu.pre)/Math.max(1-stu.pre,1e-3);
+  $('#p8StuStats').innerHTML=`<span>已出 <b>${stu.t}</b> / 60 题</span><span>当前 NLG <b>${nlg.toFixed(3)}</b></span><span>练已会技能 <b>${stu.t?(stu.selm/stu.t*100).toFixed(0):0}%</b></span><span>能力 θ <b>${peek?stu.st.th.toFixed(2):'？'}</b></span>`;
+  $('#p8StuLog').textContent=stu.t?`练前表现 pre = ${stu.pre.toFixed(3)}，现在 post = ${post.toFixed(3)}\nNLG = (${post.toFixed(3)} − ${stu.pre.toFixed(3)}) ÷ (1 − ${stu.pre.toFixed(3)}) = ${nlg.toFixed(3)}\n\n`+stu.log.slice(0,8).join('\n')+(stu.t>=60?'\n\n60 题出完了。点“换一个学生”重新开始。':''):`这个学生来自 ${DSN[stu.ds]} 的模拟器。练前表现 pre = ${stu.pre.toFixed(3)}（全部 12 个技能答对概率的平均）。\n点左边的技能出题。想知道他到底会什么，勾上“偷看”。`}
+$('#p8New').onclick=stuNew;$('#p8Peek').onchange=stuRender;
+$('#p8Ai').onclick=()=>stuDo(pickKT(stu.sim,stu.pL,0.7,0,false,stu.r));
+$('#p8Rand').onclick=()=>stuDo(Math.floor(stu.r()*12));
+
+// ---------- 8.3 批量 rollout ----------
+function rollout(sim,pol,c,h,seed){const n=300,T=60,K=12;let nlg=0,selm=0,dist=0,stm=0;
+  for(let i=0;i<n;i++){const r0=mulberry32(seed*7919+i),st=newStudent(sim,r0),r=mulberry32(seed*104729+i*31+7),pre=perf(sim,st.L),pL=sim.p0.slice(),S=new Float64Array(K),N=new Float64Array(K),seen=new Set(),streak=new Int32Array(K),first=new Float64Array(K).fill(T+1);
+    for(let t=0;t<T;t++){let a;
+      if(pol==='rand')a=Math.min(K-1,Math.floor(r()*K));
+      else if(pol==='heur'){let bs=Infinity;a=0;for(let k=0;k<K;k++){const s=Math.abs((S[k]+1)/(N[k]+2)-c)+r()*1e-6;if(s<bs){bs=s;a=k}}}
+      else a=pickKT(sim,pL,c,pol==='kt'?0:h,pol==='ag',r);
+      const res=practice(sim,st,a,r);if(res.Lk)selm++;seen.add(a);S[a]+=res.y;N[a]++;estUpdate(sim,pL,a,res.y);
+      streak[a]=res.y?streak[a]+1:0;if(streak[a]>=3&&first[a]>T)first[a]=t+1}
+    nlg+=(perf(sim,st.L)-pre)/Math.max(1-pre,1e-3);dist+=seen.size;stm+=first.reduce((a,b)=>a+b,0)/K}
+  return{nlg:nlg/n,mast:selm/(n*T)*100,dist:dist/n,stm:stm/n}}
+const POLS=[['rand','随机出题'],['heur','经验正确率规则（Heuristic）'],['kt','知识追踪 + 最接近 c（像 DKT）'],['hack','+ 偏向已会技能的策略头（像 Safe-DFKT）'],['ag','+ 防刷分惩罚（像 Safe-DFKT-AG）']];
+let runRes=null;
+function p8RunDo(){const ds=$('#p8RDs').value,sim=P.sims[ds],c=+$('#p8C').value,h=+$('#p8H').value;
+  runRes={ds,c,h,rows:POLS.map(([k,n])=>{const rs=[0,1].map(sd=>rollout(sim,k,c,h,sd+1));const avg=f=>(rs[0][f]+rs[1][f])/2;return{k,n,nlg:avg('nlg'),mast:avg('mast'),dist:avg('dist'),stm:avg('stm')}})};p8RunRender()}
+function p8RunRender(){if(!runRes)return;const C=colors(),cols={rand:C.pos,heur:mixRgb(C.rgb.surface,C.rgb.muted,.55),kt:C.neg,hack:mixRgb(C.rgb.surface,C.rgb.muted,.55),ag:C.accent};
+  hbar($('#p8RunBar'),runRes.rows.map(r=>({label:r.n,v:r.nlg,color:cols[r.k],extra:`练已会技能 ${r.mast.toFixed(1)}%\n练过 ${r.dist.toFixed(1)} 个不同技能`})),{f:v=>v.toFixed(3)});
+  $('#p8RunTbl').innerHTML=`<thead><tr><th>策略</th><th>NLG</th><th>练已会 %</th><th>不同技能数</th><th>掌握步数</th></tr></thead><tbody>`+runRes.rows.map(r=>`<tr><td>${r.n}</td><td class="num">${r.nlg.toFixed(3)}</td><td class="num">${r.mast.toFixed(1)}</td><td class="num">${r.dist.toFixed(1)}</td><td class="num">${r.stm.toFixed(1)}</td></tr>`).join('')+'</tbody>';
+  const ref=P.sims[runRes.ds].ref_random.nlg;
+  $('#p8RunNote').innerHTML=`${DSN[runRes.ds]}，c = ${runRes.c.toFixed(2)}，策略头强度 ${runRes.h}，2 批 × 300 个模拟学生 × 60 题。用于核对：论文里随机出题在这个模拟器上的 NLG 是 <b>${ref.toFixed(3)}</b>，本页算出来是 <b>${runRes.rows[0].nlg.toFixed(3)}</b>。${runRes.ds==='junyi'?'Junyi 的先修关系没有存进结果文件，这里没有模拟先修关系，所以和论文差得较多。':''}这里的“知识追踪”用的是按真实参数算的 BKT 估计，策略头是手调的示意，不是论文训练出来的，所以只看相对高低，不要和论文数字一一对比。`}
+$('#p8Run').onclick=p8RunDo;
+$('#p8C').addEventListener('input',()=>$('#p8Cv').textContent=(+$('#p8C').value).toFixed(2));
+$('#p8H').addEventListener('input',()=>$('#p8Hv').textContent=$('#p8H').value);
+$('#p8RDs').onchange=()=>{stuNew();p8RunDo()};
+
+// ---------- 8.4 结果浏览器 ----------
+$('#p8BMet').innerHTML=Object.entries(MET).map(([k,m])=>`<option value="${k}">${m.n}</option>`).join('');
+let bSel='Safe-DFKT-AG';
+function p8BRender(){const ds=$('#p8BDs').value,k=$('#p8BMet').value,m=MET[k],C=colors();const list=$('#p8BAbl').checked?[...MAIN,...ABL]:MAIN;
+  $('#p8BMetNote').textContent=m.note;
+  const items=list.map(meth=>({meth,label:lab(meth),v:get(ds,meth,k),color:colorOf(meth,C),bold:meth==='Safe-DFKT-AG'||meth==='DKT',sel:meth===bSel,na:meth==='Random'||meth==='Heuristic-0.7'&&(k==='auc'||k==='ece')?'不预测，没有这个值':'无数据'}));
+  items.sort((a,b)=>(b.v==null?-1e9:(m.hi?b.v:-b.v))-(a.v==null?-1e9:(m.hi?a.v:-a.v)));
+  hbar($('#p8BBar'),items,{f:m.f,onClick:it=>{bSel=it.meth;p8BRender()}});
+  const d=DESC[bSel]||[bSel,''];const row=k2=>{const v=get(ds,bSel,k2);return v==null?'—':MET[k2].f(v)};
+  $('#p8BCard').innerHTML=`<div class="small muted">${d[0]}</div><h3>${lab(bSel)}</h3><p class="small" style="margin-top:6px">${d[1]}</p>
+   <dl class="kv" style="margin-top:10px">${['sim_nlg','auc','ece','sim_frac_sel_mastered','sim_n_distinct','sim_stm'].map(k2=>`<dt>${MET[k2].n}</dt><dd>${row(k2)}</dd>`).join('')}</dl>
+   <p class="small muted" style="margin-top:8px">${DSN[ds]}，5 个种子平均。点左边图里的其他行可以切换。</p>`;
+  // 两张散点图
+  const pts1=MAIN.filter(x=>get(ds,x,'auc')!=null).map(x=>({x:get(ds,x,'auc'),y:get(ds,x,'sim_nlg'),label:lab(x),color:colorOf(x,C),big:x==='Safe-DFKT-AG'||x==='DKT',tag:['Safe-DFKT-AG','DKT','Uncertainty-0.5','DKVMN','LR'].includes(x)?x:null,dy:x==='Uncertainty-0.5'?0:0}));
+  // DKT 和 Uncertainty-0.5 的 AUC 完全相同，标签上下错开
+  for(const p of pts1){if(p.label==='DKT')p.dy=-10;if(p.label==='Uncertainty-0.5')p.dy=10}
+  scatter($('#p8Sc1'),pts1,{xname:'AUC（%）',yname:'NLG',xf:v=>v.toFixed(2)+'%',yf:v=>v.toFixed(4)});
+  const list2=[...MAIN,...ABL];
+  const pts2=list2.map(x=>({x:get(ds,x,'sim_frac_sel_mastered'),y:get(ds,x,'sim_nlg'),label:lab(x),color:colorOf(x,C),big:x==='Safe-DFKT-AG'||x==='DKT',tag:['Safe-DFKT-AG','DKT','Uncertainty-0.5','Random','Safe-DFKT'].includes(x)?x:null}));
+  scatter($('#p8Sc2'),pts2,{xname:'练已会技能的步数占比（%）',yname:'NLG',xf:v=>v.toFixed(1)+'%',yf:v=>v.toFixed(4)})}
+['#p8BDs','#p8BMet','#p8BAbl'].forEach(s=>$(s).addEventListener('change',p8BRender));
+
+// ---------- 8.5 方法拆解 ----------
+const TERMS=[['bce','BCE（预测准）'],['dr','− λ·V̂_DR（教得好）'],['nlg','奖励 = NLG'],['gain','奖励 = r_gain'],['bar','γ·安全护栏'],['var','β·方差惩罚'],['ag','η·防刷分 + ρ‖g‖²'],['head','策略头 g（部署时用）']];
+const VARS=[
+ ['DKT','DKT（只有预测）',['bce'],'两阶段做法：只用 BCE 训练预测，出题用固定规则。这是比较的基准。'],
+ ['DF-KT','DF-KT',['bce','dr','gain','head'],'最早的决策导向做法：没有任何安全措施，奖励用 r_gain。'],
+ ['Safe-DFKT-AG','完整方法（本文）',['bce','dr','nlg','bar','var','ag','head'],'所有项都在。预测保住了，NLG 仍然低于 DKT 0.0700。'],
+ ['Safe-DFKT','去掉防刷分',['bce','dr','nlg','bar','var','head'],'少了防刷分项，策略头放开去练已会技能，93.94% 的步数刷在会的技能上，NLG 掉到 −0.0919。'],
+ ['Safe-DFKT w/o safety barrier','再去掉护栏',['bce','dr','nlg','var','head'],'护栏没了，预测也开始变差（AUC 76.62%），NLG 是所有变体里最低的。说明护栏确实在保护预测。'],
+ ['Safe-DFKT w/o POEM','再去掉方差惩罚',['bce','dr','nlg','bar','head'],'和 Safe-DFKT 差不多，方差惩罚作用不大。'],
+ ['Safe-DFKT w/o NLG reward','奖励换回 r_gain',['bce','dr','gain','bar','var','head'],'消融里最好的（0.0256）。说明 NLG 奖励本身就把模型往错的方向带。'],
+ ['Safe-DFKT w/o policy head (two-stage deploy)','部署时去掉策略头',['bce','dr','nlg','bar','var'],'同一个骨干，只是出题时不用策略头。NLG 回到 0.0500，接近 DKT。问题主要出在策略头。'],
+];
+let vSel='Safe-DFKT-AG';
+function p8VarRender(){$('#p8Var').innerHTML=VARS.map(v=>`<button class="btn${v[0]===vSel?' on':''}" data-v="${v[0]}">${v[1]}</button>`).join('');
+  $('#p8Var').querySelectorAll('button').forEach(b=>b.onclick=()=>{vSel=b.dataset.v;p8VarRender()});
+  const v=VARS.find(x=>x[0]===vSel);$('#p8Terms').innerHTML=TERMS.map(([k,n])=>`<span class="term ${v[2].includes(k)?'on':'off'}">${n}</span>`).join('');
+  const g=k=>{const x=get('all',vSel,k);return x==null?'—':MET[k].f(x)};
+  $('#p8VarStats').innerHTML=`<span>NLG <b>${g('sim_nlg')}</b></span><span>AUC <b>${g('auc')}%</b></span><span>ECE <b>${g('ece')}%</b></span><span>练已会技能 <b>${g('sim_frac_sel_mastered')}%</b></span><span>不同技能数 <b>${g('sim_n_distinct')}</b></span>`;
+  $('#p8VarNote').textContent=v[3]}
+const PEX=[0.95,0.92,0.88,0.81,0.74,0.69,0.62,0.55,0.47,0.38,0.29,0.18];
+function p8PolRender(){const c=+$('#p8PC').value,T=+$('#p8PT').value,h=+$('#p8PG').value;$('#p8PCv').textContent=c.toFixed(2);$('#p8PTv').textContent=T.toFixed(2);$('#p8PGv').textContent=h;
+  const logit=PEX.map(p=>-Math.abs(p-c)/T+h*p),pi=softmax(logit);let best=0;pi.forEach((v,i)=>{if(v>pi[best])best=i});
+  const mass=pi.reduce((a,v,i)=>a+(PEX[i]>0.85?v:0),0);
+  $('#p8PBars').innerHTML=PEX.map((p,i)=>`<div class="bar"><span class="ch mono small">${(p*100).toFixed(0)}%</span><span class="tr"><i style="width:${(pi[i]*100).toFixed(1)}%;${PEX[i]>0.85?'background:var(--pos)':''}"></i></span><span class="pv">${(pi[i]*100).toFixed(1)}%${i===best?' ◀':''}</span></div>`).join('');
+  $('#p8PCalc').textContent=`左列是每个技能的 p̂（预测做对概率），橙色条是 p̂ > 0.85、模型认为已经会了的技能。\n按 argmax 部署：选中 p̂ = ${(PEX[best]*100).toFixed(0)}% 的技能\n放在已会技能上的概率 = ${(mass*100).toFixed(1)}%\n防刷分项 η·Σ π(k)·1[p̂>0.85] = 1 × ${mass.toFixed(3)} = ${mass.toFixed(3)}（这个数会加进损失）`}
+['#p8PC','#p8PT','#p8PG'].forEach(s=>$(s).addEventListener('input',p8PolRender));
+function p8DDRender(){const C=colors(),d=P.dd.find(x=>x.dataset==='pooled');
+  hbar($('#p8DD'),[{label:'DKT',v:d.dkt_sim_nlg,color:C.neg,bold:true},{label:'Safe-DFKT 去掉策略头',v:d.two_stage_deploy_sim_nlg,color:mixRgb(C.rgb.surface,C.rgb.muted,.55)},{label:'Safe-DFKT（带策略头）',v:d.safe_dfkt_sim_nlg,color:mixRgb(C.rgb.surface,C.rgb.muted,.55)}],{f:v=>v.toFixed(4)});
+  const fb=1-d.frac_head;$('#p8Split').innerHTML=`<i style="width:${(fb*100).toFixed(1)}%;background:var(--neg)"></i><i style="flex:1;background:var(--pos)"></i>`;
+  $('#p8SplitA').innerHTML=`骨干变化 <b>${(fb*100).toFixed(1)}%</b>`;$('#p8SplitB').innerHTML=`策略头 <b>${(d.frac_head*100).toFixed(1)}%</b>`}
+
+// ---------- 8.6 训练轨迹 ----------
+function p8TrRender(){const m=$('#p8TrM').value,C=colors(),tr=P.trace.filter(t=>t.method===m&&t.world==='sim').sort((a,b)=>a.epoch-b.epoch);
+  lineChart($('#p8TrA'),[{name:'DR 估计',color:C.accent,pts:tr.map(t=>[t.epoch,t.val_dr])}],{h:190,xname:'epoch',xTicks:[0,3,6,9,12,14],yf:v=>v.toFixed(4)});
+  lineChart($('#p8TrB'),[{name:'真实 NLG',color:C.neg,pts:tr.map(t=>[t.epoch,t.val_dec])}],{h:190,xname:'epoch',xTicks:[0,3,6,9,12,14],yf:v=>v.toFixed(4)});
+  const C2=colors();const bm=[...MAIN].filter(x=>x!=='Heuristic-0.7'||true);
+  hbar($('#p8Bias'),bm.map(x=>({label:lab(x),v:get('all',x,'sim_ope_bias'),color:colorOf(x,C2),bold:x==='Safe-DFKT-AG'||x==='DKT'})).sort((a,b)=>b.v-a.v),{f:v=>'+'+v.toFixed(4)})}
+$('#p8TrM').onchange=p8TrRender;
+
+// ---------- 8.7 难度扫描 ----------
+function p8SweepRender(){const C=colors(),ms=[['DKT','DKT',C.neg],['Safe-DFKT-AG','Safe-DFKT-AG',C.accent],['Safe-DFKT','Safe-DFKT',mixRgb(C.rgb.surface,C.rgb.ink,.45)],['Safe-DFKT w/o policy head (two-stage deploy)','去掉策略头',mixRgb(C.rgb.surface,C.rgb.muted,.6)]];
+  lineChart($('#p8Sweep'),ms.map(([m,n,col])=>({name:n,color:col,pts:P.target.filter(t=>t.method===m).sort((a,b)=>a.c_target-b.c_target).map(t=>[t.c_target,t.sim_nlg])})),{h:240,xname:'目标难度 c',xf:v=>v.toFixed(1),yf:v=>v.toFixed(4),ref:{y:0.1353,label:'随机出题 0.1353'}});
+  const meths=['Random','Uncertainty-0.5','DKT','DF-KT','Safe-DFKT w/o NLG reward','Heuristic-0.7','Safe-DFKT-AG','Safe-DFKT'];const g=(n,m)=>{const r=P.scale.find(s=>s.n_skills===n&&s.method===m);return r?r.sim_nlg.toFixed(4):'—'};
+  $('#p8Scale').innerHTML='<thead><tr><th>方法</th><th>12 个技能</th><th>24 个技能</th></tr></thead><tbody>'+meths.map(m=>`<tr><td>${lab(m)}</td><td class="num">${g(12,m)}</td><td class="num">${g(24,m)}</td></tr>`).join('')+'</tbody>'}
+
+function p8All(){p8FlowRender();if(stu.sim)stuRender();p8RunRender();p8BRender();p8VarRender();p8PolRender();p8DDRender();p8TrRender();p8SweepRender()}
+let rz8;addEventListener('resize',()=>{clearTimeout(rz8);rz8=setTimeout(p8All,140)});
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change',p8All);
+new MutationObserver(p8All).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+stuNew();p8RunDo();p8All();
+document.fonts&&document.fonts.ready.then(p8All);
+})();
+</script>
+
+</body>
+</html>

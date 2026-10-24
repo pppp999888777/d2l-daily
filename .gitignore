@@ -1,0 +1,6 @@
+src/fmnist_raw_b64.txt
+src/minitorch2.js
+src/t*.js
+src/all2.js
+__pycache__/
+.DS_Store

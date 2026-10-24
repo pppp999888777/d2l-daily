@@ -1,0 +1,237 @@
+<main class="wrap day" id="day6" data-day="6" hidden>
+<section class="hero">
+  <div class="eyebrow">第 6 天 · 原书第 3.3 节 + 第 3.4 节</div>
+  <h1>用 PyTorch 的零件重写训练，再从回归走到分类</h1>
+  <p class="lead">昨天手写的数据读取、模型、损失和优化器，PyTorch 都有现成的：<code>DataLoader</code>、<code>nn.Linear</code>、<code>nn.MSELoss</code>、<code>torch.optim.SGD</code>。今天先用它们把训练缩成几行，再学分类：模型不再输出一个数，而是输出“属于每一类的概率”，用 softmax 和交叉熵。你论文的 DKT 输出“答对的概率”，用的就是这一套的两类版本。</p>
+  <div class="plan">
+    <div><b class="k">今天的时间</b>大约 65 分钟。第一部分 25 分钟，第二部分 40 分钟。</div>
+    <div><b class="k">学完你能</b><ul><li>用 nn、optim、DataLoader 写训练循环</li><li>访问和初始化网络参数</li><li>说清 softmax、交叉熵、独热编码</li><li>知道什么是校准，会算 ECE</li></ul></div>
+    <div><b class="k">和你的论文</b><ul><li>DKT 的 sigmoid + BCE 是 softmax + 交叉熵的两类特例</li><li>论文报告的 ECE 就是今天的校准误差</li></ul></div>
+  </div>
+</section>
+
+<section class="part" id="concise">
+  <div class="part-h"><div class="eyebrow">第一部分</div><h2>3.3 线性回归的简洁实现</h2><span class="src">对应原书第 3.3 节，代码全部来自原书 PyTorch 版</span></div>
+  <div class="prose"><p>数据迭代器、损失函数、优化器、神经网络层这些东西太常用，框架都替我们写好了。下面用它们重做昨天的线性回归，每一步对照昨天手写的版本。</p>
+    <div class="row"><button class="btn primary runAll" data-day="6">从头全部运行</button><span class="small muted runAllMsg"></span></div></div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.3.1</span><h3>生成数据集、读取数据集</h3></div>
+    <div class="cell"><textarea>from d2l import torch as d2l
+import numpy as np
+import torch
+from torch.utils import data</textarea></div>
+    <div class="prose"><p>昨天写的 <code>synthetic_data</code> 已经保存进 d2l 包，直接用：</p></div>
+    <div class="cell"><textarea>true_w = d2l.tensor([2, -3.4])
+true_b = 4.2
+features, labels = d2l.synthetic_data(true_w, true_b, 1000)</textarea></div>
+    <div class="prose"><p><code>TensorDataset</code> 把特征和标签配成对，<code>DataLoader</code> 负责打乱和切小批量，代替昨天的 <code>data_iter</code> 函数。<code>is_train=True</code> 时每个 epoch 都重新打乱。</p></div>
+    <div class="cell"><textarea>def load_array(data_arrays, batch_size, is_train=True):  #@save
+    """构造一个PyTorch数据迭代器"""
+    dataset = data.TensorDataset(*data_arrays)
+    return data.DataLoader(dataset, batch_size, shuffle=is_train)</textarea></div>
+    <div class="cell"><textarea>batch_size = 10
+data_iter = load_array((features, labels), batch_size)</textarea></div>
+    <div class="prose"><p><code>iter()</code> 把它变成迭代器，<code>next()</code> 取出第一个小批量。结果是一个列表，里面是 X 和 y 两个张量：</p></div>
+    <div class="cell"><textarea>next(iter(data_iter))</textarea></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.3.2</span><h3>定义模型、初始化参数</h3></div>
+    <div class="prose"><p><code>nn.Sequential</code> 把几层串起来，数据从第一层流到最后一层。这里只有一层全连接层 <code>nn.Linear(2, 1)</code>：输入 2 个特征，输出 1 个数。只有一层其实用不着 Sequential，但以后的模型都是多层的，先熟悉这个写法。</p></div>
+    <div class="cell"><textarea># nn是神经网络的缩写
+from torch import nn
+
+net = nn.Sequential(nn.Linear(2, 1))
+net</textarea></div>
+    <div class="prose"><p><code>net[0]</code> 取出第一层，<code>.weight</code> 和 <code>.bias</code> 是它的参数。注意权重的形状是 [1, 2]，即 [输出数, 输入数]，和昨天的 w [2, 1] 正好是转置关系：<code>nn.Linear</code> 内部算的是 X @ weight.T + bias。</p></div>
+    <div class="cell"><textarea>net[0].weight, net[0].bias</textarea></div>
+    <div class="prose"><p>按昨天的方式初始化：权重从 N(0, 0.01²) 取，偏置设成 0。方法名后面带下划线（<code>normal_</code>、<code>fill_</code>）表示“原地修改”，直接改掉原来的值。</p></div>
+    <div class="cell"><textarea>net[0].weight.data.normal_(0, 0.01)
+net[0].bias.data.fill_(0)</textarea></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.3.3</span><h3>定义损失函数和优化算法</h3></div>
+    <div class="prose"><p><code>nn.MSELoss</code> 是均方误差，默认返回所有样本损失的<b>平均值</b>（昨天手写的版本返回的是每个样本的损失，再自己 <code>.sum()</code>）。</p></div>
+    <div class="cell"><textarea>loss = nn.MSELoss()</textarea></div>
+    <div class="prose"><p><code>torch.optim.SGD</code> 是小批量随机梯度下降，告诉它要更新哪些参数（<code>net.parameters()</code>）和学习率：</p></div>
+    <div class="cell"><textarea>trainer = torch.optim.SGD(net.parameters(), lr=0.03)
+trainer</textarea></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.3.4</span><h3>训练</h3></div>
+    <div class="prose"><p>训练循环和昨天几乎一样，只是把手写的零件换成了框架的：<code>trainer.zero_grad()</code> 清零梯度，<code>l.backward()</code> 求梯度，<code>trainer.step()</code> 更新参数。</p></div>
+    <div class="cell"><textarea>num_epochs = 3
+for epoch in range(num_epochs):
+    for X, y in data_iter:
+        l = loss(net(X) ,y)
+        trainer.zero_grad()
+        l.backward()
+        trainer.step()
+    l = loss(net(features), labels)
+    print(f'epoch {epoch + 1}, loss {l:f}')</textarea></div>
+    <div class="cell"><textarea>w = net[0].weight.data
+print('w的估计误差：', true_w - d2l.reshape(w, true_w.shape))
+b = net[0].bias.data
+print('b的估计误差：', true_b - b)</textarea></div>
+    <div class="panel tblwrap"><table class="t">
+      <thead><tr><th>步骤</th><th>昨天手写（3.2）</th><th>今天用框架（3.3）</th></tr></thead>
+      <tbody>
+        <tr><td>读数据</td><td><code>data_iter(batch_size, features, labels)</code></td><td><code>data.DataLoader(TensorDataset(...), batch_size, shuffle=True)</code></td></tr>
+        <tr><td>模型</td><td><code>linreg(X, w, b)</code></td><td><code>nn.Sequential(nn.Linear(2, 1))</code></td></tr>
+        <tr><td>初始化</td><td><code>torch.normal(0, 0.01, size=(2,1), requires_grad=True)</code></td><td><code>net[0].weight.data.normal_(0, 0.01)</code></td></tr>
+        <tr><td>损失</td><td><code>squared_loss</code>，然后 <code>l.sum()</code></td><td><code>nn.MSELoss()</code>，已经是平均值</td></tr>
+        <tr><td>更新</td><td><code>sgd([w, b], lr, batch_size)</code></td><td><code>trainer.zero_grad(); l.backward(); trainer.step()</code></td></tr>
+      </tbody>
+    </table></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.3.5</span><h3>练习（原书）</h3></div>
+    <div class="prose"><p><b>练习 1</b>：如果把小批量的总损失换成平均损失，学习率要怎么改？昨天手写 sgd 时，损失是总和，所以在更新时除以了批量大小，两者其实等价。如果损失用总和、更新时又不除以批量大小，学习率就要相应除以批量大小，否则步子会大 10 倍。用 <code>reduction='sum'</code> 试试：lr = 0.03 时还能收敛，只是每一步大了 10 倍；把 lr 改成 0.3，就会发散成 nan。</p></div>
+    <div class="cell"><textarea>net = nn.Sequential(nn.Linear(2, 1))
+loss = nn.MSELoss(reduction='sum')
+trainer = torch.optim.SGD(net.parameters(), lr=0.03)
+for epoch in range(3):
+    for X, y in data_iter:
+        l = loss(net(X), y)
+        trainer.zero_grad()
+        l.backward()
+        trainer.step()
+    print(f'epoch {epoch + 1}, loss {nn.MSELoss()(net(features), labels):f}')</textarea></div>
+    <div class="prose"><p><b>练习 2</b>：用 Huber 损失代替平方损失。它在误差小时是平方，误差大时变成直线，所以受离群点影响小。PyTorch 里叫 <code>nn.HuberLoss</code>（原书的公式里 σ 对应 PyTorch 的 <code>nn.SmoothL1Loss(beta=σ)</code>，两者只差一个常数倍）。</p></div>
+    <div class="cell"><textarea>a = torch.tensor([[1.0], [2.0], [4.0]])
+c = torch.tensor([[1.5], [2.0], [1.0]])
+nn.MSELoss(reduction='none')(a, c), nn.HuberLoss(reduction='none')(a, c)</textarea></div>
+    <div class="prose"><p>第三个样本差了 3：平方损失给 9（3²），Huber 只给 2.5，离群点的影响小多了。<b>练习 3</b>：怎么访问梯度？参数的 <code>.grad</code> 就是：</p></div>
+    <div class="cell"><textarea>net = nn.Sequential(nn.Linear(2, 1))
+l = nn.MSELoss()(net(features), labels)
+l.backward()
+net[0].weight.grad, net[0].bias.grad</textarea></div>
+  </div>
+</section>
+
+<section class="part" id="softmax">
+  <div class="part-h"><div class="eyebrow">第二部分</div><h2>3.4 softmax 回归</h2><span class="src">对应原书第 3.4 节。这一节原书没有代码，下面的代码格是本课加的</span></div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.4.1</span><h3>分类问题和独热编码</h3></div>
+    <div class="prose"><p>回归问“有多少”，分类问“是哪一个”：这封邮件是不是垃圾邮件？这张图是猫、鸡还是狗？原书用一个例子：输入是 2×2 的灰度图，4 个像素就是 4 个特征，类别有猫、鸡、狗三种。</p>
+    <p>标签怎么表示？直接写成 1、2、3 会让模型以为类别之间有大小顺序（“狗 = 3 比猫 = 1 大”），这通常没有意义。常用的是<b>独热编码</b>：向量长度等于类别数，属于哪类哪一位就是 1，其他是 0。猫 = (1, 0, 0)，鸡 = (0, 1, 0)，狗 = (0, 0, 1)。第 2 天的 <code>get_dummies</code> 做的就是这件事。</p></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.4.2</span><h3>网络架构</h3></div>
+    <div class="prose"><p>每个类别要一个输出，每个输出都是 4 个输入的加权和再加偏置。所以有 3×4 = 12 个权重和 3 个偏置。写成矩阵：<b>o = Wx + b</b>，W 是 3×4。三个输出 o₁、o₂、o₃ 叫 <b>logit</b>（未规范化的预测，可以是任何实数）。和线性回归一样，这也是一层全连接层，所以 softmax 回归也是单层神经网络。</p>
+    <p>全连接层的参数很多：d 个输入、q 个输出就要 d×q 个权重。你论文 DKT 的输出层是 64 个输入、145 个输出（ASSISTments 的技能数），光这一层就有 64×145 + 145 = 9425 个参数。</p></div>
+    <div class="cell"><textarea>net = nn.Sequential(nn.Linear(4, 3))
+x = torch.tensor([[0.2, 0.9, 0.1, 0.5]])      # 一张 2×2 的图拉成 4 个数
+net(x), net[0].weight.shape, sum(p.numel() for p in net.parameters())</textarea></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.4.3</span><h3>softmax 运算</h3></div>
+    <div class="prose"><p>logit 不能直接当概率：它们可以是负数，加起来也不等于 1，违反第 4 天学的概率公理。<b>softmax</b> 把它们变成概率：先对每个数求 e 的幂（保证是正数），再除以总和（保证加起来是 1）：</p>
+    <p style="font-family:var(--f-mono);font-size:14px">ŷⱼ = exp(oⱼ) / Σₖ exp(oₖ)</p>
+    <p>它不改变大小顺序，所以预测哪一类时，看 logit 最大的那个就行。softmax 回归虽然用了非线性的 softmax，但输出仍由输入的仿射变换决定，所以它还是<b>线性模型</b>。</p></div>
+    <div class="cell"><textarea>o = torch.tensor([[1.0, 2.0, 3.0], [1.0, 1.0, 1.0]])
+exp_o = o.exp()
+exp_o / exp_o.sum(1, keepdim=True)          # 第 2 天学的 keepdim + 广播</textarea></div>
+    <div class="cell"><textarea>torch.softmax(o, dim=1), torch.softmax(o, dim=1).sum(1)</textarea></div>
+    <div class="panel stack" id="smLab">
+      <h4>softmax 调试台</h4>
+      <p class="small muted">拖动三个类别的 logit，看概率怎么变。选一个“真实类别”，下面会算出交叉熵损失和它对 logit 的梯度。“温度”是把 logit 先除以一个数再做 softmax：温度低，最大的那个更突出；温度高，概率更平均。调试台第 5 章生成文字时也有这个温度。</p>
+      <div class="row">
+        <label class="ctrl" for="smO1">猫的 logit <output id="smO1v">1.0</output><input type="range" id="smO1" min="-4" max="6" step="0.1" value="1"></label>
+        <label class="ctrl" for="smO2">鸡的 logit <output id="smO2v">2.0</output><input type="range" id="smO2" min="-4" max="6" step="0.1" value="2"></label>
+        <label class="ctrl" for="smO3">狗的 logit <output id="smO3v">3.0</output><input type="range" id="smO3" min="-4" max="6" step="0.1" value="3"></label>
+      </div>
+      <div class="row">
+        <label class="ctrl" for="smT">温度 <output id="smTv">1.0</output><input type="range" id="smT" min="0.1" max="5" step="0.1" value="1"></label>
+        <label class="ctrl" for="smY">真实类别
+          <select id="smY"><option value="0">猫</option><option value="1">鸡</option><option value="2" selected>狗</option></select></label>
+      </div>
+      <div class="bars" id="smBars"></div>
+      <div class="calc" id="smCalc"></div>
+    </div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.4.4</span><h3>小批量的矢量化</h3></div>
+    <div class="prose"><p>一个小批量 X 的形状是 [n, d]（n 个样本，d 个特征），权重 W 是 [d, q]，偏置 b 是 [1, q]，q 是类别数。<b>O = XW + b</b>，<b>Ŷ = softmax(O)</b>，O 和 Ŷ 都是 [n, q]。softmax 按行做：每一行是一个样本，每行的 q 个数变成这个样本属于各类的概率。</p></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.4.5</span><h3>损失函数：交叉熵</h3></div>
+    <div class="prose"><p>还是用第 5 天的极大似然：让模型给真实标签的概率尽量大，等价于让负对数似然尽量小。对一个样本，如果真实类别是 y，损失就是 <b>l = −log ŷ_y</b>，也就是“模型给正确答案的概率”取对数再取负。这叫<b>交叉熵损失</b>。模型给正确答案 100% 时损失是 0；只给 1% 时损失是 4.6。</p>
+    <p>下面 2 个样本、3 个类别。第 1 个样本真实类别是 0，模型只给了 0.1；第 2 个是类别 2，模型给了 0.5。<code>y_hat[[0, 1], y]</code> 这种写法一次取出每一行“正确类别”那一格：</p></div>
+    <div class="cell"><textarea>y_hat = torch.tensor([[0.1, 0.3, 0.6], [0.3, 0.2, 0.5]])
+y = torch.tensor([0, 2])
+y_hat[[0, 1], y]</textarea></div>
+    <div class="cell"><textarea>-torch.log(y_hat[[0, 1], y])</textarea></div>
+    <div class="prose"><p>PyTorch 的 <code>nn.CrossEntropyLoss</code> 直接吃 logit（不用自己先做 softmax），内部一起算 softmax 和 −log，数值更稳定：</p></div>
+    <div class="cell"><textarea>logits = torch.tensor([[2.0, 1.0, 0.1], [0.5, 2.5, 0.3]], requires_grad=True)
+targets = torch.tensor([0, 1])
+l = nn.CrossEntropyLoss()(logits, targets)
+l</textarea></div>
+    <div class="prose"><p>交叉熵对 logit 的梯度特别简单：<b>softmax(o) − y</b>，也就是“预测的概率减去独热的真实标签”。预测得越准，梯度越小。验证一下（PyTorch 的损失默认对 2 个样本取了平均，所以梯度要除以 2）：</p></div>
+    <div class="cell"><textarea>l.backward()
+logits.grad, (torch.softmax(logits.detach(), dim=1) - torch.tensor([[1.0, 0, 0], [0, 1.0, 0]])) / 2</textarea></div>
+  </div>
+
+  <div class="blk" id="bce"><div class="blk-h"><span class="n">3.4.6</span><h3>两个类别时：sigmoid 和 BCE（你论文用的就是这个）</h3></div>
+    <div class="prose"><p>只有两类（比如“答对”和“答错”）时，只需要一个 logit z：答对的概率 = <b>sigmoid(z) = 1 / (1 + e⁻ᶻ)</b>。它其实就是两类的 softmax：把两个 logit 设成 0 和 z，softmax 出来第二类的概率正好是 sigmoid(z)：</p></div>
+    <div class="cell"><textarea>z = torch.tensor([2.0, -1.0, 0.5])
+two = torch.stack([torch.zeros(3), z], dim=1)
+torch.softmax(two, dim=1)[:, 1], torch.sigmoid(z)</textarea></div>
+    <div class="prose"><p>对应的交叉熵叫<b>二元交叉熵（BCE）</b>：l = −[y·log p + (1 − y)·log(1 − p)]。你论文第 3 节公式 (1) 写的 L_BCE 就是这个，y 是学生下一题的真实对错，p 是 DKT 预测的答对概率。</p></div>
+    <div class="cell"><textarea>p = torch.tensor([0.9, 0.2, 0.6])          # 模型预测的答对概率
+t = torch.tensor([1.0, 0.0, 1.0])          # 实际：对、错、对
+nn.BCELoss()(p, t), -(t * torch.log(p) + (1 - t) * torch.log(1 - p)).mean()</textarea></div>
+    <div class="prose"><p>实际写代码时更常用 <code>BCEWithLogitsLoss</code>，直接吃 logit，内部再做 sigmoid，数值更稳定：</p></div>
+    <div class="cell"><textarea>nn.BCEWithLogitsLoss()(z, t), nn.BCELoss()(torch.sigmoid(z), t)</textarea></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.4.7</span><h3>信息论基础：熵和惊异</h3></div>
+    <div class="prose"><p>原书从信息论的角度解释交叉熵。一个结果发生的概率是 P，看到它时的<b>惊异</b>是 −log P：越罕见的事越让人惊讶。<b>熵</b> H(P) = Σ −P(j) log P(j) 是平均惊异，衡量一个分布有多“不确定”。用以 2 为底的对数，单位是比特。四个结果完全平均时熵最大，是 2 比特；越集中熵越小：</p></div>
+    <div class="cell"><textarea>q = torch.tensor([0.25, 0.25, 0.25, 0.25])
+r = torch.tensor([0.7, 0.1, 0.1, 0.1])
+H = lambda p: -(p * torch.log2(p)).sum()
+H(q), H(r)</textarea></div>
+    <div class="prose"><p><b>交叉熵</b> H(P, Q) = Σ −P(j) log Q(j)：真实分布是 P，你却按自己以为的分布 Q 去预期，得到的平均惊异。当 Q = P 时最小，就等于熵。所以最小化交叉熵，就是让模型的预测分布 Q 尽量接近数据的真实分布 P。上面的交叉熵损失是它在“真实分布是独热向量”时的特例。</p></div>
+  </div>
+
+  <div class="blk" id="calib"><div class="blk-h"><span class="n">3.4.8</span><h3>校准：模型说 70%，是不是真有 70%</h3></div>
+    <div class="prose"><p>原书在讲 softmax 时提到一个性质：在模型输出 0.5 的所有样本里，应该刚好有一半真的属于那一类。这叫<b>校准</b>（calibration）。衡量校准的常用指标是 <b>ECE</b>（期望校准误差）：把预测按置信度分成 10 个区间，每个区间里比较“平均预测概率”和“实际正确率”的差，再按样本数加权平均。你论文表 1 里的 ECE（Safe-DFKT-AG 1.21%，DKT 0.94%）就是这样算的，用的正是 10 个等宽区间。</p></div>
+    <div class="panel stack" id="calLab">
+      <h4>可靠性图</h4>
+      <p class="small muted">下面模拟一个分类器：每个样本有一个真实的答对概率，模型报出的置信度可能偏高（过度自信）或偏低。柱子是每个区间的实际正确率，虚线是“完美校准”。柱子比虚线低，说明模型说得比实际更有把握。</p>
+      <div class="row">
+        <label class="ctrl" for="calK">自信程度 <output id="calKv">1.0（校准良好）</output><input type="range" id="calK" min="0.4" max="3" step="0.1" value="1"></label>
+        <button class="btn" id="calNew">换一批样本</button>
+      </div>
+      <div class="two"><div class="cv" id="calHost"><canvas id="calCv" aria-label="可靠性图：每个置信度区间的实际正确率"></canvas></div><div class="calc" id="calCalc"></div></div>
+      <p class="note">你论文的一个结论是：Safe-DFKT-AG 的校准几乎没有变差（模拟器里 1.64% 对 1.44%，差异不显著），重新校准也只补回了 2.9% 的决策差距。所以教学效果差不是校准的问题。今天学完，你就能看懂这句话里每个词了。</p>
+    </div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">3.4.9</span><h3>模型预测和评估</h3></div>
+    <div class="prose"><p>训练好以后，给一个新样本，选概率最大的那一类作为预测。预测对的比例叫<b>精度</b>（accuracy）。明天在 Fashion-MNIST 服装图片上，会真正训练一个 softmax 回归并计算精度。</p></div>
+    <div class="cell"><textarea>from torch.nn import functional as F
+F.softmax(o, dim=1).argmax(), o.argmax()</textarea></div>
+  </div>
+</section>
+
+<section class="part">
+  <div class="part-h"><div class="eyebrow">今日小结</div><h2>今天学会了吗？</h2></div>
+  <div class="two">
+    <div class="panel stack">
+      <ul class="check-list" data-day="6">
+        <li><label><input type="checkbox" data-k="c1">我会用 DataLoader、nn.Sequential、nn.Linear、nn.MSELoss、optim.SGD 写训练循环</label></li>
+        <li><label><input type="checkbox" data-k="c2">我知道 nn.Linear 的 weight 形状是 [输出数, 输入数]</label></li>
+        <li><label><input type="checkbox" data-k="c3">我知道独热编码、logit、softmax 分别是什么</label></li>
+        <li><label><input type="checkbox" data-k="c4">交叉熵损失 = −log(模型给正确答案的概率)，梯度是 softmax − y</label></li>
+        <li><label><input type="checkbox" data-k="c5">两类时用 sigmoid + BCE，我论文的 DKT 就是这样</label></li>
+        <li><label><input type="checkbox" data-k="c6">我知道校准和 ECE 是什么</label></li>
+      </ul>
+      <span class="small check-msg"></span>
+    </div>
+    <div class="panel stack">
+      <h3>明天（第 7 天）学什么</h3>
+      <p>原书 3.5 图像分类数据集（Fashion-MNIST）、3.6 softmax 回归的从零实现、3.7 简洁实现。在真实的服装图片上训练第一个分类器，看它的精度怎么一个 epoch 一个 epoch地涨上去。</p>
+    </div>
+  </div>
+</section>
+</main>

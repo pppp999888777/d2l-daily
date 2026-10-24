@@ -1,0 +1,123 @@
+
+// ---------- 张量的属性和方法 ----------
+function tensorAttr(T,name){
+  switch(name){case'shape':return{t:'size',dims:T.shape.slice()};case'dtype':return DT(T.dtype);case'T':return transpose2(T);case'ndim':return I(T.shape.length);
+    case'requires_grad':return B(T.requires_grad);case'grad':return T.grad||NONE;case'grad_fn':return T.grad_fn?{t:'gradfn',g:T.grad_fn}:NONE;case'is_leaf':return B(!T.grad_fn);case'data':{const d=mkT(T.shape.slice(),[],T.dtype);d.data=T.data;return d}}
+  const m=tensorMethod(T,name);if(m)return fn(name,m);err('AttributeError',`'${T.np?'numpy.ndarray':'Tensor'}' object has no attribute '${name}'`)}
+function tensorMethod(T,name){
+  const M={reshape:a=>reshapeT(T,dimsArg(a)),view:a=>reshapeT(T,dimsArg(a)),numel:()=>I(T.data.length),
+    size:a=>a.length?I(T.shape[intOf(a[0])<0?T.shape.length+intOf(a[0]):intOf(a[0])]):{t:'size',dims:T.shape.slice()},
+    sum:(a,kw)=>reduce(T,dimArg(a,kw),'sum',keepArg(kw)),mean:(a,kw)=>reduce(T,dimArg(a,kw),'mean',keepArg(kw)),max:(a,kw)=>reduce(T,dimArg(a,kw),'max',keepArg(kw)),min:(a,kw)=>reduce(T,dimArg(a,kw),'min',keepArg(kw)),
+    cumsum:(a,kw)=>cumsum(T,dimArg(a,kw)),norm:()=>normT(T),
+    item:()=>{if(T.data.length!==1)err('RuntimeError',`a Tensor with ${T.data.length} elements cannot be converted to Scalar`);const v=T.data[0];return isFloatDt(T.dtype)?F(v):T.dtype==='bool'?B(v):I(v)},
+    tolist:()=>{const rec=(d,off)=>{if(d===T.shape.length){const v=T.data[off];return isFloatDt(T.dtype)?F(v):T.dtype==='bool'?B(v):I(v)}const st=strides(T.shape);const r=[];for(let i=0;i<T.shape[d];i++)r.push(rec(d+1,off+i*st[d]));return list(r)};return rec(0,0)},
+    numpy:()=>{if(T.requires_grad)err('RuntimeError',"Can't call numpy() on Tensor that requires grad. Use tensor.detach().numpy() instead.");const R=mkT(T.shape.slice(),[],T.dtype,true);R.data=T.data;R.id=T.id+8;return R},
+    clone:()=>track(mkT(T.shape.slice(),T.data,T.dtype,T.np),[T],'CloneBackward0',g=>[g]),copy:()=>mkT(T.shape.slice(),T.data,T.dtype,T.np),
+    float:()=>mkT(T.shape.slice(),T.data,'float32'),double:()=>mkT(T.shape.slice(),T.data,'float64'),long:()=>mkT(T.shape.slice(),T.data,'int64'),int:()=>mkT(T.shape.slice(),T.data,'int64'),
+    astype:a=>mkT(T.shape.slice(),T.data,dtypeKw({dtype:a[0]},T.dtype),true),type:a=>mkT(T.shape.slice(),T.data,dtypeKw({dtype:a[0]},T.dtype),T.np),
+    exp:()=>unary(T,'exp'),log:()=>unary(T,'log'),log2:()=>unary(T,'log2'),sqrt:()=>unary(T,'sqrt'),abs:()=>unary(T,'abs'),sigmoid:()=>unary(T,'sigmoid'),relu:()=>unary(T,'relu'),tanh:()=>unary(T,'tanh'),t:()=>transpose2(T),
+    matmul:a=>matmul(T,asTensor(a[0])),dot:a=>matmul(T,asTensor(a[0])),
+    requires_grad_:a=>{const v=a.length?!!numOf(a[0]):true;if(v&&!isFloatDt(T.dtype))err('RuntimeError','only Tensors of floating point dtype can require gradients');T.requires_grad=v;return T},
+    backward:(a,kw)=>backward(T,a[0]||kw.gradient,kw.retain_graph&&kw.retain_graph.v),
+    detach:()=>{const d=mkT(T.shape.slice(),[],T.dtype,T.np);d.data=T.data;return d},
+    zero_:()=>{T.data.fill(0);return T},
+    normal_:a=>{const m=a[0]?numOf(a[0]):0,s=a[1]?numOf(a[1]):1;for(let i=0;i<T.data.length;i++)T.data[i]=castVal(m+s*gauss(),T.dtype);return T},
+    fill_:a=>{T.data.fill(castVal(numOf(a[0]),T.dtype));return T},
+    sub_:a=>{checkInplace(T);const r=binop('-',T,a[0]);T.data.set(r.data);return T},add_:a=>{checkInplace(T);const r=binop('+',T,a[0]);T.data.set(r.data);return T},
+    argmax:(a,kw)=>argmaxT(T,dimArg(a,kw),keepArg(kw),1),argmin:(a,kw)=>argmaxT(T,dimArg(a,kw),keepArg(kw),-1),
+    unsqueeze:a=>{const s=T.shape.slice();let d=intOf(a[0]);if(d<0)d+=s.length+1;s.splice(d,0,1);return reshapeT(T,s)},squeeze:()=>reshapeT(T,T.shape.filter(d=>d!==1)),
+    flatten:()=>reshapeT(T,[-1]),softmax:(a,kw)=>softmaxT(T,intOf(kwOr(kw,a,'dim',0))),log_softmax:(a,kw)=>softmaxT(T,intOf(kwOr(kw,a,'dim',0)),true),all:()=>mkT([],[T.data.every(Boolean)?1:0],'bool',T.np),any:()=>mkT([],[T.data.some(Boolean)?1:0],'bool',T.np),round:()=>mkT(T.shape.slice(),Array.from(T.data,v=>Math.round(v)),T.dtype,T.np),__len__:()=>I(T.shape[0])};
+  return M[name]}
+
+// ---------- 内置函数 ----------
+function iterate(v){if(isT(v)){if(!v.shape.length)err('TypeError','iteration over a 0-d tensor');const r=[];for(let i=0;i<v.shape[0];i++)r.push(getItem(v,[{v:i}]));return r}
+  switch(v.t){case'list':case'tuple':return v.items.slice();case'str':return[...v.v].map(S);case'range':{const r=[];if(v.step>0)for(let i=v.start;i<v.stop;i+=v.step)r.push(I(i));else for(let i=v.start;i>v.stop;i+=v.step)r.push(I(i));return r}
+    case'loader':return loaderBatches(v,CUR);case'axarr':return v.fig.axes.slice();case'fmnist':return Array.from({length:v.n},(_,i)=>fmGet(v,i));case'tdataset':return Array.from({length:v.tensors[0].shape[0]},(_,i)=>tup(v.tensors.map(t=>getItem(t,[{v:i}]))));case'nn':return v.children.map(c=>c[1]);
+    case'dict':return[...v.m.values()].map(e=>e[0]);case'iter':{if(v.gen){const r=[];for(const x of v.gen)r.push(x);return r}const r=v.items.slice(v.pos);v.pos=v.items.length;return r}case'size':return v.dims.map(I);case'df':return v.cols.map(S);case'series':return v.values.map(x=>pyVal(x,v.dtype));case'index':return v.items.map(S);case'file':return FS.get(v.p).split(/(?<=\n)/).filter(Boolean).map(S)}
+  err('TypeError',`'${typeName(v)}' object is not iterable`)}
+function truthy(v){if(isT(v)){if(v.data.length!==1)err('RuntimeError','Boolean value of Tensor with more than one value is ambiguous');return!!v.data[0]}
+  switch(v.t){case'none':return false;case'bool':case'int':case'float':return!!v.v;case'str':return!!v.v.length;case'list':case'tuple':return!!v.items.length;case'dict':return!!v.m.size;case'range':return iterate(v).length>0;case'df':case'series':err('ValueError','The truth value of a DataFrame is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().')}return true}
+function dictKey(k){if(isT(k))return'T'+k.id;return k.t+':'+(k.t==='tuple'?k.items.map(dictKey).join('|'):k.t==='float'&&Number.isInteger(k.v)?k.v:k.v)}
+const numKey=k=>(k.t==='float'||k.t==='bool')&&pyNum(k)===Math.trunc(pyNum(k))?'int:'+pyNum(k):dictKey(k);
+function mkDict(pairs){const m=new Map();for(const[k,v]of pairs)m.set(numKey(k),[k,v]);return{t:'dict',m}}
+function pyLen(v){if(isT(v)){if(!v.shape.length)err('TypeError','len() of a 0-d tensor');return v.shape[0]}if(v.items)return v.items.length;if(v.t==='str')return[...v.v].length;if(v.t==='dict')return v.m.size;if(v.t==='size')return v.dims.length;if(v.t==='range')return iterate(v).length;if(v.t==='df')return v.index.length;if(v.t==='series')return v.values.length;if(v.t==='tdataset')return v.tensors[0].shape[0];if(v.t==='fmnist')return v.n;if(v.t==='axarr')return v.fig.axes.length;if(v.t==='loader'){const n=dsLen(v.ds,CUR);return v.drop_last?Math.floor(n/v.bs):Math.ceil(n/v.bs)}if(v.t==='nn')return v.children.length;if(v.t==='obj'){const f=classLookup(v.cls,'__len__');if(f)return intOf(callValue({t:'bound',f,self:v},[],{},CUR))}err('TypeError',`object of type '${typeName(v)}' has no len()`)}
+function pyCmpLess(a,b){if(isT(a)||isT(b))return truthy(binop('<',a,b));const x=pyNum(a),y=pyNum(b);if(x!=null&&y!=null)return x<y;if(a.t==='str'&&b.t==='str')return a.v<b.v;if(a.items&&b.items){for(let i=0;i<Math.min(a.items.length,b.items.length);i++){if(pyCmpLess(a.items[i],b.items[i]))return true;if(pyCmpLess(b.items[i],a.items[i]))return false}return a.items.length<b.items.length}err('TypeError',`'<' not supported between instances of '${typeName(a)}' and '${typeName(b)}'`)}
+// 格式化：f'{x:.5f}' 和 format()
+function formatSpec(v,spec){if(!spec)return str(v);const m=spec.match(/^(?:(.)?([<>^=]))?([+\- ])?(#)?(0)?(\d+)?([,_])?(?:\.(\d+))?([bcdeEfFgGnosxX%])?$/);if(!m)err('ValueError',`Invalid format specifier '${spec}'`);
+  let[,fill,align,sign,,zero,width,group,prec,type]=m;fill=fill||(zero&&!align?'0':' ');align=align||(zero?'=':null);
+  let s;const n=v.t==='str'?null:(isT(v)?v.data[0]:pyNum(v));
+  if(v.t==='str'){s=v.v;if(prec)s=s.slice(0,+prec)}
+  else{if(n==null)err('TypeError',`unsupported format string passed to ${typeName(v)}.__format__`);const t=type||(v.t==='int'?'d':(prec?'g':''));
+    const a=Math.abs(n);if(!Number.isFinite(n)&&'fFeEgG%'.includes(t||'f')){s=Number.isNaN(n)?'nan':'inf';if('FEG'.includes(t))s=s.toUpperCase();const sg0=n<0?'-':sign==='+'?'+':'';s=sg0+s;if(width&&s.length<+width)s=s.padStart(+width,' ');return s}switch(t){case'd':if(!Number.isInteger(n))err('ValueError',"Unknown format code 'd' for object of type 'float'");s=String(a);break;case'f':case'F':s=a.toFixed(prec?+prec:6);break;case'e':case'E':s=a.toExponential(prec?+prec:6).replace(/e([+-])(\d)$/,'e$10$2');if(t==='E')s=s.toUpperCase();break;
+      case'%':s=(a*100).toFixed(prec?+prec:6)+'%';break;case'g':case'G':{const p=prec?Math.max(1,+prec):6;const ex=a===0?0:Math.floor(Math.log10(a));s=ex<-4||ex>=p?a.toExponential(p-1).replace(/\.?0+e/,'e').replace(/e([+-])(\d)$/,'e$10$2'):String(+a.toPrecision(p));break}
+      default:s=v.t==='float'?pyFloatRepr(a):String(a)}
+    if(group){const[ip,fp]=s.split('.');s=ip.replace(/\B(?=(\d{3})+(?!\d))/g,group)+(fp!=null?'.'+fp:'')}
+    const sg=n<0||Object.is(n,-0)?'-':sign==='+'?'+':sign===' '?' ':'';if(align==='='&&width){s=sg+s.padStart(+width-sg.length,fill);return s}s=sg+s}
+  if(width&&s.length<+width){const w=+width,padN=w-s.length;const al=align||(v.t==='str'?'<':'>');s=al==='<'?s+fill.repeat(padN):al==='^'?fill.repeat(Math.floor(padN/2))+s+fill.repeat(Math.ceil(padN/2)):fill.repeat(padN)+s}return s}
+function percentFormat(fmt,arg){const args=arg.t==='tuple'?arg.items.slice():[arg];return fmt.replace(/%(-?\d*)(?:\.(\d+))?([sdfr%])/g,(m0,w,p,t)=>{if(t==='%')return'%';const v=args.shift();let s=t==='s'?str(v):t==='r'?repr(v):t==='d'?String(Math.trunc(numOf(v))):numOf(v).toFixed(p?+p:6);if(w){const n=Math.abs(+w);s=+w<0?s.padEnd(n):s.padStart(n)}return s})}
+const builtins={
+  super:fn('super',(a,kw,ctx)=>{const sc=ctx.scope;let cls=null,self=null;try{cls=sc.get('__class__');self=sc.get('__self__')}catch(e){err('RuntimeError','super(): no arguments')}return{t:'super',cls,self}}),
+  print:fn('print',(a,kw,ctx)=>{const s=a.map(str).join(kw.sep?str(kw.sep):' ')+(kw.end?str(kw.end):'\n');ctx.outBuf+=s;return NONE}),
+  id:fn('id',a=>I(isT(a[0])?a[0].id:a[0].id||(a[0].id=newId()))),
+  type:fn('type',a=>a[0].t==='nn'?nnMod.attrs[a[0].kind]:a[0].t==='obj'?a[0].cls:({t:'type',name:isT(a[0])?(a[0].np?'numpy.ndarray':'torch.Tensor'):a[0].t==='df'?'pandas.DataFrame':a[0].t==='series'?'pandas.Series':typeName(a[0])})),
+  float:fn('float',a=>{const v=a[0];if(!v)return F(0);if(isT(v)){if(v.data.length!==1)err(v.np?'TypeError':'ValueError',v.np?'only length-1 arrays can be converted to Python scalars':'only one element tensors can be converted to Python scalars');return F(v.data[0])}if(v.t==='str'){const s=v.v.trim().toLowerCase();if(s==='nan')return F(NaN);if(s==='inf')return F(Infinity);const x=Number(s);if(s===''||Number.isNaN(x))err('ValueError',`could not convert string to float: '${v.v}'`);return F(x)}return F(numOf(v))}),
+  int:fn('int',a=>{const v=a[0];if(!v)return I(0);if(isT(v)){if(v.data.length!==1)err('ValueError','only one element tensors can be converted to Python scalars');return I(Math.trunc(v.data[0]))}if(v.t==='str'){if(!/^\s*[-+]?\d+\s*$/.test(v.v))err('ValueError',`invalid literal for int() with base 10: '${v.v}'`);return I(parseInt(v.v))}return I(Math.trunc(numOf(v)))}),
+  bool:fn('bool',a=>B(a[0]?truthy(a[0]):false)),str:fn('str',a=>S(a[0]?str(a[0]):'')),repr:fn('repr',a=>S(repr(a[0]))),
+  len:fn('len',a=>I(pyLen(a[0]))),abs:fn('abs',a=>isT(a[0])?unary(a[0],'abs'):a[0].t==='int'?I(Math.abs(a[0].v)):F(Math.abs(numOf(a[0])))),
+  round:fn('round',a=>{const x=numOf(a[0]);if(a[1]){const p=10**intOf(a[1]);return F(Math.round(x*p)/p)}const r=Math.round(x);return I(Math.abs(x%1)===0.5&&r%2?r-1:r)}),
+  range:fn('range',a=>{const n=a.map(intOf);let[s,e,st]=n.length===1?[0,n[0],1]:[n[0],n[1],n[2]||1];if(st===0)err('ValueError','range() arg 3 must not be zero');return{t:'range',start:s,stop:e,step:st}}),
+  list:fn('list',a=>list(a[0]?iterate(a[0]):[])),tuple:fn('tuple',a=>tup(a[0]?iterate(a[0]):[])),dict:fn('dict',(a,kw)=>{const pairs=a[0]?iterate(a[0]).map(p=>iterate(p)):[];for(const k in kw)pairs.push([S(k),kw[k]]);return mkDict(pairs)}),
+  set:fn('set',a=>{const seen=new Map();for(const x of a[0]?iterate(a[0]):[])seen.set(numKey(x),x);return list([...seen.values()])}),
+  enumerate:fn('enumerate',(a,kw)=>{const s=a[1]?intOf(a[1]):kw.start?intOf(kw.start):0;return{t:'iter',items:iterate(a[0]).map((x,i)=>tup([I(i+s),x])),pos:0}}),
+  zip:fn('zip',a=>{const ls=a.map(iterate),n=Math.min(...ls.map(l=>l.length));return{t:'iter',items:Array.from({length:n},(_,i)=>tup(ls.map(l=>l[i]))),pos:0}}),
+  sum:fn('sum',a=>{let acc=a[1]||I(0);for(const x of iterate(a[0]))acc=binop('+',acc,x);return acc}),
+  min:fn('min',(a,kw)=>{const L=a.length>1?a:iterate(a[0]);if(!L.length)err('ValueError','min() arg is an empty sequence');const key=kw.key;let b=L[0];for(const x of L){if(key?pyCmpLess(callValue(key,[x],{}),callValue(key,[b],{})):pyCmpLess(x,b))b=x}return b}),
+  max:fn('max',(a,kw)=>{const L=a.length>1?a:iterate(a[0]);if(!L.length)err('ValueError','max() arg is an empty sequence');const key=kw.key;let b=L[0];for(const x of L){if(key?pyCmpLess(callValue(key,[b],{}),callValue(key,[x],{})):pyCmpLess(b,x))b=x}return b}),
+  sorted:fn('sorted',(a,kw)=>{const L=iterate(a[0]),key=kw.key;const ks=L.map(x=>key?callValue(key,[x],{}):x);const idx=L.map((_,i)=>i).sort((i,j)=>pyCmpLess(ks[i],ks[j])?-1:pyCmpLess(ks[j],ks[i])?1:i-j);if(kw.reverse&&kw.reverse.v)idx.reverse();return list(idx.map(i=>L[i]))}),
+  reversed:fn('reversed',a=>({t:'iter',items:iterate(a[0]).reverse(),pos:0})),iter:fn('iter',(a,kw,ctx)=>a[0].t==='loader'?{t:'iter',gen:loaderGen(a[0],ctx),items:[],pos:0}:a[0].t==='iter'?a[0]:{t:'iter',items:iterate(a[0]),pos:0}),
+  next:fn('next',a=>{const it=a[0];if(it.t!=='iter')err('TypeError',`'${typeName(it)}' object is not an iterator`);if(it.gen){const r=it.gen.next();if(r.done){if(a[1])return a[1];err('StopIteration','')}return r.value}if(it.pos>=it.items.length){if(a[1])return a[1];err('StopIteration','')}return it.items[it.pos++]}),
+  isinstance:fn('isinstance',a=>{const v=a[0],ts=a[1].t==='tuple'?a[1].items:[a[1]];if(ts.some(t=>t.t==='cls'&&((t===ModuleCls&&isMod(v))||(t===OptimizerCls&&v.t==='optim')||(v.t==='obj'&&(()=>{let c=v.cls;while(c){if(c===t)return true;c=c.base}return false})()))))return B(true);return B(ts.some(t=>(t.t==='fn'&&t.typeName)?(t.typeName===typeName(v)||(t.typeName==='int'&&v.t==='bool')):t.t==='type'&&(t.name===typeName(v)||(t.name==='torch.Tensor'&&isT(v)&&!v.np)||(t.name==='float'&&v.t==='float')||(t.name==='int'&&(v.t==='int'||v.t==='bool')))))}),
+  open:fn('open',(a,kw)=>openFile(str(a[0]),a[1]?str(a[1]):kw.mode?str(kw.mode):'r')),
+  dir:fn('dir',a=>{const v=a[0];if(v===torch.attrs.distributions)return list(DIR_DIST.map(S));const keys=v.t==='mod'?Object.keys(v.attrs):isT(v)?['T','backward','detach','grad','item','mean','numel','numpy','requires_grad','reshape','shape','sum']:[];return list(keys.sort().map(S))}),
+  help:fn('help',(a,kw,ctx)=>{const v=a[0];ctx.outBuf+=HELP[v.name]||`Help on ${v.t==='fn'?'built-in function '+v.name:typeName(v)}:\n\n（本页的简化版 torch 没有收录这个函数的完整文档，请查看 https://pytorch.org/docs/ ）\n`;return NONE}),
+  hasattr:fn('hasattr',a=>{const nm=str(a[1]),v=a[0];if(nm==='__len__')return B(!!(v.items||v.t==='str'||v.t==='dict'||v.t==='size'||v.t==='range'||v.t==='df'||v.t==='series'||v.t==='loader'||v.t==='tdataset'||v.t==='fmnist'||(isT(v)&&v.shape.length>0)||(v.t==='obj'&&classLookup(v.cls,'__len__'))));try{getAttr(a[0],str(a[1]));return B(true)}catch(e){return B(false)}}),getattr:fn('getattr',a=>{try{return getAttr(a[0],str(a[1]))}catch(e){if(a[2])return a[2];throw e}}),
+  format:fn('format',a=>S(formatSpec(a[0],a[1]?str(a[1]):''))),chr:fn('chr',a=>S(String.fromCodePoint(intOf(a[0])))),ord:fn('ord',a=>I(str(a[0]).codePointAt(0))),
+  all:fn('all',a=>B(iterate(a[0]).every(truthy))),any:fn('any',a=>B(iterate(a[0]).some(truthy))),divmod:fn('divmod',a=>tup([binop('//',a[0],a[1]),binop('%',a[0],a[1])])),pow:fn('pow',a=>binop('**',a[0],a[1])),
+  True:B(true),False:B(false),None:NONE,
+};
+for(const n of['int','float','str','bool','list','tuple','dict'])builtins[n].typeName=n;
+const HELP={ones:"Help on built-in function ones in module torch:\n\nones(...)\n    ones(*size, *, out=None, dtype=None, layout=torch.strided, device=None, requires_grad=False) -> Tensor\n\n    Returns a tensor filled with the scalar value `1`, with the shape defined\n    by the variable argument :attr:`size`.\n\n    Args:\n        size (int...): a sequence of integers defining the shape of the output tensor.\n            Can be a variable number of arguments or a collection like a list or tuple.\n\n    Keyword arguments:\n        out (Tensor, optional): the output tensor.\n        dtype (:class:`torch.dtype`, optional): the desired data type of returned tensor.\n            Default: if ``None``, uses a global default (see :func:`torch.set_default_dtype`).\n        layout (:class:`torch.layout`, optional): the desired layout of returned Tensor.\n            Default: ``torch.strided``.\n        device (:class:`torch.device`, optional): the desired device of returned tensor.\n            Default: if ``None``, uses the current device for the default tensor type\n            (see :func:`torch.set_default_device`). :attr:`device` will be the CPU\n            for CPU tensor types and the current CUDA device for CUDA tensor types.\n        requires_grad (bool, optional): If autograd should record operations on the\n            returned tensor. Default: ``False``.\n\n    Example::\n\n        >>> torch.ones(2, 3)\n        tensor([[ 1.,  1.,  1.],\n                [ 1.,  1.,  1.]])\n\n        >>> torch.ones(5)\n        tensor([ 1.,  1.,  1.,  1.,  1.])\n\n"};
+const DIR_DIST=["AbsTransform", "AffineTransform", "Bernoulli", "Beta", "Binomial", "CatTransform", "Categorical", "Cauchy", "Chi2", "ComposeTransform", "ContinuousBernoulli", "CorrCholeskyTransform", "CumulativeDistributionTransform", "Dirichlet", "Distribution", "ExpTransform", "Exponential", "ExponentialFamily", "FisherSnedecor", "Gamma", "GeneralizedPareto", "Geometric", "Gumbel", "HalfCauchy", "HalfNormal", "Independent", "IndependentTransform", "InverseGamma", "Kumaraswamy", "LKJCholesky", "Laplace", "LogNormal", "LogisticNormal", "LowRankMultivariateNormal", "LowerCholeskyTransform", "MixtureSameFamily", "Multinomial", "MultivariateNormal", "NegativeBinomial", "Normal", "OneHotCategorical", "OneHotCategoricalStraightThrough", "Pareto", "Poisson", "PositiveDefiniteTransform", "PowerTransform", "RelaxedBernoulli", "RelaxedOneHotCategorical", "ReshapeTransform", "SigmoidTransform", "SoftmaxTransform", "SoftplusTransform", "StackTransform", "StickBreakingTransform", "StudentT", "TanhTransform", "Transform", "TransformedDistribution", "Uniform", "VonMises", "Weibull", "Wishart", "__all__", "__builtins__", "__cached__", "__doc__", "__file__", "__loader__", "__name__", "__package__", "__path__", "__spec__", "bernoulli", "beta", "biject_to", "binomial", "categorical", "cauchy", "chi2", "constraint_registry", "constraints", "continuous_bernoulli", "dirichlet", "distribution", "exp_family", "exponential", "fishersnedecor", "gamma", "generalized_pareto", "geometric", "gumbel", "half_cauchy", "half_normal", "identity_transform", "independent", "inverse_gamma", "kl", "kl_divergence", "kumaraswamy", "laplace", "lkj_cholesky", "log_normal", "logistic_normal", "lowrank_multivariate_normal", "mixture_same_family", "multinomial", "multivariate_normal", "negative_binomial", "normal", "one_hot_categorical", "pareto", "poisson", "register_kl", "relaxed_bernoulli", "relaxed_categorical", "studentT", "transform_to", "transformed_distribution", "transforms", "uniform", "utils", "von_mises", "weibull", "wishart"];
+
+// ---------- 词法分析（含缩进） ----------
+const OPS_LIST=['**=','//=','...','**','//','==','!=','<=','>=','+=','-=','*=','/=','%=','@=','->',':=','+','-','*','/','%','<','>','=','(',')','[',']','{','}',',',':','.',';','@','&','|','~','^'];
+function readString(src,i,line,q,triple,raw){let j=i,s='';const end=triple?q.repeat(3):q;
+  while(j<src.length&&!src.startsWith(end,j)){if(!triple&&src[j]==='\n')err('SyntaxError',`第 ${line} 行：字符串没有结束引号`);
+    if(src[j]==='\\'&&!raw&&j+1<src.length){j++;const c=src[j];s+=({n:'\n',t:'\t','\\':'\\',"'":"'",'"':'"','\n':''})[c]??('\\'+c)}else s+=src[j];j++}
+  if(j>=src.length)err('SyntaxError',`第 ${line} 行：字符串没有结束引号`);return[s,j+end.length]}
+function tokenize(src){const toks=[];let i=0,line=1,depth=0,atLineStart=true;const indents=[0];const n=src.length;
+  while(i<n){
+    if(atLineStart&&depth===0){let w=0,j=i;while(j<n&&(src[j]===' '||src[j]==='\t')){w+=src[j]==='\t'?4:1;j++}
+      if(j>=n)break;if(src[j]==='\n'||src[j]==='#'||src[j]==='\r'){while(j<n&&src[j]!=='\n')j++;i=j+1;line++;continue}
+      if((src[j]==='%'||src[j]==='!')&&w===0){while(j<n&&src[j]!=='\n')j++;i=j+1;line++;continue} // Jupyter 魔法命令，忽略
+      if(w>indents[indents.length-1]){indents.push(w);toks.push({type:'indent',line})}
+      else{while(w<indents[indents.length-1]){indents.pop();toks.push({type:'dedent',line})}if(w!==indents[indents.length-1])err('IndentationError',`第 ${line} 行：缩进对不齐`)}
+      i=j;atLineStart=false;continue}
+    const c=src[i];
+    if(c==='#'){while(i<n&&src[i]!=='\n')i++;continue}
+    if(c==='\n'){if(depth===0){toks.push({type:'nl',line});atLineStart=true}line++;i++;continue}
+    if(c===' '||c==='\t'||c==='\r'){i++;continue}
+    if(c==='\\'&&src[i+1]==='\n'){i+=2;line++;continue}
+    if(/[0-9]/.test(c)||(c==='.'&&/[0-9]/.test(src[i+1]||''))){let j=i;while(j<n&&/[0-9_]/.test(src[j]))j++;let fl=false;if(src[j]==='.'&&src[j+1]!=='.'){fl=true;j++;while(j<n&&/[0-9_]/.test(src[j]))j++}
+      if(/[eE]/.test(src[j]||'')&&/[-+0-9]/.test(src[j+1]||'')){fl=true;j++;if(/[-+]/.test(src[j]))j++;while(j<n&&/[0-9]/.test(src[j]))j++}
+      if(src[j]==='j')err('SyntaxError','本页不支持复数');toks.push({type:'num',v:Number(src.slice(i,j).replace(/_/g,'')),fl,line});i=j;continue}
+    const pm=src.slice(i,i+3).match(/^([rRfFbB]{0,2})(['"])/);
+    if(pm&&(pm[1].length===0||/[A-Za-z]/.test(c))){const pre=pm[1].toLowerCase(),q=pm[2];let j=i+pm[0].length;const triple=src.startsWith(q+q,j);if(triple)j+=2;const startLine=line;const[s,e]=readString(src,j,line,q,triple,pre.includes('r'));line+=(src.slice(i,e).match(/\n/g)||[]).length;
+      const tok=pre.includes('f')?{type:'fstr',raw:s,line:startLine}:{type:'str',v:s,line:startLine};const last=toks[toks.length-1];
+      if(last&&last.type==='str'&&tok.type==='str')last.v+=s;else toks.push(tok);i=e;continue}
+    if(/[A-Za-z_\u4e00-\u9fa5]/.test(c)){let j=i;while(j<n&&/[A-Za-z0-9_\u4e00-\u9fa5]/.test(src[j]))j++;toks.push({type:'name',v:src.slice(i,j),line});i=j;continue}
+    const op=OPS_LIST.find(o=>src.startsWith(o,i));
+    if(op){if('([{'.includes(op))depth++;if(')]}'.includes(op))depth=Math.max(0,depth-1);toks.push({type:'op',v:op,line});i+=op.length;continue}
+    if('，（）：；＝“”‘’'.includes(c))err('SyntaxError',`第 ${line} 行：用了中文标点「${c}」，代码里要用英文标点`);
+    err('SyntaxError',`第 ${line} 行：看不懂的字符「${c}」`)}
+  if(toks.length&&toks[toks.length-1].type!=='nl')toks.push({type:'nl',line});while(indents.length>1){indents.pop();toks.push({type:'dedent',line})}toks.push({type:'eof',line});return toks}
