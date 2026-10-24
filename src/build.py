@@ -20,6 +20,7 @@ def artifact_daily():
     data = '<script type="text/plain" id="fmData">' + read('fmnist_b64.txt').strip() + '</script>\n'
     # 时光机器全文（第 8 章用），原样放进去；页面启动时登记到模拟文件系统的 ../data/timemachine.txt
     data += '<script type="text/plain" id="tmData">' + read('timemachine.txt') + '</script>\n'
+    data += '<script type="text/plain" id="afData">' + read('airfoil_self_noise.dat') + '</script>\n'
     return read('page_head_full.html') + read('page_body2.html') + '\n' + data + '<script>\n' + mt + '\n' + read('page2.js') + '\n' + read('quiz.js') + '</script>\n'
 
 SKELETON = '''<!doctype html>

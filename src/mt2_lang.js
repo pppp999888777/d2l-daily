@@ -1,13 +1,13 @@
 
 // ---------- 张量的属性和方法 ----------
 function tensorAttr(T,name){
-  switch(name){case'shape':return T.np?tup(T.shape.map(I)):{t:'size',dims:T.shape.slice()};case'dtype':return DT(T.dtype);case'T':return transpose2(T);case'ndim':return I(T.shape.length);case'device':return{t:'device',name:'cpu'};
+  switch(name){case'shape':return T.np?tup(T.shape.map(I)):{t:'size',dims:T.shape.slice()};case'dtype':return T.np?{t:'npdtype',name:T.dtype}:DT(T.dtype);case'T':return transpose2(T);case'ndim':return I(T.shape.length);case'device':return{t:'device',name:'cpu'};
     case'requires_grad':return B(T.requires_grad);case'grad':return T.grad||NONE;case'grad_fn':return T.grad_fn?{t:'gradfn',g:T.grad_fn}:NONE;case'is_leaf':return B(!T.grad_fn);case'data':{const d=mkT(T.shape.slice(),[],T.dtype);d.data=T.data;return d}}
   const m=tensorMethod(T,name);if(m)return fn(name,m);err('AttributeError',`'${T.np?'numpy.ndarray':'Tensor'}' object has no attribute '${name}'`)}
 function tensorMethod(T,name){
   const M={reshape:a=>reshapeT(T,dimsArg(a)),view:a=>reshapeT(T,dimsArg(a)),numel:()=>I(T.data.length),
     size:a=>a.length?I(T.shape[intOf(a[0])<0?T.shape.length+intOf(a[0]):intOf(a[0])]):{t:'size',dims:T.shape.slice()},
-    sum:(a,kw)=>reduce(T,dimArg(a,kw),'sum',keepArg(kw)),mean:(a,kw)=>reduce(T,dimArg(a,kw),'mean',keepArg(kw)),clamp:(a,kw)=>clampT(T,kw.min||a[0],kw.max||a[1]),clip:(a,kw)=>clampT(T,kw.min||a[0],kw.max||a[1]),var:(a,kw)=>varStd(T,dimArg(a,kw),corrArg(kw),keepArg(kw),false),std:(a,kw)=>varStd(T,dimArg(a,kw),corrArg(kw),keepArg(kw),true),max:(a,kw)=>reduce(T,dimArg(a,kw),'max',keepArg(kw)),min:(a,kw)=>reduce(T,dimArg(a,kw),'min',keepArg(kw)),
+    sum:(a,kw)=>reduce(T,dimArg(a,kw),'sum',keepArg(kw)),mean:(a,kw)=>reduce(T,dimArg(a,kw),'mean',keepArg(kw)),clamp:(a,kw)=>clampT(T,kw.min||a[0],kw.max||a[1]),clip:(a,kw)=>clampT(T,kw.min||a[0],kw.max||a[1]),var:(a,kw)=>varStd(T,dimArg(a,kw),T.np?(kw.ddof?numOf(kw.ddof):0):corrArg(kw),keepArg(kw),false),std:(a,kw)=>varStd(T,dimArg(a,kw),T.np?(kw.ddof?numOf(kw.ddof):0):corrArg(kw),keepArg(kw),true),max:(a,kw)=>reduce(T,dimArg(a,kw),'max',keepArg(kw)),min:(a,kw)=>reduce(T,dimArg(a,kw),'min',keepArg(kw)),
     cumsum:(a,kw)=>cumsum(T,dimArg(a,kw)),norm:()=>normT(T),
     item:()=>{if(T.data.length!==1)err('RuntimeError',`a Tensor with ${T.data.length} elements cannot be converted to Scalar`);const v=T.data[0];return isFloatDt(T.dtype)?F(v):T.dtype==='bool'?B(v):I(v)},
     tolist:()=>{const rec=(d,off)=>{if(d===T.shape.length){const v=T.data[off];return isFloatDt(T.dtype)?F(v):T.dtype==='bool'?B(v):I(v)}const st=strides(T.shape);const r=[];for(let i=0;i<T.shape[d];i++)r.push(rec(d+1,off+i*st[d]));return list(r)};return rec(0,0)},
@@ -87,6 +87,7 @@ const builtins={
   list:fn('list',a=>list(a[0]?iterate(a[0]):[])),tuple:fn('tuple',a=>tup(a[0]?iterate(a[0]):[])),dict:fn('dict',(a,kw)=>{const pairs=a[0]?(a[0].t==='dict'?[...a[0].m.values()].map(([k,v])=>[k,v]):iterate(a[0]).map(p=>iterate(p))):[];for(const k in kw)pairs.push([S(k),kw[k]]);return mkDict(pairs)}),
   set:fn('set',a=>{const seen=new Map();for(const x of a[0]?iterate(a[0]):[])seen.set(numKey(x),x);const r=list([...seen.values()]);r.isSet=true;return r}),
   enumerate:fn('enumerate',(a,kw)=>{const s=a[1]?intOf(a[1]):kw.start?intOf(kw.start):0;return{t:'iter',items:iterate(a[0]).map((x,i)=>tup([I(i+s),x])),pos:0}}),
+  map:fn('map',(a,kw,ctx)=>{const ls=a.slice(1).map(iterate),n=Math.min(...ls.map(l=>l.length));return{t:'iter',items:Array.from({length:n},(_,i)=>callValue(a[0],ls.map(l=>l[i]),{},ctx)),pos:0}}),
   zip:fn('zip',a=>{const ls=a.map(iterate),n=Math.min(...ls.map(l=>l.length));return{t:'iter',items:Array.from({length:n},(_,i)=>tup(ls.map(l=>l[i]))),pos:0}}),
   sum:fn('sum',a=>{let acc=a[1]||I(0);for(const x of iterate(a[0]))acc=binop('+',acc,x);return acc}),
   min:fn('min',(a,kw)=>{const L=a.length>1?a:iterate(a[0]);if(!L.length)err('ValueError','min() arg is an empty sequence');const key=kw.key;let b=L[0];for(const x of L){if(key?pyCmpLess(callValue(key,[x],{}),callValue(key,[b],{})):pyCmpLess(x,b))b=x}return b}),

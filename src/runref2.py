@@ -4,7 +4,7 @@ C=runpy.run_path(d+sys.argv[1])['CELLS'];out=[];g={}
 import types
 _d2l=types.ModuleType('d2l');_t=types.ModuleType('d2l.torch');_t.plot=lambda *a,**k:None;_t.set_figsize=lambda *a,**k:None;_t.use_svg_display=lambda *a,**k:None
 import torch as _torch
-for _n in ['ones','zeros','tensor','normal','matmul','arange','exp','sin','cos','float32','randn','eye','bmm','rand']: setattr(_t,_n,getattr(_torch,_n))
+for _n in ['ones','zeros','tensor','normal','matmul','arange','exp','sin','cos','float32','randn','eye','bmm','rand','meshgrid','cosh','sinh','sqrt']: setattr(_t,_n,getattr(_torch,_n))
 _t.reshape=lambda x,s:x.reshape(s);_t.numpy=lambda x:x.detach().numpy();_t.plt=types.SimpleNamespace(scatter=lambda *a,**k:None,plot=lambda *a,**k:None,axhline=lambda *a,**k:None,legend=lambda *a,**k:None,gca=lambda:types.SimpleNamespace(set_xlabel=lambda *a:None,set_ylabel=lambda *a:None),rcParams={})
 def _linreg(X,w,b): return _torch.matmul(X,w)+b
 def _sq(y_hat,y): return (y_hat-y.reshape(y_hat.shape))**2/2
@@ -41,6 +41,9 @@ if 'FMNIST' in sys.argv[3:]:
         def __init__(self): self.times=[]; self.start()
         def start(self): self.tik=_time.time()
         def stop(self): self.times.append(_time.time()-self.tik); return self.times[-1]
+        def avg(self): return sum(self.times)/len(self.times)
+        def sum(self): return sum(self.times)
+        def cumsum(self): return _np.array(self.times).cumsum().tolist()
     _t.Timer=_Timer
     import re as _re
     _js=open(d+'mt2_vision.js').read(); _pre=_js[_js.index('const D2L_PRELUDE=`')+19:_js.index('`;',_js.index('const D2L_PRELUDE=`'))].replace('\\\\n','\\n')
@@ -51,7 +54,7 @@ if 'FMNIST' in sys.argv[3:]:
     exec(_pre, _t.__dict__)
 C=['\n'.join(l for l in c.split('\n') if not l.startswith('%')) for c in C]
 os.makedirs(d+'ref2/work',exist_ok=True);os.makedirs(d+'ref2/data',exist_ok=True)
-import shutil;shutil.copy(d+'timemachine.txt',d+'ref2/data/timemachine.txt')  # 第 8 章：d2l.download 返回 ../data/timemachine.txt
+import shutil;shutil.copy(d+'timemachine.txt',d+'ref2/data/timemachine.txt');shutil.copy(d+'airfoil_self_noise.dat',d+'ref2/data/airfoil_self_noise.dat')  # 第 8 章：d2l.download 返回 ../data/timemachine.txt
 os.chdir(d+'ref2/work')
 for c in C:
     buf=io.StringIO()

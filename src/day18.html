@@ -1,0 +1,367 @@
+<main class="wrap day" id="day18" data-day="18" hidden>
+<section class="hero">
+  <div class="eyebrow">第 18 天 · 原书第 11.4、11.5、11.6、11.10 节 · 论文路线第 11 课</div>
+  <h1>优化算法：随机梯度下降、动量法、Adam</h1>
+  <p class="lead">从第 5 天起一直在用“沿梯度反方向走一小步”。今天看清楚这一步可以怎么走得更好：用小批量估计梯度（随机梯度下降），让学习率随时间变小，用动量抹平来回震荡，以及 Adam：给每个参数自动配一个合适的步长。你论文所有神经网络都用 <code>torch.optim.Adam(params, lr=lr)</code>，DKT 的 lr 是 2×10⁻³。</p>
+  <div class="plan">
+    <div><b class="k">今天的时间</b>大约 80 分钟。代码格都很快，自动运行。</div>
+    <div><b class="k">学完你能</b><ul><li>说清随机梯度为什么有噪声、学习率为什么要衰减</li><li>比较批量梯度下降、随机梯度下降和小批量</li><li>写出动量法和 Adam 的更新公式</li><li>知道 Adam 里每个超参数的作用</li></ul></div>
+    <div><b class="k">和你的论文</b><ul><li><code>torch.optim.Adam(params, lr=lr)</code></li><li>主训练 lr = 2e-3，策略头微调 lr = 1e-3</li><li>批量 <code>BS = 256</code></li></ul></div>
+  </div>
+</section>
+
+<section class="part" id="sgd11">
+  <div class="part-h"><div class="eyebrow">第一部分</div><h2>11.4 随机梯度下降</h2><span class="src">对应原书第 11.4 节，代码来自原书 PyTorch 版</span></div>
+  <div class="prose"><div class="row"><button class="btn primary runAll" data-day="18">从头全部运行</button><span class="small muted runAllMsg"></span></div></div>
+  <div class="blk">
+    <div class="prose">
+      <p>训练集有 n 个样本，目标函数是平均损失 f(x) = (1/n) Σᵢ fᵢ(x)。算一次完整梯度要遍历所有样本，代价 O(n)。<b>随机梯度下降</b>每次只随机挑一个样本 i，用 ∇fᵢ(x) 代替 ∇f(x)：它的期望等于真梯度（无偏），但带着噪声。</p>
+      <p>下面用一个二维函数 f(x₁, x₂) = x₁² + 2x₂² 模拟：在真梯度上加标准正态噪声。<code>train_2d</code> 和 <code>show_trace_2d</code> 来自原书 11.3 节，已经放在 d2l 里。</p>
+    </div>
+    <div class="cell"><textarea>%matplotlib inline
+from d2l import torch as d2l
+import math
+import torch</textarea></div>
+    <div class="cell"><textarea>def f(x1, x2):  # 目标函数
+    return x1 ** 2 + 2 * x2 ** 2
+
+def f_grad(x1, x2):  # 目标函数的梯度
+    return 2 * x1, 4 * x2</textarea></div>
+    <div class="cell"><textarea>def sgd(x1, x2, s1, s2, f_grad):
+    g1, g2 = f_grad(x1, x2)
+    # 模拟有噪声的梯度
+    g1 += d2l.normal(0.0, 1, (1,)).item()
+    g2 += d2l.normal(0.0, 1, (1,)).item()
+    eta_t = eta * lr()
+    return (x1 - eta_t * g1, x2 - eta_t * g2, 0, 0)</textarea></div>
+    <div class="prose"><p>学习率固定为 0.1：即使到了最优点附近，噪声还是推着 x 到处跑，停不下来。</p></div>
+    <div class="cell"><textarea>def constant_lr():
+    return 1
+
+eta = 0.1
+lr = constant_lr  # 常数学习速度
+d2l.show_trace_2d(f, d2l.train_2d(sgd, steps=50, f_grad=f_grad))</textarea></div>
+  </div>
+  <div class="blk"><div class="blk-h"><span class="n">11.4.3</span><h3>动态学习率</h3></div>
+    <div class="prose"><p>办法是让学习率随时间变小：一开始走大步快速靠近，后来走小步减少噪声。指数衰减 η(t) = η₀ e^{−λt} 降得太快，还没走到最优点就停了：</p></div>
+    <div class="cell"><textarea>def exponential_lr():
+    # 在函数外部定义，而在内部更新的全局变量
+    global t
+    t += 1
+    return math.exp(-0.1 * t)
+
+t = 1
+lr = exponential_lr
+d2l.show_trace_2d(f, d2l.train_2d(sgd, steps=1000, f_grad=f_grad))</textarea></div>
+    <div class="prose"><p>多项式衰减 η(t) = η₀ (1 + αt)^{−1/2} 降得慢一些，效果更好：</p></div>
+    <div class="cell"><textarea>def polynomial_lr():
+    # 在函数外部定义，而在内部更新的全局变量
+    global t
+    t += 1
+    return (1 + 0.1 * t) ** (-0.5)
+
+t = 1
+lr = polynomial_lr
+d2l.show_trace_2d(f, d2l.train_2d(sgd, steps=50, f_grad=f_grad))</textarea></div>
+  </div>
+</section>
+
+<section class="part" id="mbsgd">
+  <div class="part-h"><div class="eyebrow">第二部分</div><h2>11.5 小批量随机梯度下降</h2><span class="src">对应原书第 11.5 节，代码来自原书 PyTorch 版。翼型噪声数据集（1503 条）已放在网页里</span></div>
+  <div class="blk"><div class="blk-h"><span class="n">11.5.1</span><h3>向量化和缓存</h3></div>
+    <div class="prose"><p>为什么不用单个样本，而用一小批？因为硬件一次算一大块矩阵比一个个算快得多。原书比较三种算 256 × 256 矩阵乘法的方式。本页是浏览器里的 JavaScript，速度数字比真 PyTorch 小很多，但快慢的顺序是一样的。</p></div>
+    <div class="cell"><textarea>%matplotlib inline
+from d2l import torch as d2l
+import torch
+from torch import nn
+import numpy as np
+
+timer = d2l.Timer()
+A = torch.zeros(256, 256)
+B = torch.randn(256, 256)
+C = torch.randn(256, 256)</textarea></div>
+    <div class="cell"><textarea># 逐元素计算A=BC
+timer.start()
+for i in range(256):
+    for j in range(256):
+        A[i, j] = torch.dot(B[i, :], C[:, j])
+timer.stop()</textarea></div>
+    <div class="cell"><textarea># 逐列计算A=BC
+timer.start()
+for j in range(256):
+    A[:, j] = torch.mv(B, C[:, j])
+timer.stop()</textarea></div>
+    <div class="cell"><textarea># 一次性计算A=BC
+timer.start()
+A = torch.mm(B, C)
+timer.stop()
+
+# 乘法和加法作为单独的操作（在实践中融合）
+gigaflops = [2/i for i in timer.times]
+print(f'performance in Gigaflops: element {gigaflops[0]:.3f}, '
+      f'column {gigaflops[1]:.3f}, full {gigaflops[2]:.3f}')</textarea></div>
+    <div class="cell"><textarea>timer.start()
+for j in range(0, 256, 64):
+    A[:, j:j+64] = torch.mm(B, C[:, j:j+64])
+timer.stop()
+print(f'performance in Gigaflops: block {2 / timer.times[3]:.3f}')</textarea></div>
+  </div>
+  <div class="blk"><div class="blk-h"><span class="n">11.5.3</span><h3>读取数据集</h3></div>
+    <div class="prose"><p>NASA 的翼型噪声数据：5 个特征（频率、攻角等），预测噪声分贝。每一列先标准化成均值 0、方差 1。</p></div>
+    <div class="cell"><textarea>#@save
+d2l.DATA_HUB['airfoil'] = (d2l.DATA_URL + 'airfoil_self_noise.dat',
+                           '76e5be1548fd8222e5074cf0faae75edff8cf93f')
+
+#@save
+def get_data_ch11(batch_size=10, n=1500):
+    data = np.genfromtxt(d2l.download('airfoil'),
+                         dtype=np.float32, delimiter='\t')
+    data = torch.from_numpy((data - data.mean(axis=0)) / data.std(axis=0))
+    data_iter = d2l.load_array((data[:n, :-1], data[:n, -1]),
+                               batch_size, is_train=True)
+    return data_iter, data.shape[1]-1</textarea></div>
+  </div>
+  <div class="blk"><div class="blk-h"><span class="n">11.5.4</span><h3>从零开始实现</h3></div>
+    <div class="prose"><p>为了后面统一，优化器写成 <code>(params, states, hyperparams)</code> 的形式：states 存动量之类的状态，hyperparams 存学习率等。</p></div>
+    <div class="cell"><textarea>def sgd(params, states, hyperparams):
+    for p in params:
+        p.data.sub_(hyperparams['lr'] * p.grad)
+        p.grad.data.zero_()</textarea></div>
+    <div class="cell"><textarea>#@save
+def train_ch11(trainer_fn, states, hyperparams, data_iter,
+               feature_dim, num_epochs=2):
+    # 初始化模型
+    w = torch.normal(mean=0.0, std=0.01, size=(feature_dim, 1),
+                     requires_grad=True)
+    b = torch.zeros((1), requires_grad=True)
+    net, loss = lambda X: d2l.linreg(X, w, b), d2l.squared_loss
+    # 训练模型
+    animator = d2l.Animator(xlabel='epoch', ylabel='loss',
+                            xlim=[0, num_epochs], ylim=[0.22, 0.35])
+    n, timer = 0, d2l.Timer()
+    for _ in range(num_epochs):
+        for X, y in data_iter:
+            l = loss(net(X), y).mean()
+            l.backward()
+            trainer_fn([w, b], states, hyperparams)
+            n += X.shape[0]
+            if n % 200 == 0:
+                timer.stop()
+                animator.add(n/X.shape[0]/len(data_iter),
+                             (d2l.evaluate_loss(net, data_iter, loss),))
+                timer.start()
+    print(f'loss: {animator.Y[0][-1]:.3f}, {timer.avg():.3f} sec/epoch')
+    return timer.cumsum(), animator.Y[0]</textarea></div>
+    <div class="prose"><p><b>批量梯度下降</b>：批量 1500，也就是全部数据，每轮只更新一次，学习率可以大到 1。</p></div>
+    <div class="cell"><textarea>def train_sgd(lr, batch_size, num_epochs=2):
+    data_iter, feature_dim = get_data_ch11(batch_size)
+    return train_ch11(
+        sgd, None, {'lr': lr}, data_iter, feature_dim, num_epochs)
+
+gd_res = train_sgd(1, 1500, 10)</textarea></div>
+    <div class="prose"><p><b>随机梯度下降</b>：批量 1，每轮更新 1500 次，学习率要小。</p></div>
+    <div class="cell"><textarea>sgd_res = train_sgd(0.005, 1)</textarea></div>
+    <div class="prose"><p>两种<b>小批量</b>：批量 100 和 10。</p></div>
+    <div class="cell"><textarea>mini1_res = train_sgd(.4, 100)</textarea></div>
+    <div class="cell"><textarea>mini2_res = train_sgd(.05, 10)</textarea></div>
+    <div class="prose"><p>按时间比较（横轴是对数刻度）。原书的结论：小批量兼顾了“每一步算得快”（向量化）和“每一步更新得准”（多个样本平均降低噪声）。网页里的计时不太准，看形状就行。</p></div>
+    <div class="cell"><textarea>d2l.set_figsize([6, 3])
+d2l.plot(*list(map(list, zip(gd_res, sgd_res, mini1_res, mini2_res))),
+         'time (sec)', 'loss', xlim=[1e-2, 10],
+         legend=['gd', 'sgd', 'batch size=100', 'batch size=10'])
+d2l.plt.gca().set_xscale('log')</textarea></div>
+  </div>
+  <div class="blk"><div class="blk-h"><span class="n">11.5.5</span><h3>简洁实现</h3></div>
+    <div class="cell"><textarea>#@save
+def train_concise_ch11(trainer_fn, hyperparams, data_iter, num_epochs=4):
+    # 初始化模型
+    net = nn.Sequential(nn.Linear(5, 1))
+    def init_weights(m):
+        if type(m) == nn.Linear:
+            torch.nn.init.normal_(m.weight, std=0.01)
+    net.apply(init_weights)
+
+    optimizer = trainer_fn(net.parameters(), **hyperparams)
+    loss = nn.MSELoss(reduction='none')
+    animator = d2l.Animator(xlabel='epoch', ylabel='loss',
+                            xlim=[0, num_epochs], ylim=[0.22, 0.35])
+    n, timer = 0, d2l.Timer()
+    for _ in range(num_epochs):
+        for X, y in data_iter:
+            optimizer.zero_grad()
+            out = net(X)
+            y = y.reshape(out.shape)
+            l = loss(out, y)
+            l.mean().backward()
+            optimizer.step()
+            n += X.shape[0]
+            if n % 200 == 0:
+                timer.stop()
+                # MSELoss计算平方误差时不带系数1/2
+                animator.add(n/X.shape[0]/len(data_iter),
+                             (d2l.evaluate_loss(net, data_iter, loss) / 2,))
+                timer.start()
+    print(f'loss: {animator.Y[0][-1]:.3f}, {timer.avg():.3f} sec/epoch')</textarea></div>
+    <div class="cell"><textarea>data_iter, _ = get_data_ch11(10)
+trainer = torch.optim.SGD
+train_concise_ch11(trainer, {'lr': 0.01}, data_iter)</textarea></div>
+    <div class="callout"><h4>对照你的论文：批量 256</h4><p><code>experiment.py</code> 第 67 行 <code>BS = 256</code>：每次用 256 个窗口（每个最多 100 步）算一次梯度。<code>train_kt</code> 每轮开头 <code>rng.permutation(tr)</code> 打乱训练窗口，再按 256 个一组切。这就是小批量随机梯度下降，只是更新规则换成了 Adam。</p></div>
+  </div>
+</section>
+
+<section class="part" id="momentum">
+  <div class="part-h"><div class="eyebrow">第三部分</div><h2>11.6 动量法</h2><span class="src">对应原书第 11.6 节，代码来自原书 PyTorch 版</span></div>
+  <div class="blk">
+    <div class="prose"><p>函数 f(x) = 0.1x₁² + 2x₂² 在 x₂ 方向很陡、x₁ 方向很平。学习率小时，x₁ 方向走得极慢；学习率稍大，x₂ 方向就来回震荡甚至发散：</p></div>
+    <div class="cell"><textarea>%matplotlib inline
+from d2l import torch as d2l
+import torch
+
+eta = 0.4
+def f_2d(x1, x2):
+    return 0.1 * x1 ** 2 + 2 * x2 ** 2
+def gd_2d(x1, x2, s1, s2):
+    return (x1 - eta * 0.2 * x1, x2 - eta * 4 * x2, 0, 0)
+
+d2l.show_trace_2d(f_2d, d2l.train_2d(gd_2d))</textarea></div>
+    <div class="cell"><textarea>eta = 0.6
+d2l.show_trace_2d(f_2d, d2l.train_2d(gd_2d))</textarea></div>
+    <div class="prose">
+      <p><b>动量法</b>：不直接用当前梯度，而是用梯度的“滑动和”作为速度：</p>
+      <p class="math">vₜ = β v_{t−1} + gₜ<br>xₜ = x_{t−1} − η vₜ</p>
+      <p>在 x₂ 方向，梯度正负交替，加起来互相抵消，震荡变小；在 x₁ 方向，梯度一直同号，越积越大，走得更快。</p>
+    </div>
+    <div class="cell"><textarea>def momentum_2d(x1, x2, v1, v2):
+    v1 = beta * v1 + 0.2 * x1
+    v2 = beta * v2 + 4 * x2
+    return x1 - eta * v1, x2 - eta * v2, v1, v2
+
+eta, beta = 0.6, 0.5
+d2l.show_trace_2d(f_2d, d2l.train_2d(momentum_2d))</textarea></div>
+    <div class="cell"><textarea>eta, beta = 0.6, 0.25
+d2l.show_trace_2d(f_2d, d2l.train_2d(momentum_2d))</textarea></div>
+    <div class="prose"><p>vₜ 展开是 Σ_τ β^τ g_{t−τ}：过去梯度的加权和，越久以前的权重越小。β 越大，记得越久：</p></div>
+    <div class="cell"><textarea>d2l.set_figsize()
+betas = [0.95, 0.9, 0.6, 0]
+for beta in betas:
+    x = d2l.numpy(d2l.arange(40))
+    d2l.plt.plot(x, beta ** x, label=f'beta = {beta:.2f}')
+d2l.plt.xlabel('time')
+d2l.plt.legend();</textarea></div>
+    <div class="prose"><p>从零实现。状态是每个参数一个速度 v：</p></div>
+    <div class="cell"><textarea>def init_momentum_states(feature_dim):
+    v_w = d2l.zeros((feature_dim, 1))
+    v_b = d2l.zeros(1)
+    return (v_w, v_b)</textarea></div>
+    <div class="cell"><textarea>def sgd_momentum(params, states, hyperparams):
+    for p, v in zip(params, states):
+        with torch.no_grad():
+            v[:] = hyperparams['momentum'] * v + p.grad
+            p[:] -= hyperparams['lr'] * v
+        p.grad.data.zero_()</textarea></div>
+    <div class="cell"><textarea>def train_momentum(lr, momentum, num_epochs=2):
+    d2l.train_ch11(sgd_momentum, init_momentum_states(feature_dim),
+                   {'lr': lr, 'momentum': momentum}, data_iter,
+                   feature_dim, num_epochs)
+
+data_iter, feature_dim = d2l.get_data_ch11(batch_size=10)
+train_momentum(0.02, 0.5)</textarea></div>
+    <div class="cell"><textarea>train_momentum(0.01, 0.9)</textarea></div>
+    <div class="cell"><textarea>train_momentum(0.005, 0.9)</textarea></div>
+    <div class="prose"><p>简洁实现：<code>torch.optim.SGD</code> 加 <code>momentum</code> 参数。</p></div>
+    <div class="cell"><textarea>trainer = torch.optim.SGD
+d2l.train_concise_ch11(trainer, {'lr': 0.005, 'momentum': 0.9}, data_iter)</textarea></div>
+  </div>
+</section>
+
+<section class="part" id="adam">
+  <div class="part-h"><div class="eyebrow">第四部分</div><h2>11.10 Adam</h2><span class="src">对应原书第 11.10 节，代码来自原书 PyTorch 版</span></div>
+  <div class="blk">
+    <div class="prose">
+      <p>Adam 同时维护两个滑动平均：梯度的（一阶矩，相当于动量）和梯度平方的（二阶矩，衡量这个参数的梯度通常有多大）：</p>
+      <p class="math">vₜ = β₁ v_{t−1} + (1 − β₁) gₜ<br>sₜ = β₂ s_{t−1} + (1 − β₂) gₜ²</p>
+      <p>两个滑动平均从 0 开始，前几步会偏小，所以要做<b>偏差修正</b>：v̂ = v / (1 − β₁ᵗ)，ŝ = s / (1 − β₂ᵗ)。更新：</p>
+      <p class="math">x ← x − η · v̂ / (√ŝ + ε)</p>
+      <p>关键在除以 √ŝ：梯度一直很大的参数，步子被缩小；梯度一直很小的参数，步子被放大。每个参数自动有自己的步长，所以 Adam 对学习率没那么敏感。常用 β₁ = 0.9，β₂ = 0.999。</p>
+    </div>
+    <div class="cell"><textarea>%matplotlib inline
+from d2l import torch as d2l
+import torch
+
+def init_adam_states(feature_dim):
+    v_w, v_b = d2l.zeros((feature_dim, 1)), d2l.zeros(1)
+    s_w, s_b = d2l.zeros((feature_dim, 1)), d2l.zeros(1)
+    return ((v_w, s_w), (v_b, s_b))
+
+def adam(params, states, hyperparams):
+    beta1, beta2, eps = 0.9, 0.999, 1e-6
+    for p, (v, s) in zip(params, states):
+        with torch.no_grad():
+            v[:] = beta1 * v + (1 - beta1) * p.grad
+            s[:] = beta2 * s + (1 - beta2) * torch.square(p.grad)
+            v_bias_corr = v / (1 - beta1 ** hyperparams['t'])
+            s_bias_corr = s / (1 - beta2 ** hyperparams['t'])
+            p[:] -= hyperparams['lr'] * v_bias_corr / (torch.sqrt(s_bias_corr)
+                                                       + eps)
+        p.grad.data.zero_()
+    hyperparams['t'] += 1</textarea></div>
+    <div class="cell"><textarea>data_iter, feature_dim = d2l.get_data_ch11(batch_size=10)
+d2l.train_ch11(adam, init_adam_states(feature_dim),
+               {'lr': 0.01, 't': 1}, data_iter, feature_dim);</textarea></div>
+    <div class="cell"><textarea>trainer = torch.optim.Adam
+d2l.train_concise_ch11(trainer, {'lr': 0.01}, data_iter)</textarea></div>
+    <div class="prose"><p>原书还介绍了 Yogi：把 sₜ 的更新改成 sₜ = s_{t−1} + (1 − β₂) gₜ² ⊙ sign(gₜ² − s_{t−1})，避免梯度突然变大时 s 增长过快。</p></div>
+    <div class="cell"><textarea>def yogi(params, states, hyperparams):
+    beta1, beta2, eps = 0.9, 0.999, 1e-3
+    for p, (v, s) in zip(params, states):
+        with torch.no_grad():
+            v[:] = beta1 * v + (1 - beta1) * p.grad
+            s[:] = s + (1 - beta2) * torch.sign(
+                torch.square(p.grad) - s) * torch.square(p.grad)
+            v_bias_corr = v / (1 - beta1 ** hyperparams['t'])
+            s_bias_corr = s / (1 - beta2 ** hyperparams['t'])
+            p[:] -= hyperparams['lr'] * v_bias_corr / (torch.sqrt(s_bias_corr)
+                                                       + eps)
+        p.grad.data.zero_()
+    hyperparams['t'] += 1
+
+data_iter, feature_dim = d2l.get_data_ch11(batch_size=10)
+d2l.train_ch11(yogi, init_adam_states(feature_dim),
+               {'lr': 0.01, 't': 1}, data_iter, feature_dim);</textarea></div>
+    <div class="panel stack" id="opLab">
+      <h4>三种优化器赛跑</h4>
+      <p class="small muted">在 f(x₁, x₂) = 0.1x₁² + 2x₂² 上，从 (−5, −2) 出发走 40 步。灰线是等高线，最优点在原点。调学习率看谁先到、谁在震荡、谁发散。</p>
+      <div class="row"><label class="ctrl" for="opLr">学习率 η <output id="opLrv">0.40</output><input type="range" id="opLr" min="-2.5" max="0" step="0.05" value="-0.4"></label><label class="ctrl" for="opB">动量 β <output id="opBv">0.50</output><input type="range" id="opB" min="0" max="0.95" step="0.05" value="0.5"></label></div>
+      <div class="cv" id="opHost"><canvas id="opCv" aria-label="三种优化器的轨迹"></canvas></div>
+      <div class="calc pw" id="opCalc"></div>
+    </div>
+    <div class="callout"><h4>对照你的论文</h4><p>第 1349 行 <code>opt = torch.optim.Adam(params, lr=lr)</code>：只给了学习率，其余都是默认值（β₁ = 0.9，β₂ = 0.999，ε = 10⁻⁸，没有权重衰减）。lr 来自第 1237 行的表：LR 和 PFA 用 5×10⁻³，DKT、DKVMN、SAKT、AKT、simpleKT 用 2×10⁻³。第 1721 行微调策略头时用 1×10⁻³。策略头的 L2 惩罚是直接写在损失里的（第 9 天），没有用优化器的 <code>weight_decay</code>。</p></div>
+  </div>
+</section>
+
+<section class="part quiz-sec">
+  <div class="part-h"><div class="eyebrow">课后题</div><h2>做几道题检查一下</h2><span class="src">选择题点选项马上出结果；写形状和写代码的题，网页会现场运行代码判断对错。答题记录只存在你这台设备的浏览器里。</span></div>
+  <div class="quiz dayquiz" data-day="18"></div>
+  <div class="row small muted quizscore" data-day="18"></div>
+</section>
+
+<section class="part">
+  <div class="part-h"><div class="eyebrow">今日小结</div><h2>今天学会了吗？</h2></div>
+  <div class="two">
+    <div class="panel stack">
+      <ul class="check-list" data-day="18">
+        <li><label><input type="checkbox" data-k="c1">随机梯度是真梯度的无偏估计，但有噪声；学习率要逐渐变小</label></li>
+        <li><label><input type="checkbox" data-k="c2">小批量兼顾向量化的速度和梯度的准确</label></li>
+        <li><label><input type="checkbox" data-k="c3">动量：vₜ = βv_{t−1} + gₜ，抵消震荡、加速平坦方向</label></li>
+        <li><label><input type="checkbox" data-k="c4">Adam：一阶矩、二阶矩、偏差修正，除以 √ŝ 给每个参数配步长</label></li>
+        <li><label><input type="checkbox" data-k="c5">论文：Adam，lr = 2e-3，批量 256，其余默认</label></li>
+      </ul>
+      <span class="small check-msg"></span>
+    </div>
+    <div class="panel stack">
+      <h3>明天（第 19 天）学什么</h3>
+      <p>书里没有的专题：离线策略评估（OPE）。只有旧出题策略 μ 收集的日志，怎么估计一个新策略 π 好不好？逐步实现 IPS、SNIPS 和双重稳健（DR）估计，正是你论文第 1407 行的 <code>ope_eval</code>。</p>
+    </div>
+  </div>
+</section>
+</main>

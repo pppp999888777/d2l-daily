@@ -73,6 +73,12 @@ torch.attrs.pow=fn('pow',a=>binop('**',isT(a[0])?a[0]:a[0],a[1]));
 torch.attrs.triu=fn('triu',(a,kw)=>triT(asTensor(a[0]),intOf(kwOr(kw,a,'diagonal',1,I(0))),true));torch.attrs.tril=fn('tril',(a,kw)=>triT(asTensor(a[0]),intOf(kwOr(kw,a,'diagonal',1,I(0))),false));
 torch.attrs.masked_fill=fn('masked_fill',a=>maskedFillT(asTensor(a[0]),asTensor(a[1]),a[2]));
 torch.attrs.einsum=fn('einsum',a=>einsumT(str(a[0]),(a.length===2&&(a[1].t==='list'||a[1].t==='tuple')?a[1].items:a.slice(1)).map(asTensor)));
+torch.attrs.meshgrid=fn('meshgrid',(a,kw)=>{const ts=(a.length===1&&(a[0].t==='list'||a[0].t==='tuple')?a[0].items:a).map(asTensor),ij=!kw.indexing||str(kw.indexing)==='ij',ns=ts.map(t=>t.data.length);
+  const shape=ij?ns:[ns[1],ns[0],...ns.slice(2)];return tup(ts.map((t,k)=>{const out=new Float64Array(prod(shape)),st=strides(shape),kk=ij?k:(k===0?1:k===1?0:k);for(let q=0;q<out.length;q++){const c=Math.floor(q/st[kk])%shape[kk];out[q]=t.data[c]}return mkT(shape.slice(),out,t.dtype)}))});
+if(!torch.attrs.mv)torch.attrs.mv=fn('mv',a=>matmul(asTensor(a[0]),asTensor(a[1]),'mv'));if(!torch.attrs.dot)torch.attrs.dot=fn('dot',a=>matmul(asTensor(a[0]),asTensor(a[1])));
+torch.attrs.from_numpy=fn('from_numpy',a=>{const T=a[0];const R=mkT(T.shape.slice(),[],T.dtype);R.data=T.data;return R});
+if(!torch.attrs.square)torch.attrs.square=fn('square',a=>unary(asTensor(a[0]),'square'));
+if(!torch.attrs.sign)torch.attrs.sign=fn('sign',a=>{const T=asTensor(a[0]);return track(mkT(T.shape.slice(),Float64Array.from(T.data,Math.sign),T.dtype,T.np),[T],'SignBackward0',g=>[new Float64Array(g.length)])});
 torch.attrs.linspace=fn('linspace',(a,kw)=>{const s0=numOf(kwOr(kw,a,'start',0)),e=numOf(kwOr(kw,a,'end',1)),n=intOf(kwOr(kw,a,'steps',2));const st=n>1?(e-s0)/(n-1):0;
   return withGrad(mkT([n],Array.from({length:n},(_,i)=>n===1?s0:i<n/2?s0+i*st:e-(n-1-i)*st),dtypeKw(kw,'float32')),kw)});
 torch.attrs.device=fn('device',a=>({t:'device',name:str(a[0]).split(':')[0]}));
@@ -81,7 +87,9 @@ torch.attrs.save=fn('save',a=>{const p=normPath(str(a[1]));const dir=p.includes(
 torch.attrs.load=fn('load',a=>{const p=normPath(str(a[0]));if(!FS.has(p))err('FileNotFoundError',`[Errno 2] No such file or directory: '${str(a[0])}'`);const v=FS.get(p);if(typeof v==='string')err('UnpicklingError','invalid load key, 不是用 torch.save 保存的文件');return pyDeepCopy(v.pickled)});
 function distAttr(d,name){if(name==='sample')return fn('sample',a=>multinomialSample(d.n,d.probs,a[0]?dimsArg([a[0]]):[]));if(name==='probs')return d.probs;err('AttributeError',`'Multinomial' object has no attribute '${name}'`)}
 const npArr=(T)=>{const R=mkT(T.shape.slice(),T.data,T.dtype,true);return R};
-const numpy=mod('numpy',{
+function npGenfromtxt(a,kw){const f=openFile(str(a[0]),'r'),txt=FS.get(f.p),dl=kw.delimiter?str(kw.delimiter):null;const rows=txt.split('\n').filter(l=>l.trim()).map(l=>(dl?l.split(dl):l.trim().split(/\s+/)).map(x=>x.trim()===''?NaN:+x));
+  const C=Math.max(...rows.map(r=>r.length)),dt=kw.dtype?dtypeKw({dtype:kw.dtype},'float64'):'float64';return mkT([rows.length,C],rows.flatMap(r=>Array.from({length:C},(_,j)=>j<r.length?r[j]:NaN)),dt,true)}
+const numpy=mod('numpy',{genfromtxt:fn('genfromtxt',(a,kw)=>npGenfromtxt(a,kw)),
   arange:fn('arange',(a,kw)=>{const nums=a.map(numOf);let s=0,e,st=1;if(nums.length===1)e=nums[0];else[s,e,st=1]=nums;const fl=a.some(v=>v.t==='float');const d=[];for(let k=0;;k++){const v=s+k*st;if(st>0?v>=e-1e-12:v<=e+1e-12)break;d.push(v)}return mkT([d.length],d,fl?'float64':'int64',true)}),
   array:fn('array',a=>{const n=nested(a[0]);return mkT(n.shape,n.flat,n.dt==='float32'?'float64':n.dt,true)}),
   linspace:fn('linspace',a=>{const s=numOf(a[0]),e=numOf(a[1]),n=a[2]?intOf(a[2]):50;return mkT([n],Array.from({length:n},(_,i)=>n===1?s:s+(e-s)*i/(n-1)),'float64',true)}),
@@ -127,16 +135,18 @@ function d2lPlot(a,kw,ctx){let X=a[0],Y=kwOr(kw,a,'Y',1,null);const xl=kwOr(kw,a
   ctx.plots.push(fig);ctx.fig=fig;return NONE}
 const pltAxes={t:'mod',name:'Axes',attrs:{}};
 function pltMod(ctx){return{t:'mod',name:'matplotlib.pyplot',attrs:new Proxy({},{get:(o,name)=>{
-  const P={plot:(a,kw)=>{const f=plotFig(ctx);let x,y;if(a.length>=2&&a[1].t!=='str'){x=toXY(a[0]);y=toXY(a[1])}else{y=toXY(a[0]);x=y.map((_,i)=>i)}const fmt=a.find(v=>v.t==='str'),lab=kw.label?str(kw.label):'';if(lab)f.legend=true;f.series.push({x,y,label:lab,scatter:!!(fmt&&/^[ox.*]$/.test(fmt.v))});return NONE},
+  const P={plot:(a,kw)=>{const f=plotFig(ctx);let x,y;if(a.length>=2&&a[1].t!=='str'){x=toXY(a[0]);y=toXY(a[1])}else{y=toXY(a[0]);x=y.map((_,i)=>i)}const fmt=a.find(v=>v.t==='str'),lab=kw.label?str(kw.label):'';if(lab)f.legend=true;const col=kw.color?str(kw.color):null;f.series.push({x,y,label:lab,scatter:!!(fmt&&/^[ox.*]$/.test(fmt.v)),hex:col&&col.startsWith('#')?col:null,marker:!!(fmt&&/o/.test(fmt.v)&&/-/.test(fmt.v))});return NONE},
     scatter:(a,kw)=>{const f=plotFig(ctx);f.series.push({x:toXY(a[0]),y:toXY(a[1]),label:kw.label?str(kw.label):'',scatter:true});return NONE},
+    contour:(a,kw)=>{const f=plotFig(ctx);const X=asTensor(a[0]),Y=asTensor(a[1]),Z=asTensor(a[2]);f.contours=f.contours||[];f.contours.push({nx:X.shape[0],ny:X.shape[1],x:[...X.data],y:[...Y.data],z:[...Z.data]});return NONE},
+    gca:()=>({t:'specax',f:plotFig(ctx)}),
     axhline:(a,kw)=>{plotFig(ctx).hlines.push(numOf(kw.y||a[0]||F(0)));return NONE},xlabel:a=>{plotFig(ctx).xlabel=str(a[0]);return NONE},ylabel:a=>{plotFig(ctx).ylabel=str(a[0]);return NONE},legend:()=>{plotFig(ctx).legend=true;return NONE},
-    gca:()=>({t:'mod',name:'Axes',attrs:{set_xlabel:fn('set_xlabel',a=>{plotFig(ctx).xlabel=str(a[0]);return NONE}),set_ylabel:fn('set_ylabel',a=>{plotFig(ctx).ylabel=str(a[0]);return NONE}),set_title:fn('set_title',()=>NONE)}}),
+    gca_old_unused:()=>({t:'mod',name:'Axes',attrs:{set_xlabel:fn('set_xlabel',a=>{plotFig(ctx).xlabel=str(a[0]);return NONE}),set_ylabel:fn('set_ylabel',a=>{plotFig(ctx).ylabel=str(a[0]);return NONE}),set_title:fn('set_title',()=>NONE)}}),
     subplots:(a,kw)=>subplots(a,kw),show:()=>NONE,title:()=>NONE,figure:()=>NONE,grid:()=>NONE,rcParams:DUMMY};
   return P[name]?fn(name,P[name]):DUMMY}})}}
 function makeTimer(){const o={times:[],tik:0};const now=()=>(typeof performance!=='undefined'?performance.now():Date.now())/1000;o.tik=now();
   return{t:'mod',name:'Timer',attrs:{times:{get t(){return'list'},get items(){return o.times.map(F)}},start:fn('start',()=>{o.tik=now();return NONE}),stop:fn('stop',()=>{o.times.push(now()-o.tik);return F(o.times[o.times.length-1])}),
     avg:fn('avg',()=>F(o.times.reduce((a,b)=>a+b,0)/o.times.length)),sum:fn('sum',()=>F(o.times.reduce((a,b)=>a+b,0))),cumsum:fn('cumsum',()=>{let s=0;return list(o.times.map(v=>F(s+=v)))})}}}
-const D2L_ALIAS={eye:'eye',bmm:'bmm',ones:'ones',zeros:'zeros',tensor:'tensor',normal:'normal',matmul:'matmul',arange:'arange',exp:'exp',sin:'sin',cos:'cos',tanh:'tanh',abs:'abs',float32:'float32',int64:'int64',concat:'cat',stack:'stack',randn:'randn',rand:'rand',zeros_like:'zeros_like',ones_like:'ones_like',sigmoid:'sigmoid',log:'log',sqrt:'sqrt'};
+const D2L_ALIAS={meshgrid:'meshgrid',cosh:'cosh',sinh:'sinh',eye:'eye',bmm:'bmm',ones:'ones',zeros:'zeros',tensor:'tensor',normal:'normal',matmul:'matmul',arange:'arange',exp:'exp',sin:'sin',cos:'cos',tanh:'tanh',abs:'abs',float32:'float32',int64:'int64',concat:'cat',stack:'stack',randn:'randn',rand:'rand',zeros_like:'zeros_like',ones_like:'ones_like',sigmoid:'sigmoid',log:'log',sqrt:'sqrt'};
 function d2lMod(ctx){return mod('d2l',{
   ...Object.fromEntries(Object.entries(D2L_ALIAS).map(([k,v])=>[k,torch.attrs[v]])),
   reshape:fn('reshape',a=>reshapeT(asTensor(a[0]),dimsArg([a[1]]))),numpy:fn('numpy',a=>{const T=asTensor(a[0]);const R=mkT(T.shape.slice(),[],T.dtype,true);R.data=T.data;return R}),
