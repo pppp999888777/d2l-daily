@@ -28,6 +28,7 @@ function tensorMethod(T,name){
     argmax:(a,kw)=>argmaxT(T,dimArg(a,kw),keepArg(kw),1),argmin:(a,kw)=>argmaxT(T,dimArg(a,kw),keepArg(kw),-1),
     unsqueeze:a=>{const s=T.shape.slice();let d=intOf(a[0]);if(d<0)d+=s.length+1;s.splice(d,0,1);return reshapeT(T,s)},transpose:a=>transposeT(T,intOf(a[0]),intOf(a[1])),permute:a=>permuteT(T,dimsArg(a)),bmm:a=>bmmT(T,asTensor(a[0])),dim:()=>I(T.shape.length),ndimension:()=>I(T.shape.length),
     repeat:a=>repeatT(T,dimsArg(a)),repeat_interleave:(a,kw)=>{const d=kwOr(kw,a,'dim',1,NONE);return repeatInterleaveT(T,kwOr(kw,a,'repeats',0),d.t==='none'?null:intOf(d))},sort:(a,kw)=>sortT(T,intOf(kwOr(kw,a,'dim',0,I(-1))),kw.descending?truthy(kw.descending):false),
+    masked_fill:(a,kw)=>maskedFillT(T,asTensor(kwOr(kw,a,'mask',0)),kwOr(kw,a,'value',1)),triu:(a,kw)=>triT(T,intOf(kwOr(kw,a,'diagonal',0,I(0))),true),tril:(a,kw)=>triT(T,intOf(kwOr(kw,a,'diagonal',0,I(0))),false),
     squeeze:(a,kw)=>{const dv=kw.dim||a[0];if(!dv||dv.t==='none')return reshapeT(T,T.shape.filter(d=>d!==1));let d=intOf(dv);if(d<0)d+=T.shape.length;return T.shape[d]===1?reshapeT(T,T.shape.filter((_,i)=>i!==d)):T},
     gather:(a,kw)=>gatherT(T,intOf(kwOr(kw,a,'dim',0)),asTensor(kwOr(kw,a,'index',1))),index_select:(a,kw)=>indexSelectT(T,intOf(kwOr(kw,a,'dim',0)),asTensor(kwOr(kw,a,'index',1))),
     flatten:()=>reshapeT(T,[-1]),pow:a=>binop('**',T,a[0]),softmax:(a,kw)=>softmaxT(T,intOf(kwOr(kw,a,'dim',0))),log_softmax:(a,kw)=>softmaxT(T,intOf(kwOr(kw,a,'dim',0)),true),all:()=>mkT([],[T.data.every(Boolean)?1:0],'bool',T.np),any:()=>mkT([],[T.data.some(Boolean)?1:0],'bool',T.np),round:()=>mkT(T.shape.slice(),Array.from(T.data,v=>Math.round(v)),T.dtype,T.np),__len__:()=>I(T.shape[0])};
@@ -48,18 +49,29 @@ function mkDict(pairs){const m=new Map();for(const[k,v]of pairs)m.set(numKey(k),
 function pyLen(v){if(isT(v)){if(!v.shape.length)err('TypeError','len() of a 0-d tensor');return v.shape[0]}if(v.items)return v.items.length;if(v.t==='str')return[...v.v].length;if(v.t==='dict')return v.m.size;if(v.t==='size')return v.dims.length;if(v.t==='range')return iterate(v).length;if(v.t==='df')return v.index.length;if(v.t==='series')return v.values.length;if(v.t==='tdataset')return v.tensors[0].shape[0];if(v.t==='fmnist')return v.n;if(v.t==='axarr')return v.fig.axes.length;if(v.t==='loader'){const n=dsLen(v.ds,CUR);return v.drop_last?Math.floor(n/v.bs):Math.ceil(n/v.bs)}if(v.t==='nn')return v.children.length;if(v.t==='obj'){const f=classLookup(v.cls,'__len__');if(f)return intOf(callValue({t:'bound',f,self:v},[],{},CUR))}err('TypeError',`object of type '${typeName(v)}' has no len()`)}
 function pyCmpLess(a,b){if(isT(a)||isT(b))return truthy(binop('<',a,b));const x=pyNum(a),y=pyNum(b);if(x!=null&&y!=null)return x<y;if(a.t==='str'&&b.t==='str')return a.v<b.v;if(a.items&&b.items){for(let i=0;i<Math.min(a.items.length,b.items.length);i++){if(pyCmpLess(a.items[i],b.items[i]))return true;if(pyCmpLess(b.items[i],a.items[i]))return false}return a.items.length<b.items.length}err('TypeError',`'<' not supported between instances of '${typeName(a)}' and '${typeName(b)}'`)}
 // 格式化：f'{x:.5f}' 和 format()
+// Python 的 "%d %s %.2f" % (...) 格式化
+function percentFormat(fmt,args){const vals=args.t==='tuple'?args.items.slice():[args];let k=0;
+  const out=fmt.replace(/%(?:\(([^)]*)\))?([-+ #0]*)(\d+|\*)?(?:\.(\d+))?([diouxXeEfFgGcrsa%])/g,(m0,key,flags,width,prec,type)=>{if(type==='%')return'%';
+    if(k>=vals.length)err('TypeError','not enough arguments for format string');let v=vals[k++];if(isT(v)&&v.data.length===1)v=isFloatDt(v.dtype)?F(v.data[0]):I(v.data[0]);
+    if(type==='s')return pad(str(v));if(type==='r'||type==='a')return pad(repr(v));
+    const align=flags.includes('-')?'<':'>',z=flags.includes('0')&&!flags.includes('-')?'0':'',sg=flags.includes('+')?'+':flags.includes(' ')?' ':'';
+    const t=type==='i'||type==='u'?'d':type;let n=pyNum(v);if(n==null)err('TypeError',`%${type} format: a real number is required, not ${typeName(v)}`);if('dxXo'.includes(t)){n=Math.trunc(n);v=I(n)}
+    return formatSpec(v,(z?'0':'')+(align==='<'?'<':'')+sg+(width||'')+(prec!=null?'.'+prec:'')+t);
+    function pad(s){if(!width)return s;return align==='<'?s.padEnd(+width):s.padStart(+width)}});
+  if(k<vals.length)err('TypeError','not all arguments converted during string formatting');return out}
+// Python 的定点格式：恰好在中间时舍入到偶数（JavaScript 的 toFixed 总是进位）
+function pyFixed(a,p){const s=a.toFixed(p);if(p>20)return s;const m=a*10**p,fl=Math.floor(m);if(m-fl===0.5&&(2*fl+1)/(2*10**p)===a&&fl%2===0)return(fl/10**p).toFixed(p);return s}
 function formatSpec(v,spec){if(!spec)return str(v);const m=spec.match(/^(?:(.)?([<>^=]))?([+\- ])?(#)?(0)?(\d+)?([,_])?(?:\.(\d+))?([bcdeEfFgGnosxX%])?$/);if(!m)err('ValueError',`Invalid format specifier '${spec}'`);
-  let[,fill,align,sign,,zero,width,group,prec,type]=m;fill=fill||(zero&&!align?'0':' ');align=align||(zero?'=':null);
+  let[,fill,align,sign,,zero,width,group,prec,type]=m;fill=fill||(zero?'0':' ');align=align||(zero?'=':null);
   let s;const n=v.t==='str'?null:(isT(v)?v.data[0]:pyNum(v));
   if(v.t==='str'){s=v.v;if(prec)s=s.slice(0,+prec)}
   else{if(n==null)err('TypeError',`unsupported format string passed to ${typeName(v)}.__format__`);const t=type||(v.t==='int'?'d':(prec?'g':''));
-    const a=Math.abs(n);if(!Number.isFinite(n)&&'fFeEgG%'.includes(t||'f')){s=Number.isNaN(n)?'nan':'inf';if('FEG'.includes(t))s=s.toUpperCase();const sg0=n<0?'-':sign==='+'?'+':'';s=sg0+s;if(width&&s.length<+width)s=s.padStart(+width,' ');return s}switch(t){case'd':if(!Number.isInteger(n))err('ValueError',"Unknown format code 'd' for object of type 'float'");s=String(a);break;case'f':case'F':s=a.toFixed(prec?+prec:6);break;case'e':case'E':s=a.toExponential(prec?+prec:6).replace(/e([+-])(\d)$/,'e$10$2');if(t==='E')s=s.toUpperCase();break;
+    const a=Math.abs(n);if(!Number.isFinite(n)&&'fFeEgG%'.includes(t||'f')){s=Number.isNaN(n)?'nan':'inf';if('FEG'.includes(t))s=s.toUpperCase();const sg0=n<0?'-':sign==='+'?'+':'';s=sg0+s;if(width&&s.length<+width)s=s.padStart(+width,' ');return s}switch(t){case'b':case'o':case'x':case'X':{if(!Number.isInteger(n))err('ValueError',`Unknown format code '${t}' for object of type 'float'`);s=a.toString(t==='b'?2:t==='o'?8:16);if(t==='X')s=s.toUpperCase();break}case'd':if(!Number.isInteger(n))err('ValueError',"Unknown format code 'd' for object of type 'float'");s=String(a);break;case'f':case'F':s=pyFixed(a,prec?+prec:6);break;case'e':case'E':s=a.toExponential(prec?+prec:6).replace(/e([+-])(\d)$/,'e$10$2');if(t==='E')s=s.toUpperCase();break;
       case'%':s=(a*100).toFixed(prec?+prec:6)+'%';break;case'g':case'G':{const p=prec?Math.max(1,+prec):6;const ex=a===0?0:Math.floor(Math.log10(a));s=ex<-4||ex>=p?a.toExponential(p-1).replace(/\.?0+e/,'e').replace(/e([+-])(\d)$/,'e$10$2'):String(+a.toPrecision(p));break}
       default:s=v.t==='float'?pyFloatRepr(a):String(a)}
     if(group){const[ip,fp]=s.split('.');s=ip.replace(/\B(?=(\d{3})+(?!\d))/g,group)+(fp!=null?'.'+fp:'')}
     const sg=n<0||Object.is(n,-0)?'-':sign==='+'?'+':sign===' '?' ':'';if(align==='='&&width){s=sg+s.padStart(+width-sg.length,fill);return s}s=sg+s}
   if(width&&s.length<+width){const w=+width,padN=w-s.length;const al=align||(v.t==='str'?'<':'>');s=al==='<'?s+fill.repeat(padN):al==='^'?fill.repeat(Math.floor(padN/2))+s+fill.repeat(Math.ceil(padN/2)):fill.repeat(padN)+s}return s}
-function percentFormat(fmt,arg){const args=arg.t==='tuple'?arg.items.slice():[arg];return fmt.replace(/%(-?\d*)(?:\.(\d+))?([sdfr%])/g,(m0,w,p,t)=>{if(t==='%')return'%';const v=args.shift();let s=t==='s'?str(v):t==='r'?repr(v):t==='d'?String(Math.trunc(numOf(v))):numOf(v).toFixed(p?+p:6);if(w){const n=Math.abs(+w);s=+w<0?s.padEnd(n):s.padStart(n)}return s})}
 const builtins={
   super:fn('super',(a,kw,ctx)=>{const sc=ctx.scope;let cls=null,self=null;try{cls=sc.get('__class__');self=sc.get('__self__')}catch(e){err('RuntimeError','super(): no arguments')}return{t:'super',cls,self}}),
   print:fn('print',(a,kw,ctx)=>{const s=a.map(str).join(kw.sep?str(kw.sep):' ')+(kw.end?str(kw.end):'\n');ctx.outBuf+=s;return NONE}),

@@ -184,7 +184,7 @@ function evalE(e,env,ctx){switch(e.k){
   case'and':{const a=evalE(e.a,env,ctx);return truthy(a)?evalE(e.b,env,ctx):a}case'or':{const a=evalE(e.a,env,ctx);return truthy(a)?a:evalE(e.b,env,ctx)}
   case'ifexp':return truthy(evalE(e.c,env,ctx))?evalE(e.a,env,ctx):evalE(e.b,env,ctx);
   case'lambda':return{t:'func',name:'<lambda>',params:e.params.map(p=>({...p,defVal:p.def?evalE(p.def,env,ctx):null})),expr:e.body,closure:env,id:newId()};
-  case'bin':{const a=evalE(e.a,env,ctx),b=evalE(e.b,env,ctx);if(e.op==='@')return matmul(asTensor(a),asTensor(b));
+  case'bin':{const a=evalE(e.a,env,ctx),b=evalE(e.b,env,ctx);if(e.op==='%'&&a.t==='str')return S(percentFormat(a.v,b));if(e.op==='@')return matmul(asTensor(a),asTensor(b));
     if(a.t==='obj'){const m=classLookup(a.cls,{'+':'__add__','-':'__sub__','*':'__mul__','/':'__truediv__'}[e.op]);if(m)return callFunc(m,[a,b],{},ctx)}return binop(e.op,a,b)}
   case'cmp':{let left=evalE(e.first,env,ctx),res=null;for(let i=0;i<e.ops.length;i++){const right=evalE(e.rest[i],env,ctx),op=e.ops[i];let r;
       if(op==='in')r=B(contains(right,left));else if(op==='not in')r=B(!contains(right,left));else if(op==='is')r=B(left===right||(left.t==='none'&&right.t==='none')||(left.t==='bool'&&right.t==='bool'&&left.v===right.v));else if(op==='is not')r=B(!(left===right||(left.t==='none'&&right.t==='none')||(left.t==='bool'&&right.t==='bool'&&left.v===right.v)));else r=binop(op,left,right);

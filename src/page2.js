@@ -8,7 +8,7 @@ function colors(){const cs=getComputedStyle(document.documentElement),g=n=>cs.ge
 function fitCanvas(cv,W,H){const r=window.devicePixelRatio||1;cv.width=Math.round(W*r);cv.height=Math.round(H*r);cv.style.width=W+'px';cv.style.height=H+'px';const c=cv.getContext('2d');c.setTransform(r,0,0,r,0,0);return c}
 const MONO='11px "JetBrains Mono",ui-monospace,monospace';
 const bodyFont=px=>`${px}px ${getComputedStyle(document.body).fontFamily}`;
-const DAYS=['1','2','3','4','5','6','7','8','9','10','11','12','13','14','15'];
+const DAYS=['1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16'];
 
 // ---------- 张量图示 ----------
 function cellText(v,dtype){if(dtype==='bool')return v?'T':'F';if(dtype==='int64')return String(v);if(!Number.isFinite(v))return String(v);return Number.isInteger(v)?String(v):(Math.abs(v)>=100?v.toFixed(0):v.toFixed(2))}
@@ -127,7 +127,7 @@ function setupCells(){$$('.cell').forEach((cell,i)=>{const ta=cell.querySelector
     else if(e.key==='Tab'&&!e.shiftKey){e.preventDefault();const s=ta.selectionStart;ta.setRangeText('    ',s,ta.selectionEnd,'end');autoSize(ta)}})})}
 function runAll(day){ENVS[day]=MT.newEnv();EXEC[day]=0;MT.resetFS();let errs=0;const main=$('#day'+day);
   $$('.cell',main).forEach(c=>{if(c.dataset.manual){const out=c.querySelector('.out');out.className='out';out.textContent='';const t=document.createElement('span');t.className='tip';t.textContent=`这一格要手动运行：${c.dataset.manual}。准备好了点这一格右上角的“运行”。`;out.appendChild(t);out.hidden=false;return}if(!runCellEl(c))errs++});RAN[day]=true;
-  const expected={'1':0,'2':5,'3':3,'4':0,'5':0,'6':0,'7':0,'8':0,'9':0,'10':0,'11':2,'12':0,'13':0,'14':0,'15':0}[day]||0;
+  const expected={'1':0,'2':5,'3':3,'4':0,'5':0,'6':0,'7':0,'8':0,'9':0,'10':0,'11':2,'12':0,'13':0,'14':0,'15':0,'16':0}[day]||0;
   $$('.runAllMsg',main).forEach(m=>m.textContent=errs>expected?`运行完了，有 ${errs} 个格子报错，往下找红字。`:expected?`全部运行完了。其中 ${expected} 个格子是故意报错的，用来练习读报错。`:'全部运行完了，没有报错。')}
 document.addEventListener('click',e=>{const b=e.target.closest('.runAll');if(b)runAll(b.dataset.day)});
 
@@ -340,12 +340,12 @@ function fmtStyle(fmt,i){const m=fmt.match(/^([bgrcmyk])?(--|-\.|-|:|o)?$/)||[];
 const VIRIDIS=[[68,1,84],[59,82,139],[33,145,140],[94,201,98],[253,231,37]];
 function viridis(t){t=Math.max(0,Math.min(1,t))*4;const i=Math.min(3,Math.floor(t)),f=t-i,a=VIRIDIS[i],b=VIRIDIS[i+1];return[a[0]+(b[0]-a[0])*f,a[1]+(b[1]-a[1])*f,a[2]+(b[2]-a[2])*f]}
 function drawImage(cv,img,px){const{H,W}=img;cv.width=W;cv.height=H;cv.style.width=px+'px';cv.style.height=Math.round(px*H/W)+'px';const c=cv.getContext('2d'),d=c.createImageData(W,H);let lo=Infinity,hi=-Infinity;for(const v of img.px){if(v<lo)lo=v;if(v>hi)hi=v}const rg=hi-lo||1;
-  const reds=t=>[Math.round(255-t*(255-103)),Math.round(245-t*245),Math.round(240-t*(240-13))];for(let k=0;k<W*H;k++){const[r,g,b]=img.cmap==='Reds'?reds((img.px[k]-lo)/rg):viridis((img.px[k]-lo)/rg);d.data[k*4]=r;d.data[k*4+1]=g;d.data[k*4+2]=b;d.data[k*4+3]=255}c.putImageData(d,0,0)}
+  const blues=t=>[Math.round(247-t*(247-8)),Math.round(251-t*(251-48)),Math.round(255-t*(255-107))],reds=t=>[Math.round(255-t*(255-103)),Math.round(245-t*245),Math.round(240-t*(240-13))];for(let k=0;k<W*H;k++){const[r,g,b]=img.cmap==='Reds'?reds((img.px[k]-lo)/rg):img.cmap==='Blues'?blues((img.px[k]-lo)/rg):viridis((img.px[k]-lo)/rg);d.data[k*4]=r;d.data[k*4+1]=g;d.data[k*4+2]=b;d.data[k*4+3]=255}c.putImageData(d,0,0)}
 function renderFig(wrap,fig){if(fig.axes.some(a=>a.image)){const grid=document.createElement('div');grid.className='imgrid';grid.style.gridTemplateColumns=`repeat(${fig.cols},minmax(0,1fr))`;
-    const hm=fig.axes.some(a=>a.image&&a.image.cmap),sz=hm?Math.max(110,Math.min(260,Math.floor(((wrap.parentElement&&wrap.parentElement.clientWidth)||320)/fig.cols)-16)):72;
+    const hm=fig.axes.some(a=>a.image&&(a.image.cmap==='Reds'||a.image.cmap==='Blues')),sz=hm?Math.max(110,Math.min(260,Math.floor(((wrap.parentElement&&wrap.parentElement.clientWidth)||320)/fig.cols)-16)):72;
     for(const ax of fig.axes){const cell=document.createElement('figure');if(ax.title){const t=document.createElement('figcaption');t.textContent=ax.title;cell.appendChild(t)}if(ax.image){const cv=document.createElement('canvas');cv.setAttribute('aria-label',ax.title||(hm?'注意力权重热图':'图片'));cv.className=hm?'hm':'';cell.appendChild(cv);drawImage(cv,ax.image,sz)}
       if(hm&&(ax.xlabel||ax.ylabel)){const c=document.createElement('figcaption');c.className='small muted';c.textContent=`横轴（列）：${ax.xlabel||''}　纵轴（行）：${ax.ylabel||''}`;cell.appendChild(c)}grid.appendChild(cell)}
-    if(hm){const n=document.createElement('p');n.className='small muted';n.textContent='颜色越深权重越大：最浅是这张图里的最小值，最深是最大值。';wrap.appendChild(grid);wrap.appendChild(n);return}wrap.appendChild(grid);return}
+    if(hm){const n=document.createElement('p');n.className='small muted';n.textContent='颜色越深数值越大：最浅是这张图里的最小值，最深是最大值。';wrap.appendChild(grid);wrap.appendChild(n);return}wrap.appendChild(grid);return}
   for(const ax of fig.axes){if(!ax.lines.length)continue;const spec={series:ax.lines.map((l,i)=>({x:l.x,y:l.y,label:ax.legend[i]||'',...fmtStyle(l.fmt,i)})),hlines:[],xlabel:ax.xlabel,ylabel:ax.ylabel,legend:ax.legend.length>0,xlim:ax.xlim,ylim:ax.ylim,xscale:ax.xscale,yscale:ax.yscale};const cv=document.createElement('canvas');cv.setAttribute('aria-label','训练曲线');wrap.appendChild(cv);drawPlot(cv,spec)}}
 
 // ---------- 第 7 天：解压内嵌的 Fashion-MNIST，像素查看器 ----------
@@ -554,6 +554,27 @@ function sdRender(){const host=$('#sdHost');if(!host.offsetParent)return;const d
   const sdv=a=>Math.sqrt(a.reduce((s,v)=>s+v*v,0)/a.length);
   $('#sdCalc').textContent=`d = ${d}\n8 个分数的标准差：不缩放 ${sdv(sc).toFixed(2)}，除以 √d 后 ${sdv(sc.map(v=>v/Math.sqrt(d))).toFixed(2)}\n最大的权重：不缩放 ${Math.max(...p0).toFixed(3)}，除以 √d 后 ${Math.max(...p1).toFixed(3)}\n\n${d<4?'d 很小时两者差别不大。':Math.max(...p0)>0.95?'不缩放时几乎所有权重都压在一个键上，softmax 饱和了：其他键的梯度接近 0，学不动。':'d 越大，不缩放的分数越分散，权重越尖。'}`}
 $('#sdD').addEventListener('input',sdRender);$('#sdGo').onclick=()=>{SD.seed++;sdRender()};
+// ---------- 第 16 天：位置编码的相似度 ----------
+function peVec(i,d){const v=new Float64Array(d);for(let j=0;j<d;j+=2){const x=i/Math.pow(10000,j/d);v[j]=Math.sin(x);if(j+1<d)v[j+1]=Math.cos(x)}return v}
+function peRender(){const host=$('#peHost');if(!host.offsetParent)return;const i=+$('#peI').value,d=+$('#peD').value;$('#peIv').textContent=i;
+  const pi=peVec(i,d),xs=Array.from({length:60},(_,k)=>k),sim=xs.map(k=>{const pk=peVec(k,d);let s=0;for(let j=0;j<d;j++)s+=pi[j]*pk[j];return s/d*2});
+  host.innerHTML='<canvas id="peCv" aria-label="位置相似度"></canvas>';
+  drawPlot($('#peCv'),{series:[{x:xs,y:sim,label:`位置 ${i} 和各位置的相似度`}],hlines:[],xlabel:'位置',ylabel:'',legend:true});
+  const pair=(a,b)=>{const pa=peVec(a,d),pb=peVec(b,d);let s=0;for(let j=0;j<d;j++)s+=pa[j]*pb[j];return(s/d*2).toFixed(4)};
+  $('#peCalc').textContent=`相似度 = 两个位置编码的点积 × 2 / d（自己和自己是 1）\n\n位置 ${i} 和 ${Math.min(59,i+3)}：${pair(i,Math.min(59,i+3))}\n位置 0 和 3：${pair(0,3)}\n位置 40 和 43：${pair(40,43)}\n\n只要隔得一样远，相似度就一样：点积只和“相隔多远”有关，和绝对位置无关。\n离得越近越相似，所以模型能从位置编码里读出“这两道题隔了多远”。${d===8?'\n维度少时，远处的相似度会上下波动得比较厉害。':''}`}
+$('#peI').addEventListener('input',peRender);$('#peD').onchange=peRender;
+// ---------- 第 16 天：SAKT 预测下一题时在看什么 ----------
+const SK={sk:[0,1,0,2,2,1,0,2,1,2],rs:[1,0,1,0,0,1,1,1,0,1],names:['A','B','C']};
+function skRender(){const host=$('#skHost');if(!host.offsetParent)return;const C=colors(),q=+$('#skQ').value,r=+$('#skR').value,masked=$('#skM').value==='1';$('#skRv').textContent=r.toFixed(2);
+  const T=SK.sk.length,tq=6;// 站在第 7 题（下标 6）之后，预测第 8 题；去掉掩码时会看到第 8 到 10 题
+  const sc=SK.sk.map((s,j)=>(s===q?2:0)-r*Math.abs(tq-j)),use=sc.map((_,j)=>!masked||j<=tq),m=Math.max(...sc.filter((_,j)=>use[j])),e=sc.map((v,j)=>use[j]?Math.exp(v-m):0),z=e.reduce((a,b)=>a+b,0),w=e.map(v=>v/z),p=w.reduce((a,v,j)=>a+v*SK.rs[j],0);
+  const W=Math.max(260,host.clientWidth),H=220,ctx=fitCanvas($('#skCv'),W,H),pl=8,cw=(W-2*pl)/T;ctx.font=bodyFont(12);ctx.textAlign='center';
+  SK.sk.forEach((s,j)=>{const x=pl+j*cw,fut=j>tq;ctx.fillStyle=SK.rs[j]?C.pos:C.neg;ctx.globalAlpha=fut?.35:.8;ctx.fillRect(x+3,6,cw-6,34);ctx.globalAlpha=1;ctx.fillStyle=C.ink;ctx.fillText(SK.names[s],x+cw/2,22);ctx.fillText(SK.rs[j]?'对':'错',x+cw/2,36);
+    const h=w[j]*(H-90);ctx.fillStyle=C.accent;ctx.fillRect(x+cw*0.25,H-28-h,cw*0.5,h);ctx.fillStyle=C.muted;ctx.fillText(w[j]>0.005?w[j].toFixed(2):(use[j]?'0':'×'),x+cw/2,H-32-h);ctx.fillText(String(j+1),x+cw/2,H-10)});
+  ctx.strokeStyle=C.ink;ctx.setLineDash([4,4]);ctx.beginPath();const xb=pl+(tq+1)*cw;ctx.moveTo(xb,0);ctx.lineTo(xb,H);ctx.stroke();ctx.setLineDash([]);ctx.textAlign='left';ctx.fillStyle=C.muted;ctx.fillText('← 已经做过　未来 →',Math.max(4,xb-62),56);
+  const fut=w.slice(tq+1).reduce((a,b)=>a+b,0);
+  $('#skCalc').textContent=`现在做完了第 1 到 7 题，要预测第 8 题（知识点 ${SK.names[q]}）答对的概率。\n打分 = (同一个知识点 ? 2 : 0) − ${r.toFixed(2)} × 相隔的步数\n\n预测答对概率 = Σ 权重 × 对错 = ${p.toFixed(3)}\n${masked?'有因果掩码：第 8 到 10 题的权重是 0（图上标 ×）。':`去掉掩码：${(fut*100).toFixed(0)}% 的注意力落在了未来的题上，模型在“偷看答案”。训练时这样做损失会很低，但上线时根本拿不到未来的数据。`}\n${r<0.05?'不看远近：同知识点的题平分权重。':r>1?'只看最近的一两题，几乎不管知识点。':'同一个知识点、离得近的题权重最大。'}`}
+['#skQ','#skM'].forEach(s=>$(s).onchange=skRender);$('#skR').addEventListener('input',skRender);
 // ---------- 小结勾选、课程表、切换天数 ----------
 function checksSetup(){$$('.check-list').forEach(ul=>{const day=ul.dataset.day,key='checks'+day,st=store.get(key,{});$$('input',ul).forEach(c=>{c.checked=!!st[c.dataset.k];c.onchange=()=>{const s=store.get(key,{});s[c.dataset.k]=c.checked;store.set(key,s);checkMsg(ul)}});checkMsg(ul)})}
 function checkMsg(ul){const day=ul.dataset.day,all=$$('input',ul),n=all.filter(c=>c.checked).length,msg=ul.parentElement.querySelector('.check-msg');const done=n===all.length;
@@ -566,7 +587,7 @@ const ROAD=[['1','第 1 章 引言 + 2.1 数据操作'],['2','2.2 数据预处�
   ['18','11.4 至 11.6 + 11.10 小批量随机梯度下降、动量、Adam（论文用的优化器）','paper'],['19','论文专题：离线策略评估 IPS、SNIPS、DR（书里没有）','paper'],['20','论文专题：逐行读你的 experiment.py','paper'],
   ['选学','4.7 前向传播、反向传播和计算图；4.10 Kaggle 房价预测'],['选学','第 6 至 7 章 卷积神经网络（LeNet、ResNet 等）'],['选学','9.3 至 9.8 深度和双向循环网络、机器翻译、seq2seq'],['选学','第 11 章其余优化算法、第 12 章计算性能'],['选学','第 13 至 15 章 计算机视觉、自然语言处理']];
 function roadRender(){$('#roadList').innerHTML=ROAD.map(([d,t,f])=>{const live=DAYS.includes(d);return`<div><span class="d">${/^\d+$/.test(d)?`第 ${d} 天`:d}</span><span>${live?`<a href="#day${d}">${esc(t)}</a>`:esc(t)}${f==='paper'?' <span class="mark">论文</span>':''}</span><span class="st${live?' now':''}">${live?'已上线':'未上线'}</span></div>`}).join('')}
-const REDRAW={'1':()=>{kRender();imRender();ofRender()},'2':()=>{dotRender();normRender()},'3':()=>{secRender();gradRender()},'4':()=>{diceRender();bayesRender();bktRender()},'5':()=>{houseRender();if(!sgd.X)sgdData();sgdRender()},'6':()=>{smRender();calRender()},'7':()=>{pixRender()},'8':()=>{uaRender();actRender()},'9':()=>{spRender();rdRender();dpRender()},'10':()=>{sgRender();shRender()},'11':()=>{pcRender()},'12':()=>{tkRender();ptRender();rnRender()},'13':()=>{clRender();btRender()},'14':()=>{gtRender()},'15':()=>{nwRender();sdRender()}};
+const REDRAW={'1':()=>{kRender();imRender();ofRender()},'2':()=>{dotRender();normRender()},'3':()=>{secRender();gradRender()},'4':()=>{diceRender();bayesRender();bktRender()},'5':()=>{houseRender();if(!sgd.X)sgdData();sgdRender()},'6':()=>{smRender();calRender()},'7':()=>{pixRender()},'8':()=>{uaRender();actRender()},'9':()=>{spRender();rdRender();dpRender()},'10':()=>{sgRender();shRender()},'11':()=>{pcRender()},'12':()=>{tkRender();ptRender();rnRender()},'13':()=>{clRender();btRender()},'14':()=>{gtRender()},'15':()=>{nwRender();sdRender()},'16':()=>{peRender();skRender()}};
 function showDay(day,scroll){if(!DAYS.includes(day))day='1';$$('main.day').forEach(m=>m.hidden=m.dataset.day!==day);$$('[data-nav]').forEach(a=>a.classList.toggle('on',a.dataset.nav===day));store.set('lastDay',day);
   if(!RAN[day]){if(day==='7'&&!FM_U8){fmReady.then(ok=>{if(ok&&!RAN['7']){runAll('7');REDRAW['7']()}});}else runAll(day)}$$('#day'+day+' textarea').forEach(autoSize);REDRAW[day]();if(scroll)window.scrollTo(0,0)}
 function route(){const h=location.hash.replace('#','');const m=h.match(/^day(\d+)$/);if(m){showDay(m[1],true);return}

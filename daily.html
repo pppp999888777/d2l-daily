@@ -214,7 +214,7 @@ code.big{font-size:.8em;background:var(--sunk);padding:0 .25em;border-radius:6px
 </style><header class="top"><div class="wrap">
   <span class="brand">动手学深度学习每日课</span>
   <nav class="days" id="dayNav" aria-label="课程天数">
-    <a href="#day1" data-nav="1">第 1 天</a><a href="#day2" data-nav="2">第 2 天</a><a href="#day3" data-nav="3">第 3 天</a><a href="#day4" data-nav="4">第 4 天</a><a href="#day5" data-nav="5">第 5 天</a><a href="#day6" data-nav="6">第 6 天</a><a href="#day7" data-nav="7">第 7 天</a><a href="#day8" data-nav="8">第 8 天</a><a href="#day9" data-nav="9">第 9 天</a><a href="#day10" data-nav="10">第 10 天</a><a href="#day11" data-nav="11">第 11 天</a><a href="#day12" data-nav="12">第 12 天</a><a href="#day13" data-nav="13">第 13 天</a><a href="#day14" data-nav="14">第 14 天</a><a href="#day15" data-nav="15">第 15 天</a>
+    <a href="#day1" data-nav="1">第 1 天</a><a href="#day2" data-nav="2">第 2 天</a><a href="#day3" data-nav="3">第 3 天</a><a href="#day4" data-nav="4">第 4 天</a><a href="#day5" data-nav="5">第 5 天</a><a href="#day6" data-nav="6">第 6 天</a><a href="#day7" data-nav="7">第 7 天</a><a href="#day8" data-nav="8">第 8 天</a><a href="#day9" data-nav="9">第 9 天</a><a href="#day10" data-nav="10">第 10 天</a><a href="#day11" data-nav="11">第 11 天</a><a href="#day12" data-nav="12">第 12 天</a><a href="#day13" data-nav="13">第 13 天</a><a href="#day14" data-nav="14">第 14 天</a><a href="#day15" data-nav="15">第 15 天</a><a href="#day16" data-nav="16">第 16 天</a>
     <a href="#road" class="road-link">课程表</a>
     <a class="soon" href="#road">第 9 天</a><a class="soon" href="#road">第 10 天</a>
   </nav>
@@ -4614,6 +4614,249 @@ r = torch.einsum("btmn,btnd->btmd", w, M)  <span class="c"># 用权重对 20 个
 </section>
 </main>
 
+<main class="wrap day" id="day16" data-day="16" hidden>
+<section class="hero">
+  <div class="eyebrow">第 16 天 · 原书第 10.5 节 + 第 10.6 节 · 论文路线第 9 课</div>
+  <h1>多头注意力、自注意力和位置编码</h1>
+  <p class="lead">昨天的注意力是“一个查询去看一组键值”。今天两个升级：<b>多头</b>，同时用几组不同的投影去看，每组关注不同的东西；<b>自注意力</b>，序列自己既当查询又当键和值，每个位置都去看其他位置。注意力本身不知道先后顺序，所以还要加<b>位置编码</b>。你论文的 SAKT 就是这三样东西加一个“不许偷看未来”的因果掩码。</p>
+  <div class="plan">
+    <div><b class="k">今天的时间</b>大约 70 分钟。代码格都很快，自动运行。</div>
+    <div><b class="k">学完你能</b><ul><li>说清多头注意力的形状变换</li><li>比较 CNN、RNN 和自注意力</li><li>写出正弦位置编码</li><li>用因果掩码让第 t 步看不到未来</li></ul></div>
+    <div><b class="k">和你的论文</b><ul><li>SAKT 的 <code>heads=2</code> 和 <code>causal_attn</code></li><li><code>self.pos = nn.Embedding(maxlen, d)</code></li><li>查询是下一题，键值是做过的题</li></ul></div>
+  </div>
+</section>
+
+<section class="part" id="mha">
+  <div class="part-h"><div class="eyebrow">第一部分</div><h2>10.5 多头注意力</h2><span class="src">对应原书第 10.5 节，代码来自原书 PyTorch 版</span></div>
+  <div class="prose"><div class="row"><button class="btn primary runAll" data-day="16">从头全部运行</button><span class="small muted runAllMsg"></span></div></div>
+  <div class="blk">
+    <div class="prose">
+      <p>同一组查询、键、值，用 h 组不同的线性变换投影，各自做一次注意力（每一组叫一个<b>头</b>），把 h 个结果拼起来，再用一个线性层 W_o 混合：</p>
+      <p class="math">headᵢ = Attention(Q W_qᵢ, K W_kᵢ, V W_vᵢ)<br>MultiHead = concat(head₁, …, head_h) W_o</p>
+      <p>不同的头可以学到不同的关注方式：比如一个头看“同一个知识点”，另一个头看“最近几步”。为了不增加计算量，每个头的维度是 num_hiddens / h。</p>
+    </div>
+    <div class="cell"><textarea>from d2l import torch as d2l
+import math
+import torch
+from torch import nn</textarea></div>
+    <div class="prose"><p>实现上有个技巧：不用循环 h 次，而是把 num_hiddens 维切成 h 段，把“头”这个维度并到批量维度里，一次 bmm 就算完所有头。</p></div>
+    <div class="cell"><textarea>#@save
+def transpose_qkv(X, num_heads):
+    """为了多注意力头的并行计算而变换形状"""
+    # 输入X的形状:(batch_size，查询或者“键－值”对的个数，num_hiddens)
+    # 输出X的形状:(batch_size，查询或者“键－值”对的个数，num_heads，
+    # num_hiddens/num_heads)
+    X = X.reshape(X.shape[0], X.shape[1], num_heads, -1)
+
+    # 输出X的形状:(batch_size，num_heads，查询或者“键－值”对的个数,
+    # num_hiddens/num_heads)
+    X = X.permute(0, 2, 1, 3)
+
+    # 最终输出的形状:(batch_size*num_heads,查询或者“键－值”对的个数,
+    # num_hiddens/num_heads)
+    return X.reshape(-1, X.shape[2], X.shape[3])
+
+
+#@save
+def transpose_output(X, num_heads):
+    """逆转transpose_qkv函数的操作"""
+    X = X.reshape(-1, num_heads, X.shape[1], X.shape[2])
+    X = X.permute(0, 2, 1, 3)
+    return X.reshape(X.shape[0], X.shape[1], -1)</textarea></div>
+    <div class="prose"><p>看一个小例子：1 个序列、3 个位置、每个位置 8 维，切成 2 个头。第 2 个头拿到的是每个位置的后 4 维：</p></div>
+    <div class="cell"><textarea>X = torch.arange(24.0).reshape(1, 3, 8)
+Y = transpose_qkv(X, 2)
+print(Y.shape)
+print(Y[1])
+print('能还原回去：', bool((transpose_output(Y, 2) == X).all()))</textarea></div>
+    <div class="cell"><textarea>#@save
+class MultiHeadAttention(nn.Module):
+    """多头注意力"""
+    def __init__(self, key_size, query_size, value_size, num_hiddens,
+                 num_heads, dropout, bias=False, **kwargs):
+        super(MultiHeadAttention, self).__init__(**kwargs)
+        self.num_heads = num_heads
+        self.attention = d2l.DotProductAttention(dropout)
+        self.W_q = nn.Linear(query_size, num_hiddens, bias=bias)
+        self.W_k = nn.Linear(key_size, num_hiddens, bias=bias)
+        self.W_v = nn.Linear(value_size, num_hiddens, bias=bias)
+        self.W_o = nn.Linear(num_hiddens, num_hiddens, bias=bias)
+
+    def forward(self, queries, keys, values, valid_lens):
+        # queries，keys，values的形状:
+        # (batch_size，查询或者“键－值”对的个数，num_hiddens)
+        # valid_lens　的形状:
+        # (batch_size，)或(batch_size，查询的个数)
+        # 经过变换后，输出的queries，keys，values　的形状:
+        # (batch_size*num_heads，查询或者“键－值”对的个数，
+        # num_hiddens/num_heads)
+        queries = transpose_qkv(self.W_q(queries), self.num_heads)
+        keys = transpose_qkv(self.W_k(keys), self.num_heads)
+        values = transpose_qkv(self.W_v(values), self.num_heads)
+
+        if valid_lens is not None:
+            # 在轴0，将第一项（标量或者矢量）复制num_heads次，
+            # 然后如此复制第二项，然后诸如此类。
+            valid_lens = torch.repeat_interleave(
+                valid_lens, repeats=self.num_heads, dim=0)
+
+        # output的形状:(batch_size*num_heads，查询的个数，
+        # num_hiddens/num_heads)
+        output = self.attention(queries, keys, values, valid_lens)
+
+        # output_concat的形状:(batch_size，查询的个数，num_hiddens)
+        output_concat = transpose_output(output, self.num_heads)
+        return self.W_o(output_concat)</textarea></div>
+    <div class="cell"><textarea>num_hiddens, num_heads = 100, 5
+attention = MultiHeadAttention(num_hiddens, num_hiddens, num_hiddens,
+                               num_hiddens, num_heads, 0.5)
+attention.eval()</textarea></div>
+    <div class="cell"><textarea>batch_size, num_queries = 2, 4
+num_kvpairs, valid_lens =  6, d2l.tensor([3, 2])
+X = d2l.ones((batch_size, num_queries, num_hiddens))
+Y = d2l.ones((batch_size, num_kvpairs, num_hiddens))
+attention(X, Y, Y, valid_lens).shape</textarea></div>
+  </div>
+</section>
+
+<section class="part" id="selfatt">
+  <div class="part-h"><div class="eyebrow">第二部分</div><h2>10.6 自注意力和位置编码</h2><span class="src">对应原书第 10.6 节，代码来自原书 PyTorch 版</span></div>
+  <div class="blk"><div class="blk-h"><span class="n">10.6.1</span><h3>自注意力</h3></div>
+    <div class="prose"><p>把同一个序列同时当查询、键和值：每个位置都去看序列里所有位置，输出和输入一样长。</p></div>
+    <div class="cell"><textarea>num_hiddens, num_heads = 100, 5
+attention = d2l.MultiHeadAttention(num_hiddens, num_hiddens, num_hiddens,
+                                   num_hiddens, num_heads, 0.5)
+attention.eval()</textarea></div>
+    <div class="cell"><textarea>batch_size, num_queries, valid_lens = 2, 4, d2l.tensor([3, 2])
+X = d2l.ones((batch_size, num_queries, num_hiddens))
+attention(X, X, X, valid_lens).shape</textarea></div>
+  </div>
+  <div class="blk"><div class="blk-h"><span class="n">10.6.2</span><h3>比较卷积神经网络、循环神经网络和自注意力</h3></div>
+    <div class="prose">
+      <p>把长度为 n、每个位置 d 维的序列变成同样长度的序列，三种做法比较如下（原书表格）：</p>
+      <div class="tblwrap"><table class="t">
+        <thead><tr><th></th><th>计算量</th><th>顺序操作（能不能并行）</th><th>最长路径（远处信息要走几步）</th></tr></thead>
+        <tbody>
+          <tr><td>卷积（核大小 k）</td><td>O(knd²)</td><td>O(1)</td><td>O(n/k)</td></tr>
+          <tr><td>循环神经网络</td><td>O(nd²)</td><td>O(n)：必须一步一步算</td><td>O(n)</td></tr>
+          <tr><td>自注意力</td><td>O(n²d)</td><td>O(1)：所有位置同时算</td><td>O(1)：任意两个位置直接相连</td></tr>
+        </tbody></table></div>
+      <p>自注意力的好处：可以并行，远处的信息一步就到。代价：计算量随序列长度的平方增长。KT 里一个窗口 100 步，n² = 10⁴，完全可以接受。</p>
+    </div>
+    <div class="callout"><h4>对照你的论文：DKT 和 SAKT 的区别</h4><p>DKT 用 LSTM，第 100 题的信息要从第 1 题开始一步步传过来，中间可能被遗忘（第 14 天的门控只是缓解）。SAKT 用自注意力，预测下一题时直接回头看所有做过的题，挑相关的看：比如下一题考“分数加法”，就重点看以前做过的分数加法题。</p></div>
+  </div>
+  <div class="blk"><div class="blk-h"><span class="n">10.6.3</span><h3>位置编码</h3></div>
+    <div class="prose">
+      <p>自注意力对位置是“看不见”的：把序列打乱顺序，每个位置的输出只是跟着换位置，值完全不变。可是顺序很重要（昨天做对和一个月前做对，意义不同）。所以要给每个位置加一个<b>位置编码</b>。原书用正弦和余弦：第 i 个位置、第 2j 和 2j+1 维是</p>
+      <p class="math">p_{i,2j} = sin(i / 10000^{2j/d})，p_{i,2j+1} = cos(i / 10000^{2j/d})</p>
+    </div>
+    <div class="cell"><textarea>#@save
+class PositionalEncoding(nn.Module):
+    """位置编码"""
+    def __init__(self, num_hiddens, dropout, max_len=1000):
+        super(PositionalEncoding, self).__init__()
+        self.dropout = nn.Dropout(dropout)
+        # 创建一个足够长的P
+        self.P = d2l.zeros((1, max_len, num_hiddens))
+        X = d2l.arange(max_len, dtype=torch.float32).reshape(
+            -1, 1) / torch.pow(10000, torch.arange(
+            0, num_hiddens, 2, dtype=torch.float32) / num_hiddens)
+        self.P[:, :, 0::2] = torch.sin(X)
+        self.P[:, :, 1::2] = torch.cos(X)
+
+    def forward(self, X):
+        X = X + self.P[:, :X.shape[1], :].to(X.device)
+        return self.dropout(X)</textarea></div>
+    <div class="prose"><p>第 6 到 9 列：越往后的列，频率越低（波越长）。</p></div>
+    <div class="cell"><textarea>encoding_dim, num_steps = 32, 60
+pos_encoding = PositionalEncoding(encoding_dim, 0)
+pos_encoding.eval()
+X = pos_encoding(d2l.zeros((1, num_steps, encoding_dim)))
+P = pos_encoding.P[:, :X.shape[1], :]
+d2l.plot(d2l.arange(num_steps), P[0, :, 6:10].T, xlabel='Row (position)',
+         figsize=(6, 2.5), legend=["Col %d" % d for d in d2l.arange(6, 10)])</textarea></div>
+    <div class="prose"><p>原书的类比：二进制数里，最低位每 1 个数变一次，第二位每 2 个数变一次，第三位每 4 个数变一次。位置编码也是这样，只是用连续的正弦波代替 0 和 1。</p></div>
+    <div class="cell"><textarea>for i in range(8):
+    print(f'{i}的二进制是：{i:>03b}')</textarea></div>
+    <div class="cell"><textarea>P = P[0, :, :].unsqueeze(0).unsqueeze(0)
+d2l.show_heatmaps(P, xlabel='Column (encoding dimension)',
+                  ylabel='Row (position)', figsize=(3.5, 4), cmap='Blues')</textarea></div>
+    <div class="panel stack" id="peLab">
+      <h4>位置编码能表示“相隔多远”</h4>
+      <p class="small muted">原书 10.6.3.2 节说：位置 i + δ 的编码可以由位置 i 的编码经过一个只和 δ 有关的线性变换得到，所以模型容易学到“相对位置”。直观地看：两个位置编码的点积只和它们隔了多远有关。选一个位置 i，下图是它和所有位置的编码的相似度（点积，除以维度）。</p>
+      <div class="row"><label class="ctrl" for="peI">位置 i <output id="peIv">20</output><input type="range" id="peI" min="0" max="59" step="1" value="20"></label><label class="ctrl" for="peD">编码维度 d <select id="peD"><option value="8">8</option><option value="32" selected>32</option><option value="64">64</option></select></label></div>
+      <div class="cv" id="peHost"><canvas id="peCv" aria-label="位置相似度"></canvas></div>
+      <div class="calc pw" id="peCalc"></div>
+    </div>
+  </div>
+</section>
+
+<section class="part" id="sakt">
+  <div class="part-h"><div class="eyebrow">第三部分</div><h2>补充：SAKT 的因果自注意力</h2><span class="src">本页补充，对照你论文 <code>experiment.py</code> 第 995 行的 causal_attn 和第 1141 行的 SAKT</span></div>
+  <div class="blk">
+    <div class="prose"><p>KT 里有一条铁律：预测第 t+1 题时，只能用第 t 题及以前的记录。自注意力默认每个位置都能看所有位置，所以要加<b>因果掩码</b>：第 i 个查询看第 j 个键时，如果 j &gt; i（在未来），就把分数设成很大的负数。</p></div>
+    <div class="cell"><textarea>T = 5
+scores = torch.zeros(1, T, T)          # 假设所有分数一样，方便看掩码的效果
+mask = torch.triu(torch.ones(T, T, dtype=torch.bool), diagonal=1)   # 对角线以上是未来
+print(mask)
+weights = torch.softmax(scores.masked_fill(mask, -1e9), dim=-1)
+weights[0]</textarea></div>
+    <div class="prose"><p>第 1 行只能看第 1 个位置（权重 1），第 2 行平分给前 2 个，第 5 行平分给全部 5 个。画成热图，右上角全是 0：</p></div>
+    <div class="cell"><textarea>d2l.show_heatmaps(weights.unsqueeze(0), xlabel='Keys（做过的题）',
+                  ylabel='Queries（要预测的题）')</textarea></div>
+    <div class="panel stack" id="skLab">
+      <h4>SAKT 预测下一题时在看什么</h4>
+      <p class="small muted">一个学生做了 10 道题（上面一排，格子里写着知识点和对错）。选下一题考哪个知识点。查询是“下一题的知识点”，键是“做过的题的知识点 + 位置”，值是“做过的题的对错”。这里用一个手工设计的打分：同一个知识点加分，越近加分越多（模拟模型学到的东西）。柱子是注意力权重，预测是值（对 = 1，错 = 0）的加权平均。</p>
+      <div class="row"><label class="ctrl" for="skQ">下一题的知识点 <select id="skQ"><option value="0">知识点 A</option><option value="1">知识点 B</option><option value="2" selected>知识点 C</option></select></label><label class="ctrl" for="skR">“越近越重要”的程度 <output id="skRv">0.3</output><input type="range" id="skR" min="0" max="1.5" step="0.05" value="0.3"></label><label class="ctrl" for="skM">掩码 <select id="skM"><option value="1">有因果掩码</option><option value="0">去掉掩码（会偷看）</option></select></label></div>
+      <div class="cv" id="skHost"><canvas id="skCv" aria-label="SAKT 注意力权重"></canvas></div>
+      <div class="calc pw" id="skCalc"></div>
+    </div>
+    <div class="callout"><h4>对照你的论文：causal_attn 逐行看</h4>
+<pre class="code">def causal_attn(Q, Kt, V, qpos, heads, decay=None):     <span class="c"># 第 995 行</span>
+    B, Tq, M, d = Q.shape
+    T = Kt.shape[1]; dh = d // heads                     <span class="c"># 每个头 dh = 64 / 2 = 32 维</span>
+    q = Q.reshape(B, Tq, M, heads, dh).permute(0, 3, 1, 2, 4)   <span class="c"># 和 transpose_qkv 一样：切头</span>
+    k = Kt.reshape(B, T, heads, dh).permute(0, 2, 1, 3)
+    v = V.reshape(B, T, heads, dh).permute(0, 2, 1, 3)
+    s = torch.einsum("bhtmd,bhjd->bhtmj", q, k) / math.sqrt(dh)   <span class="c"># 缩放点积</span>
+    jpos = torch.arange(T, device=Q.device)
+    dist = qpos.view(-1, 1) - jpos.view(1, -1)          <span class="c"># 查询位置减键位置</span>
+    ...
+    s = s.masked_fill((dist &lt; 0).view(1, 1, Tq, 1, T), -1e9)    <span class="c"># 键在未来：因果掩码</span>
+    a = torch.softmax(s, -1)
+    o = torch.einsum("bhtmj,bhjd->bhtmd", a, v)          <span class="c"># 加权求和</span>
+    return o.permute(0, 2, 3, 1, 4).reshape(B, Tq, M, d)   <span class="c"># 和 transpose_output 一样：拼回去</span></pre>
+      <p>和今天的 <code>MultiHeadAttention</code> 是同一个东西：<code>einsum</code> 只是 bmm 的另一种写法。SAKT（第 1141 行）里：键和值来自做过的题 <code>self.iemb(sk + self.K * rs.long())</code> 加上位置；查询来自下一题的知识点 <code>self.qemb(q)</code>；<code>heads=2</code>；位置编码用的是<b>可学习的</b> <code>nn.Embedding(maxlen, d)</code>，不是今天的正弦函数，两种都常见。被省略的那两行是 AKT 用的“距离衰减”（<code>decay</code>），明天讲。</p></div>
+  </div>
+</section>
+
+<section class="part quiz-sec">
+  <div class="part-h"><div class="eyebrow">课后题</div><h2>做几道题检查一下</h2><span class="src">选择题点选项马上出结果；写形状和写代码的题，网页会现场运行代码判断对错。答题记录只存在你这台设备的浏览器里。</span></div>
+  <div class="quiz dayquiz" data-day="16"></div>
+  <div class="row small muted quizscore" data-day="16"></div>
+</section>
+
+<section class="part">
+  <div class="part-h"><div class="eyebrow">今日小结</div><h2>今天学会了吗？</h2></div>
+  <div class="two">
+    <div class="panel stack">
+      <ul class="check-list" data-day="16">
+        <li><label><input type="checkbox" data-k="c1">多头：切成 h 段各做一次注意力，拼起来再过 W_o</label></li>
+        <li><label><input type="checkbox" data-k="c2">transpose_qkv 把“头”并进批量维，一次 bmm 算完</label></li>
+        <li><label><input type="checkbox" data-k="c3">自注意力：可并行、任意两位置一步相连，代价是 n²</label></li>
+        <li><label><input type="checkbox" data-k="c4">位置编码告诉模型顺序；正弦编码或可学习的嵌入</label></li>
+        <li><label><input type="checkbox" data-k="c5">因果掩码：未来的位置分数设成 −10⁹；SAKT 就是这样做的</label></li>
+      </ul>
+      <span class="small check-msg"></span>
+    </div>
+    <div class="panel stack">
+      <h3>明天（第 17 天）学什么</h3>
+      <p>原书 10.7 Transformer：残差连接、层规范化（LayerNorm）、前馈网络，把它们和多头注意力拼成一个完整的块。SAKT、AKT、simpleKT 的 <code>ln1</code>、<code>ln2</code>、<code>ffn</code> 就是这些。还会看 AKT 的距离衰减。</p>
+    </div>
+  </div>
+</section>
+</main>
+
 <div class="wrap"><section class="part road-sec" id="road">
   <div class="part-h"><div class="eyebrow">课程表</div><h2>按你的论文排的学习路线</h2><span class="src">第 1 到 7 天是基础，按原书顺序。从第 8 天起只挑你论文用到的章节：多层感知机、正则化、自定义模型、循环网络和 LSTM（DKT）、注意力和 Transformer（SAKT、AKT、simpleKT）、Adam，最后是两个书里没有的论文专题。卷积、计算机视觉、NLP 应用等和论文关系不大的章节放到最后选学。</span></div>
   <div class="road" id="roadList"></div>
@@ -8039,6 +8282,12 @@ function sortT(T,dim,desc){const nd=T.shape.length;if(dim<0)dim+=nd;const outer=
   for(let o=0;o<outer;o++)for(let i=0;i<inner;i++){const k=[...Array(D).keys()],v=j=>T.data[(o*D+j)*inner+i];k.sort((a,b)=>{const x=v(a),y=v(b);if(Number.isNaN(x)!==Number.isNaN(y))return Number.isNaN(x)?(desc?-1:1):(desc?1:-1);return desc?(y-x)||(a-b):(x-y)||(a-b)});k.forEach((j,r)=>{vals[(o*D+r)*inner+i]=v(j);ids[(o*D+r)*inner+i]=j})}
   const Ix=mkT(T.shape.slice(),ids,'int64');const V=track(mkT(T.shape.slice(),vals,T.dtype,T.np),[T],'SortBackward0',g=>{const r=new Float64Array(T.data.length);for(let o=0;o<outer;o++)for(let i=0;i<inner;i++)for(let rr=0;rr<D;rr++){const q=(o*D+rr)*inner+i;r[(o*D+ids[q])*inner+i]+=g[q]}return[r]});
   const t=tup([V,Ix]);t.rtype='sort';t.fields=['values','indices'];return t}
+// 上三角 / 下三角、masked_fill（按布尔掩码填值，掩码可以广播）
+function triT(T,k,upper){const[r,c]=T.shape.slice(-2),n=T.data.length,out=Float64Array.from(T.data);for(let q=0;q<n;q++){const i=Math.floor(q/c)%r,j=q%c;if(upper?j-i<k:j-i>k)out[q]=0}
+  return track(mkT(T.shape.slice(),out,T.dtype,T.np),[T],upper?'TriuBackward0':'TrilBackward0',g=>[Float64Array.from(g,(v,q)=>{const i=Math.floor(q/c)%r,j=q%c;return(upper?j-i<k:j-i>k)?0:v})])}
+function maskedFillT(T,M,v){const val=numOf(v),shape=bshape(T.shape,M.shape);if(shape.join()!==T.shape.join())err('RuntimeError',`The expanded size of the mask must match the tensor shape`);
+  const sb=bidx(M.shape,shape),n=T.data.length,hit=new Uint8Array(n),idx=new Array(shape.length).fill(0);for(let q=0;q<n;q++){let o=0;for(let d=0;d<shape.length;d++)o+=idx[d]*sb[d];hit[q]=M.data[o]?1:0;for(let d=shape.length-1;d>=0;d--){if(++idx[d]<shape[d])break;idx[d]=0}}
+  const out=Float64Array.from(T.data,(x,q)=>hit[q]?castVal(val,T.dtype):x);return track(mkT(T.shape.slice(),out,T.dtype,T.np),[T],'MaskedFillBackward0',g=>[Float64Array.from(g,(x,q)=>hit[q]?0:x)])}
 function clampT(T,lo,hi){const L=lo&&lo.t!=='none'?numOf(lo):-Infinity,H=hi&&hi.t!=='none'?numOf(hi):Infinity;if(L===-Infinity&&H===Infinity)err('RuntimeError',"torch.clamp: At least one of 'min' or 'max' must not be None");
   const dt=T.dtype==='bool'?'int64':T.dtype,out=Float64Array.from(T.data,v=>Number.isNaN(v)?v:Math.min(H,Math.max(L,v)));
   return track(mkT(T.shape.slice(),out,dt,T.np),[T],'ClampBackward1',g=>[Float64Array.from(g,(gv,k)=>T.data[k]>=L&&T.data[k]<=H?gv:0)])}
@@ -8289,6 +8538,9 @@ torch.attrs.bmm=fn('bmm',a=>bmmT(asTensor(a[0]),asTensor(a[1])));
 torch.attrs.sort=fn('sort',(a,kw)=>sortT(asTensor(a[0]),intOf(kwOr(kw,a,'dim',1,I(-1))),kw.descending?truthy(kw.descending):false));
 torch.attrs.repeat_interleave=fn('repeat_interleave',(a,kw)=>{const d=kwOr(kw,a,'dim',2,NONE);return repeatInterleaveT(asTensor(a[0]),kwOr(kw,a,'repeats',1),d.t==='none'?null:intOf(d))});
 torch.attrs.transpose=fn('transpose',a=>transposeT(asTensor(a[0]),intOf(a[1]),intOf(a[2])));torch.attrs.permute=fn('permute',a=>permuteT(asTensor(a[0]),dimsArg([a[1]])));
+torch.attrs.pow=fn('pow',a=>binop('**',isT(a[0])?a[0]:a[0],a[1]));
+torch.attrs.triu=fn('triu',(a,kw)=>triT(asTensor(a[0]),intOf(kwOr(kw,a,'diagonal',1,I(0))),true));torch.attrs.tril=fn('tril',(a,kw)=>triT(asTensor(a[0]),intOf(kwOr(kw,a,'diagonal',1,I(0))),false));
+torch.attrs.masked_fill=fn('masked_fill',a=>maskedFillT(asTensor(a[0]),asTensor(a[1]),a[2]));
 torch.attrs.linspace=fn('linspace',(a,kw)=>{const s0=numOf(kwOr(kw,a,'start',0)),e=numOf(kwOr(kw,a,'end',1)),n=intOf(kwOr(kw,a,'steps',2));const st=n>1?(e-s0)/(n-1):0;
   return withGrad(mkT([n],Array.from({length:n},(_,i)=>n===1?s0:i<n/2?s0+i*st:e-(n-1-i)*st),dtypeKw(kw,'float32')),kw)});
 torch.attrs.device=fn('device',a=>({t:'device',name:str(a[0]).split(':')[0]}));
@@ -8337,7 +8589,7 @@ function toXY(v){if(isT(v))return[...v.data];if(v.items)return v.items.map(numOf
 function plotFig(ctx){if(!ctx.fig){ctx.fig={series:[],hlines:[],xlabel:'',ylabel:'',legend:false};ctx.plots.push(ctx.fig)}return ctx.fig}
 function d2lPlot(a,kw,ctx){let X=a[0],Y=kwOr(kw,a,'Y',1,null);const xl=kwOr(kw,a,'xlabel',2,NONE),yl=kwOr(kw,a,'ylabel',3,NONE),lg=kwOr(kw,a,'legend',4,NONE);
   const isList=v=>v&&(v.t==='list'||v.t==='tuple')&&v.items.length&&(isT(v.items[0])||v.items[0].t==='list');
-  let Xs=isList(X)?X.items:[X],Ys;if(!Y||Y.t==='none'){Ys=Xs;Xs=Ys.map(y=>null)}else Ys=isList(Y)?Y.items:[Y];if(Xs.length===1&&Ys.length>1)Xs=Ys.map(()=>Xs[0]);
+  const rows=v=>isT(v)&&v.shape.length===2?iterate(v):null;let Xs=isList(X)?X.items:rows(X)||[X],Ys;if(!Y||Y.t==='none'){Ys=Xs;Xs=Ys.map(y=>null)}else Ys=isList(Y)?Y.items:rows(Y)||[Y];if(Xs.length===1&&Ys.length>1)Xs=Ys.map(()=>Xs[0]);
   const labels=lg&&lg.t!=='none'?lg.items.map(str):[];const lim=v=>v&&v.t!=='none'?iterate(v).map(numOf):null,xlim=lim(kwOr(kw,a,'xlim',5,NONE)),ylim=lim(kwOr(kw,a,'ylim',6,NONE)),xs=kwOr(kw,a,'xscale',7,NONE),ys=kwOr(kw,a,'yscale',8,NONE);
   const fig={series:Ys.map((y,i)=>{const yv=toXY(y),xv=Xs[i]?toXY(Xs[i]):yv.map((_,k)=>k);return{x:xv,y:yv,label:labels[i]||''}}),hlines:[],xlabel:xl.t==='str'?xl.v:'',ylabel:yl.t==='str'?yl.v:'',legend:labels.length>0,xlim,ylim,xscale:xs.t==='str'?xs.v:'linear',yscale:ys.t==='str'?ys.v:'linear'};
   ctx.plots.push(fig);ctx.fig=fig;return NONE}
@@ -8392,6 +8644,7 @@ function tensorMethod(T,name){
     argmax:(a,kw)=>argmaxT(T,dimArg(a,kw),keepArg(kw),1),argmin:(a,kw)=>argmaxT(T,dimArg(a,kw),keepArg(kw),-1),
     unsqueeze:a=>{const s=T.shape.slice();let d=intOf(a[0]);if(d<0)d+=s.length+1;s.splice(d,0,1);return reshapeT(T,s)},transpose:a=>transposeT(T,intOf(a[0]),intOf(a[1])),permute:a=>permuteT(T,dimsArg(a)),bmm:a=>bmmT(T,asTensor(a[0])),dim:()=>I(T.shape.length),ndimension:()=>I(T.shape.length),
     repeat:a=>repeatT(T,dimsArg(a)),repeat_interleave:(a,kw)=>{const d=kwOr(kw,a,'dim',1,NONE);return repeatInterleaveT(T,kwOr(kw,a,'repeats',0),d.t==='none'?null:intOf(d))},sort:(a,kw)=>sortT(T,intOf(kwOr(kw,a,'dim',0,I(-1))),kw.descending?truthy(kw.descending):false),
+    masked_fill:(a,kw)=>maskedFillT(T,asTensor(kwOr(kw,a,'mask',0)),kwOr(kw,a,'value',1)),triu:(a,kw)=>triT(T,intOf(kwOr(kw,a,'diagonal',0,I(0))),true),tril:(a,kw)=>triT(T,intOf(kwOr(kw,a,'diagonal',0,I(0))),false),
     squeeze:(a,kw)=>{const dv=kw.dim||a[0];if(!dv||dv.t==='none')return reshapeT(T,T.shape.filter(d=>d!==1));let d=intOf(dv);if(d<0)d+=T.shape.length;return T.shape[d]===1?reshapeT(T,T.shape.filter((_,i)=>i!==d)):T},
     gather:(a,kw)=>gatherT(T,intOf(kwOr(kw,a,'dim',0)),asTensor(kwOr(kw,a,'index',1))),index_select:(a,kw)=>indexSelectT(T,intOf(kwOr(kw,a,'dim',0)),asTensor(kwOr(kw,a,'index',1))),
     flatten:()=>reshapeT(T,[-1]),pow:a=>binop('**',T,a[0]),softmax:(a,kw)=>softmaxT(T,intOf(kwOr(kw,a,'dim',0))),log_softmax:(a,kw)=>softmaxT(T,intOf(kwOr(kw,a,'dim',0)),true),all:()=>mkT([],[T.data.every(Boolean)?1:0],'bool',T.np),any:()=>mkT([],[T.data.some(Boolean)?1:0],'bool',T.np),round:()=>mkT(T.shape.slice(),Array.from(T.data,v=>Math.round(v)),T.dtype,T.np),__len__:()=>I(T.shape[0])};
@@ -8412,18 +8665,29 @@ function mkDict(pairs){const m=new Map();for(const[k,v]of pairs)m.set(numKey(k),
 function pyLen(v){if(isT(v)){if(!v.shape.length)err('TypeError','len() of a 0-d tensor');return v.shape[0]}if(v.items)return v.items.length;if(v.t==='str')return[...v.v].length;if(v.t==='dict')return v.m.size;if(v.t==='size')return v.dims.length;if(v.t==='range')return iterate(v).length;if(v.t==='df')return v.index.length;if(v.t==='series')return v.values.length;if(v.t==='tdataset')return v.tensors[0].shape[0];if(v.t==='fmnist')return v.n;if(v.t==='axarr')return v.fig.axes.length;if(v.t==='loader'){const n=dsLen(v.ds,CUR);return v.drop_last?Math.floor(n/v.bs):Math.ceil(n/v.bs)}if(v.t==='nn')return v.children.length;if(v.t==='obj'){const f=classLookup(v.cls,'__len__');if(f)return intOf(callValue({t:'bound',f,self:v},[],{},CUR))}err('TypeError',`object of type '${typeName(v)}' has no len()`)}
 function pyCmpLess(a,b){if(isT(a)||isT(b))return truthy(binop('<',a,b));const x=pyNum(a),y=pyNum(b);if(x!=null&&y!=null)return x<y;if(a.t==='str'&&b.t==='str')return a.v<b.v;if(a.items&&b.items){for(let i=0;i<Math.min(a.items.length,b.items.length);i++){if(pyCmpLess(a.items[i],b.items[i]))return true;if(pyCmpLess(b.items[i],a.items[i]))return false}return a.items.length<b.items.length}err('TypeError',`'<' not supported between instances of '${typeName(a)}' and '${typeName(b)}'`)}
 // 格式化：f'{x:.5f}' 和 format()
+// Python 的 "%d %s %.2f" % (...) 格式化
+function percentFormat(fmt,args){const vals=args.t==='tuple'?args.items.slice():[args];let k=0;
+  const out=fmt.replace(/%(?:\(([^)]*)\))?([-+ #0]*)(\d+|\*)?(?:\.(\d+))?([diouxXeEfFgGcrsa%])/g,(m0,key,flags,width,prec,type)=>{if(type==='%')return'%';
+    if(k>=vals.length)err('TypeError','not enough arguments for format string');let v=vals[k++];if(isT(v)&&v.data.length===1)v=isFloatDt(v.dtype)?F(v.data[0]):I(v.data[0]);
+    if(type==='s')return pad(str(v));if(type==='r'||type==='a')return pad(repr(v));
+    const align=flags.includes('-')?'<':'>',z=flags.includes('0')&&!flags.includes('-')?'0':'',sg=flags.includes('+')?'+':flags.includes(' ')?' ':'';
+    const t=type==='i'||type==='u'?'d':type;let n=pyNum(v);if(n==null)err('TypeError',`%${type} format: a real number is required, not ${typeName(v)}`);if('dxXo'.includes(t)){n=Math.trunc(n);v=I(n)}
+    return formatSpec(v,(z?'0':'')+(align==='<'?'<':'')+sg+(width||'')+(prec!=null?'.'+prec:'')+t);
+    function pad(s){if(!width)return s;return align==='<'?s.padEnd(+width):s.padStart(+width)}});
+  if(k<vals.length)err('TypeError','not all arguments converted during string formatting');return out}
+// Python 的定点格式：恰好在中间时舍入到偶数（JavaScript 的 toFixed 总是进位）
+function pyFixed(a,p){const s=a.toFixed(p);if(p>20)return s;const m=a*10**p,fl=Math.floor(m);if(m-fl===0.5&&(2*fl+1)/(2*10**p)===a&&fl%2===0)return(fl/10**p).toFixed(p);return s}
 function formatSpec(v,spec){if(!spec)return str(v);const m=spec.match(/^(?:(.)?([<>^=]))?([+\- ])?(#)?(0)?(\d+)?([,_])?(?:\.(\d+))?([bcdeEfFgGnosxX%])?$/);if(!m)err('ValueError',`Invalid format specifier '${spec}'`);
-  let[,fill,align,sign,,zero,width,group,prec,type]=m;fill=fill||(zero&&!align?'0':' ');align=align||(zero?'=':null);
+  let[,fill,align,sign,,zero,width,group,prec,type]=m;fill=fill||(zero?'0':' ');align=align||(zero?'=':null);
   let s;const n=v.t==='str'?null:(isT(v)?v.data[0]:pyNum(v));
   if(v.t==='str'){s=v.v;if(prec)s=s.slice(0,+prec)}
   else{if(n==null)err('TypeError',`unsupported format string passed to ${typeName(v)}.__format__`);const t=type||(v.t==='int'?'d':(prec?'g':''));
-    const a=Math.abs(n);if(!Number.isFinite(n)&&'fFeEgG%'.includes(t||'f')){s=Number.isNaN(n)?'nan':'inf';if('FEG'.includes(t))s=s.toUpperCase();const sg0=n<0?'-':sign==='+'?'+':'';s=sg0+s;if(width&&s.length<+width)s=s.padStart(+width,' ');return s}switch(t){case'd':if(!Number.isInteger(n))err('ValueError',"Unknown format code 'd' for object of type 'float'");s=String(a);break;case'f':case'F':s=a.toFixed(prec?+prec:6);break;case'e':case'E':s=a.toExponential(prec?+prec:6).replace(/e([+-])(\d)$/,'e$10$2');if(t==='E')s=s.toUpperCase();break;
+    const a=Math.abs(n);if(!Number.isFinite(n)&&'fFeEgG%'.includes(t||'f')){s=Number.isNaN(n)?'nan':'inf';if('FEG'.includes(t))s=s.toUpperCase();const sg0=n<0?'-':sign==='+'?'+':'';s=sg0+s;if(width&&s.length<+width)s=s.padStart(+width,' ');return s}switch(t){case'b':case'o':case'x':case'X':{if(!Number.isInteger(n))err('ValueError',`Unknown format code '${t}' for object of type 'float'`);s=a.toString(t==='b'?2:t==='o'?8:16);if(t==='X')s=s.toUpperCase();break}case'd':if(!Number.isInteger(n))err('ValueError',"Unknown format code 'd' for object of type 'float'");s=String(a);break;case'f':case'F':s=pyFixed(a,prec?+prec:6);break;case'e':case'E':s=a.toExponential(prec?+prec:6).replace(/e([+-])(\d)$/,'e$10$2');if(t==='E')s=s.toUpperCase();break;
       case'%':s=(a*100).toFixed(prec?+prec:6)+'%';break;case'g':case'G':{const p=prec?Math.max(1,+prec):6;const ex=a===0?0:Math.floor(Math.log10(a));s=ex<-4||ex>=p?a.toExponential(p-1).replace(/\.?0+e/,'e').replace(/e([+-])(\d)$/,'e$10$2'):String(+a.toPrecision(p));break}
       default:s=v.t==='float'?pyFloatRepr(a):String(a)}
     if(group){const[ip,fp]=s.split('.');s=ip.replace(/\B(?=(\d{3})+(?!\d))/g,group)+(fp!=null?'.'+fp:'')}
     const sg=n<0||Object.is(n,-0)?'-':sign==='+'?'+':sign===' '?' ':'';if(align==='='&&width){s=sg+s.padStart(+width-sg.length,fill);return s}s=sg+s}
   if(width&&s.length<+width){const w=+width,padN=w-s.length;const al=align||(v.t==='str'?'<':'>');s=al==='<'?s+fill.repeat(padN):al==='^'?fill.repeat(Math.floor(padN/2))+s+fill.repeat(Math.ceil(padN/2)):fill.repeat(padN)+s}return s}
-function percentFormat(fmt,arg){const args=arg.t==='tuple'?arg.items.slice():[arg];return fmt.replace(/%(-?\d*)(?:\.(\d+))?([sdfr%])/g,(m0,w,p,t)=>{if(t==='%')return'%';const v=args.shift();let s=t==='s'?str(v):t==='r'?repr(v):t==='d'?String(Math.trunc(numOf(v))):numOf(v).toFixed(p?+p:6);if(w){const n=Math.abs(+w);s=+w<0?s.padEnd(n):s.padStart(n)}return s})}
 const builtins={
   super:fn('super',(a,kw,ctx)=>{const sc=ctx.scope;let cls=null,self=null;try{cls=sc.get('__class__');self=sc.get('__self__')}catch(e){err('RuntimeError','super(): no arguments')}return{t:'super',cls,self}}),
   print:fn('print',(a,kw,ctx)=>{const s=a.map(str).join(kw.sep?str(kw.sep):' ')+(kw.end?str(kw.end):'\n');ctx.outBuf+=s;return NONE}),
@@ -8583,7 +8847,7 @@ function nnForward(m,args,ctx){const x=args[0];
   switch(m.kind){
     case'RNN':case'LSTM':case'GRU':return rnnForward(m,args);case'Embedding':return embedForward(m,x);
     case'Linear':{const X=asTensor(x),W=m.params.weight,b=m.params.bias;if(X.shape[X.shape.length-1]!==W.shape[1])err('RuntimeError',`mat1 and mat2 shapes cannot be multiplied (${X.shape.length===1?1:prod(X.shape.slice(0,-1))}x${X.shape[X.shape.length-1]} and ${W.shape[1]}x${W.shape[0]})`);
-      let Xf=X.shape.length>2?reshapeT(X,[-1,X.shape[X.shape.length-1]]):X;let R=matmul(Xf,transpose2(W));if(b)R=binop('+',R,b);if(X.shape.length>2)R=reshapeT(R,[...X.shape.slice(0,-1),W.shape[0]]);else if(X.shape.length===2&&b)rename(R,'AddmmBackward0');return R}
+      let Xf=X.shape.length>2?reshapeT(X,[-1,X.shape[X.shape.length-1]]):X;let R=matmul(Xf,transpose2(W));if(b)R=binop('+',R,b);if(X.shape.length>2){R=reshapeT(R,[...X.shape.slice(0,-1),W.shape[0]]);if(!b)rename(R,'UnsafeViewBackward0')}else if(X.shape.length===2&&b)rename(R,'AddmmBackward0');return R}
     case'Sequential':{let h=x;for(const c of m.children)h=callValue(c[1],[h],{},ctx);return h}
     case'Flatten':{const X=asTensor(x);const s=m.cfg.start_dim;return reshapeT(X,[...X.shape.slice(0,s),-1])}
     case'ReLU':return unary(x,'relu');case'Sigmoid':return unary(x,'sigmoid');case'Tanh':return unary(x,'tanh');case'Identity':return x;
@@ -9270,6 +9534,57 @@ class DotProductAttention(nn.Module):
         scores = torch.bmm(queries, keys.transpose(1,2)) / math.sqrt(d)
         self.attention_weights = masked_softmax(scores, valid_lens)
         return torch.bmm(self.dropout(self.attention_weights), values)
+
+def transpose_qkv(X, num_heads):
+    """为了多注意力头的并行计算而变换形状"""
+    X = X.reshape(X.shape[0], X.shape[1], num_heads, -1)
+    X = X.permute(0, 2, 1, 3)
+    return X.reshape(-1, X.shape[2], X.shape[3])
+
+def transpose_output(X, num_heads):
+    """逆转transpose_qkv函数的操作"""
+    X = X.reshape(-1, num_heads, X.shape[1], X.shape[2])
+    X = X.permute(0, 2, 1, 3)
+    return X.reshape(X.shape[0], X.shape[1], -1)
+
+class MultiHeadAttention(nn.Module):
+    """多头注意力"""
+    def __init__(self, key_size, query_size, value_size, num_hiddens,
+                 num_heads, dropout, bias=False, **kwargs):
+        super(MultiHeadAttention, self).__init__(**kwargs)
+        self.num_heads = num_heads
+        self.attention = d2l.DotProductAttention(dropout)
+        self.W_q = nn.Linear(query_size, num_hiddens, bias=bias)
+        self.W_k = nn.Linear(key_size, num_hiddens, bias=bias)
+        self.W_v = nn.Linear(value_size, num_hiddens, bias=bias)
+        self.W_o = nn.Linear(num_hiddens, num_hiddens, bias=bias)
+
+    def forward(self, queries, keys, values, valid_lens):
+        queries = transpose_qkv(self.W_q(queries), self.num_heads)
+        keys = transpose_qkv(self.W_k(keys), self.num_heads)
+        values = transpose_qkv(self.W_v(values), self.num_heads)
+        if valid_lens is not None:
+            valid_lens = torch.repeat_interleave(
+                valid_lens, repeats=self.num_heads, dim=0)
+        output = self.attention(queries, keys, values, valid_lens)
+        output_concat = transpose_output(output, self.num_heads)
+        return self.W_o(output_concat)
+
+class PositionalEncoding(nn.Module):
+    """位置编码"""
+    def __init__(self, num_hiddens, dropout, max_len=1000):
+        super(PositionalEncoding, self).__init__()
+        self.dropout = nn.Dropout(dropout)
+        self.P = d2l.zeros((1, max_len, num_hiddens))
+        X = d2l.arange(max_len, dtype=torch.float32).reshape(
+            -1, 1) / torch.pow(10000, torch.arange(
+            0, num_hiddens, 2, dtype=torch.float32) / num_hiddens)
+        self.P[:, :, 0::2] = torch.sin(X)
+        self.P[:, :, 1::2] = torch.cos(X)
+
+    def forward(self, X):
+        X = X + self.P[:, :X.shape[1], :].to(X.device)
+        return self.dropout(X)
 `;
 
 // ---------- 语法分析 ----------
@@ -9457,7 +9772,7 @@ function evalE(e,env,ctx){switch(e.k){
   case'and':{const a=evalE(e.a,env,ctx);return truthy(a)?evalE(e.b,env,ctx):a}case'or':{const a=evalE(e.a,env,ctx);return truthy(a)?a:evalE(e.b,env,ctx)}
   case'ifexp':return truthy(evalE(e.c,env,ctx))?evalE(e.a,env,ctx):evalE(e.b,env,ctx);
   case'lambda':return{t:'func',name:'<lambda>',params:e.params.map(p=>({...p,defVal:p.def?evalE(p.def,env,ctx):null})),expr:e.body,closure:env,id:newId()};
-  case'bin':{const a=evalE(e.a,env,ctx),b=evalE(e.b,env,ctx);if(e.op==='@')return matmul(asTensor(a),asTensor(b));
+  case'bin':{const a=evalE(e.a,env,ctx),b=evalE(e.b,env,ctx);if(e.op==='%'&&a.t==='str')return S(percentFormat(a.v,b));if(e.op==='@')return matmul(asTensor(a),asTensor(b));
     if(a.t==='obj'){const m=classLookup(a.cls,{'+':'__add__','-':'__sub__','*':'__mul__','/':'__truediv__'}[e.op]);if(m)return callFunc(m,[a,b],{},ctx)}return binop(e.op,a,b)}
   case'cmp':{let left=evalE(e.first,env,ctx),res=null;for(let i=0;i<e.ops.length;i++){const right=evalE(e.rest[i],env,ctx),op=e.ops[i];let r;
       if(op==='in')r=B(contains(right,left));else if(op==='not in')r=B(!contains(right,left));else if(op==='is')r=B(left===right||(left.t==='none'&&right.t==='none')||(left.t==='bool'&&right.t==='bool'&&left.v===right.v));else if(op==='is not')r=B(!(left===right||(left.t==='none'&&right.t==='none')||(left.t==='bool'&&right.t==='bool'&&left.v===right.v)));else r=binop(op,left,right);
@@ -9541,7 +9856,7 @@ function colors(){const cs=getComputedStyle(document.documentElement),g=n=>cs.ge
 function fitCanvas(cv,W,H){const r=window.devicePixelRatio||1;cv.width=Math.round(W*r);cv.height=Math.round(H*r);cv.style.width=W+'px';cv.style.height=H+'px';const c=cv.getContext('2d');c.setTransform(r,0,0,r,0,0);return c}
 const MONO='11px "JetBrains Mono",ui-monospace,monospace';
 const bodyFont=px=>`${px}px ${getComputedStyle(document.body).fontFamily}`;
-const DAYS=['1','2','3','4','5','6','7','8','9','10','11','12','13','14','15'];
+const DAYS=['1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16'];
 
 // ---------- 张量图示 ----------
 function cellText(v,dtype){if(dtype==='bool')return v?'T':'F';if(dtype==='int64')return String(v);if(!Number.isFinite(v))return String(v);return Number.isInteger(v)?String(v):(Math.abs(v)>=100?v.toFixed(0):v.toFixed(2))}
@@ -9660,7 +9975,7 @@ function setupCells(){$$('.cell').forEach((cell,i)=>{const ta=cell.querySelector
     else if(e.key==='Tab'&&!e.shiftKey){e.preventDefault();const s=ta.selectionStart;ta.setRangeText('    ',s,ta.selectionEnd,'end');autoSize(ta)}})})}
 function runAll(day){ENVS[day]=MT.newEnv();EXEC[day]=0;MT.resetFS();let errs=0;const main=$('#day'+day);
   $$('.cell',main).forEach(c=>{if(c.dataset.manual){const out=c.querySelector('.out');out.className='out';out.textContent='';const t=document.createElement('span');t.className='tip';t.textContent=`这一格要手动运行：${c.dataset.manual}。准备好了点这一格右上角的“运行”。`;out.appendChild(t);out.hidden=false;return}if(!runCellEl(c))errs++});RAN[day]=true;
-  const expected={'1':0,'2':5,'3':3,'4':0,'5':0,'6':0,'7':0,'8':0,'9':0,'10':0,'11':2,'12':0,'13':0,'14':0,'15':0}[day]||0;
+  const expected={'1':0,'2':5,'3':3,'4':0,'5':0,'6':0,'7':0,'8':0,'9':0,'10':0,'11':2,'12':0,'13':0,'14':0,'15':0,'16':0}[day]||0;
   $$('.runAllMsg',main).forEach(m=>m.textContent=errs>expected?`运行完了，有 ${errs} 个格子报错，往下找红字。`:expected?`全部运行完了。其中 ${expected} 个格子是故意报错的，用来练习读报错。`:'全部运行完了，没有报错。')}
 document.addEventListener('click',e=>{const b=e.target.closest('.runAll');if(b)runAll(b.dataset.day)});
 
@@ -9873,12 +10188,12 @@ function fmtStyle(fmt,i){const m=fmt.match(/^([bgrcmyk])?(--|-\.|-|:|o)?$/)||[];
 const VIRIDIS=[[68,1,84],[59,82,139],[33,145,140],[94,201,98],[253,231,37]];
 function viridis(t){t=Math.max(0,Math.min(1,t))*4;const i=Math.min(3,Math.floor(t)),f=t-i,a=VIRIDIS[i],b=VIRIDIS[i+1];return[a[0]+(b[0]-a[0])*f,a[1]+(b[1]-a[1])*f,a[2]+(b[2]-a[2])*f]}
 function drawImage(cv,img,px){const{H,W}=img;cv.width=W;cv.height=H;cv.style.width=px+'px';cv.style.height=Math.round(px*H/W)+'px';const c=cv.getContext('2d'),d=c.createImageData(W,H);let lo=Infinity,hi=-Infinity;for(const v of img.px){if(v<lo)lo=v;if(v>hi)hi=v}const rg=hi-lo||1;
-  const reds=t=>[Math.round(255-t*(255-103)),Math.round(245-t*245),Math.round(240-t*(240-13))];for(let k=0;k<W*H;k++){const[r,g,b]=img.cmap==='Reds'?reds((img.px[k]-lo)/rg):viridis((img.px[k]-lo)/rg);d.data[k*4]=r;d.data[k*4+1]=g;d.data[k*4+2]=b;d.data[k*4+3]=255}c.putImageData(d,0,0)}
+  const blues=t=>[Math.round(247-t*(247-8)),Math.round(251-t*(251-48)),Math.round(255-t*(255-107))],reds=t=>[Math.round(255-t*(255-103)),Math.round(245-t*245),Math.round(240-t*(240-13))];for(let k=0;k<W*H;k++){const[r,g,b]=img.cmap==='Reds'?reds((img.px[k]-lo)/rg):img.cmap==='Blues'?blues((img.px[k]-lo)/rg):viridis((img.px[k]-lo)/rg);d.data[k*4]=r;d.data[k*4+1]=g;d.data[k*4+2]=b;d.data[k*4+3]=255}c.putImageData(d,0,0)}
 function renderFig(wrap,fig){if(fig.axes.some(a=>a.image)){const grid=document.createElement('div');grid.className='imgrid';grid.style.gridTemplateColumns=`repeat(${fig.cols},minmax(0,1fr))`;
-    const hm=fig.axes.some(a=>a.image&&a.image.cmap),sz=hm?Math.max(110,Math.min(260,Math.floor(((wrap.parentElement&&wrap.parentElement.clientWidth)||320)/fig.cols)-16)):72;
+    const hm=fig.axes.some(a=>a.image&&(a.image.cmap==='Reds'||a.image.cmap==='Blues')),sz=hm?Math.max(110,Math.min(260,Math.floor(((wrap.parentElement&&wrap.parentElement.clientWidth)||320)/fig.cols)-16)):72;
     for(const ax of fig.axes){const cell=document.createElement('figure');if(ax.title){const t=document.createElement('figcaption');t.textContent=ax.title;cell.appendChild(t)}if(ax.image){const cv=document.createElement('canvas');cv.setAttribute('aria-label',ax.title||(hm?'注意力权重热图':'图片'));cv.className=hm?'hm':'';cell.appendChild(cv);drawImage(cv,ax.image,sz)}
       if(hm&&(ax.xlabel||ax.ylabel)){const c=document.createElement('figcaption');c.className='small muted';c.textContent=`横轴（列）：${ax.xlabel||''}　纵轴（行）：${ax.ylabel||''}`;cell.appendChild(c)}grid.appendChild(cell)}
-    if(hm){const n=document.createElement('p');n.className='small muted';n.textContent='颜色越深权重越大：最浅是这张图里的最小值，最深是最大值。';wrap.appendChild(grid);wrap.appendChild(n);return}wrap.appendChild(grid);return}
+    if(hm){const n=document.createElement('p');n.className='small muted';n.textContent='颜色越深数值越大：最浅是这张图里的最小值，最深是最大值。';wrap.appendChild(grid);wrap.appendChild(n);return}wrap.appendChild(grid);return}
   for(const ax of fig.axes){if(!ax.lines.length)continue;const spec={series:ax.lines.map((l,i)=>({x:l.x,y:l.y,label:ax.legend[i]||'',...fmtStyle(l.fmt,i)})),hlines:[],xlabel:ax.xlabel,ylabel:ax.ylabel,legend:ax.legend.length>0,xlim:ax.xlim,ylim:ax.ylim,xscale:ax.xscale,yscale:ax.yscale};const cv=document.createElement('canvas');cv.setAttribute('aria-label','训练曲线');wrap.appendChild(cv);drawPlot(cv,spec)}}
 
 // ---------- 第 7 天：解压内嵌的 Fashion-MNIST，像素查看器 ----------
@@ -10087,6 +10402,27 @@ function sdRender(){const host=$('#sdHost');if(!host.offsetParent)return;const d
   const sdv=a=>Math.sqrt(a.reduce((s,v)=>s+v*v,0)/a.length);
   $('#sdCalc').textContent=`d = ${d}\n8 个分数的标准差：不缩放 ${sdv(sc).toFixed(2)}，除以 √d 后 ${sdv(sc.map(v=>v/Math.sqrt(d))).toFixed(2)}\n最大的权重：不缩放 ${Math.max(...p0).toFixed(3)}，除以 √d 后 ${Math.max(...p1).toFixed(3)}\n\n${d<4?'d 很小时两者差别不大。':Math.max(...p0)>0.95?'不缩放时几乎所有权重都压在一个键上，softmax 饱和了：其他键的梯度接近 0，学不动。':'d 越大，不缩放的分数越分散，权重越尖。'}`}
 $('#sdD').addEventListener('input',sdRender);$('#sdGo').onclick=()=>{SD.seed++;sdRender()};
+// ---------- 第 16 天：位置编码的相似度 ----------
+function peVec(i,d){const v=new Float64Array(d);for(let j=0;j<d;j+=2){const x=i/Math.pow(10000,j/d);v[j]=Math.sin(x);if(j+1<d)v[j+1]=Math.cos(x)}return v}
+function peRender(){const host=$('#peHost');if(!host.offsetParent)return;const i=+$('#peI').value,d=+$('#peD').value;$('#peIv').textContent=i;
+  const pi=peVec(i,d),xs=Array.from({length:60},(_,k)=>k),sim=xs.map(k=>{const pk=peVec(k,d);let s=0;for(let j=0;j<d;j++)s+=pi[j]*pk[j];return s/d*2});
+  host.innerHTML='<canvas id="peCv" aria-label="位置相似度"></canvas>';
+  drawPlot($('#peCv'),{series:[{x:xs,y:sim,label:`位置 ${i} 和各位置的相似度`}],hlines:[],xlabel:'位置',ylabel:'',legend:true});
+  const pair=(a,b)=>{const pa=peVec(a,d),pb=peVec(b,d);let s=0;for(let j=0;j<d;j++)s+=pa[j]*pb[j];return(s/d*2).toFixed(4)};
+  $('#peCalc').textContent=`相似度 = 两个位置编码的点积 × 2 / d（自己和自己是 1）\n\n位置 ${i} 和 ${Math.min(59,i+3)}：${pair(i,Math.min(59,i+3))}\n位置 0 和 3：${pair(0,3)}\n位置 40 和 43：${pair(40,43)}\n\n只要隔得一样远，相似度就一样：点积只和“相隔多远”有关，和绝对位置无关。\n离得越近越相似，所以模型能从位置编码里读出“这两道题隔了多远”。${d===8?'\n维度少时，远处的相似度会上下波动得比较厉害。':''}`}
+$('#peI').addEventListener('input',peRender);$('#peD').onchange=peRender;
+// ---------- 第 16 天：SAKT 预测下一题时在看什么 ----------
+const SK={sk:[0,1,0,2,2,1,0,2,1,2],rs:[1,0,1,0,0,1,1,1,0,1],names:['A','B','C']};
+function skRender(){const host=$('#skHost');if(!host.offsetParent)return;const C=colors(),q=+$('#skQ').value,r=+$('#skR').value,masked=$('#skM').value==='1';$('#skRv').textContent=r.toFixed(2);
+  const T=SK.sk.length,tq=6;// 站在第 7 题（下标 6）之后，预测第 8 题；去掉掩码时会看到第 8 到 10 题
+  const sc=SK.sk.map((s,j)=>(s===q?2:0)-r*Math.abs(tq-j)),use=sc.map((_,j)=>!masked||j<=tq),m=Math.max(...sc.filter((_,j)=>use[j])),e=sc.map((v,j)=>use[j]?Math.exp(v-m):0),z=e.reduce((a,b)=>a+b,0),w=e.map(v=>v/z),p=w.reduce((a,v,j)=>a+v*SK.rs[j],0);
+  const W=Math.max(260,host.clientWidth),H=220,ctx=fitCanvas($('#skCv'),W,H),pl=8,cw=(W-2*pl)/T;ctx.font=bodyFont(12);ctx.textAlign='center';
+  SK.sk.forEach((s,j)=>{const x=pl+j*cw,fut=j>tq;ctx.fillStyle=SK.rs[j]?C.pos:C.neg;ctx.globalAlpha=fut?.35:.8;ctx.fillRect(x+3,6,cw-6,34);ctx.globalAlpha=1;ctx.fillStyle=C.ink;ctx.fillText(SK.names[s],x+cw/2,22);ctx.fillText(SK.rs[j]?'对':'错',x+cw/2,36);
+    const h=w[j]*(H-90);ctx.fillStyle=C.accent;ctx.fillRect(x+cw*0.25,H-28-h,cw*0.5,h);ctx.fillStyle=C.muted;ctx.fillText(w[j]>0.005?w[j].toFixed(2):(use[j]?'0':'×'),x+cw/2,H-32-h);ctx.fillText(String(j+1),x+cw/2,H-10)});
+  ctx.strokeStyle=C.ink;ctx.setLineDash([4,4]);ctx.beginPath();const xb=pl+(tq+1)*cw;ctx.moveTo(xb,0);ctx.lineTo(xb,H);ctx.stroke();ctx.setLineDash([]);ctx.textAlign='left';ctx.fillStyle=C.muted;ctx.fillText('← 已经做过　未来 →',Math.max(4,xb-62),56);
+  const fut=w.slice(tq+1).reduce((a,b)=>a+b,0);
+  $('#skCalc').textContent=`现在做完了第 1 到 7 题，要预测第 8 题（知识点 ${SK.names[q]}）答对的概率。\n打分 = (同一个知识点 ? 2 : 0) − ${r.toFixed(2)} × 相隔的步数\n\n预测答对概率 = Σ 权重 × 对错 = ${p.toFixed(3)}\n${masked?'有因果掩码：第 8 到 10 题的权重是 0（图上标 ×）。':`去掉掩码：${(fut*100).toFixed(0)}% 的注意力落在了未来的题上，模型在“偷看答案”。训练时这样做损失会很低，但上线时根本拿不到未来的数据。`}\n${r<0.05?'不看远近：同知识点的题平分权重。':r>1?'只看最近的一两题，几乎不管知识点。':'同一个知识点、离得近的题权重最大。'}`}
+['#skQ','#skM'].forEach(s=>$(s).onchange=skRender);$('#skR').addEventListener('input',skRender);
 // ---------- 小结勾选、课程表、切换天数 ----------
 function checksSetup(){$$('.check-list').forEach(ul=>{const day=ul.dataset.day,key='checks'+day,st=store.get(key,{});$$('input',ul).forEach(c=>{c.checked=!!st[c.dataset.k];c.onchange=()=>{const s=store.get(key,{});s[c.dataset.k]=c.checked;store.set(key,s);checkMsg(ul)}});checkMsg(ul)})}
 function checkMsg(ul){const day=ul.dataset.day,all=$$('input',ul),n=all.filter(c=>c.checked).length,msg=ul.parentElement.querySelector('.check-msg');const done=n===all.length;
@@ -10099,7 +10435,7 @@ const ROAD=[['1','第 1 章 引言 + 2.1 数据操作'],['2','2.2 数据预处�
   ['18','11.4 至 11.6 + 11.10 小批量随机梯度下降、动量、Adam（论文用的优化器）','paper'],['19','论文专题：离线策略评估 IPS、SNIPS、DR（书里没有）','paper'],['20','论文专题：逐行读你的 experiment.py','paper'],
   ['选学','4.7 前向传播、反向传播和计算图；4.10 Kaggle 房价预测'],['选学','第 6 至 7 章 卷积神经网络（LeNet、ResNet 等）'],['选学','9.3 至 9.8 深度和双向循环网络、机器翻译、seq2seq'],['选学','第 11 章其余优化算法、第 12 章计算性能'],['选学','第 13 至 15 章 计算机视觉、自然语言处理']];
 function roadRender(){$('#roadList').innerHTML=ROAD.map(([d,t,f])=>{const live=DAYS.includes(d);return`<div><span class="d">${/^\d+$/.test(d)?`第 ${d} 天`:d}</span><span>${live?`<a href="#day${d}">${esc(t)}</a>`:esc(t)}${f==='paper'?' <span class="mark">论文</span>':''}</span><span class="st${live?' now':''}">${live?'已上线':'未上线'}</span></div>`}).join('')}
-const REDRAW={'1':()=>{kRender();imRender();ofRender()},'2':()=>{dotRender();normRender()},'3':()=>{secRender();gradRender()},'4':()=>{diceRender();bayesRender();bktRender()},'5':()=>{houseRender();if(!sgd.X)sgdData();sgdRender()},'6':()=>{smRender();calRender()},'7':()=>{pixRender()},'8':()=>{uaRender();actRender()},'9':()=>{spRender();rdRender();dpRender()},'10':()=>{sgRender();shRender()},'11':()=>{pcRender()},'12':()=>{tkRender();ptRender();rnRender()},'13':()=>{clRender();btRender()},'14':()=>{gtRender()},'15':()=>{nwRender();sdRender()}};
+const REDRAW={'1':()=>{kRender();imRender();ofRender()},'2':()=>{dotRender();normRender()},'3':()=>{secRender();gradRender()},'4':()=>{diceRender();bayesRender();bktRender()},'5':()=>{houseRender();if(!sgd.X)sgdData();sgdRender()},'6':()=>{smRender();calRender()},'7':()=>{pixRender()},'8':()=>{uaRender();actRender()},'9':()=>{spRender();rdRender();dpRender()},'10':()=>{sgRender();shRender()},'11':()=>{pcRender()},'12':()=>{tkRender();ptRender();rnRender()},'13':()=>{clRender();btRender()},'14':()=>{gtRender()},'15':()=>{nwRender();sdRender()},'16':()=>{peRender();skRender()}};
 function showDay(day,scroll){if(!DAYS.includes(day))day='1';$$('main.day').forEach(m=>m.hidden=m.dataset.day!==day);$$('[data-nav]').forEach(a=>a.classList.toggle('on',a.dataset.nav===day));store.set('lastDay',day);
   if(!RAN[day]){if(day==='7'&&!FM_U8){fmReady.then(ok=>{if(ok&&!RAN['7']){runAll('7');REDRAW['7']()}});}else runAll(day)}$$('#day'+day+' textarea').forEach(autoSize);REDRAW[day]();if(scroll)window.scrollTo(0,0)}
 function route(){const h=location.hash.replace('#','');const m=h.match(/^day(\d+)$/);if(m){showDay(m[1],true);return}
@@ -10270,6 +10606,17 @@ const QUIZ={
  {t:'c',q:'查询和键的长度不同（比如查询 20 维、键 2 维），该用哪种评分函数？',o:['缩放点积','加性注意力：先各自用线性层变到同一长度','都不行','点积不缩放'],a:1,why:'点积要求两个向量一样长。加性注意力的 W_q、W_k 把它们映射到同一个 h 维空间。'},
  {t:'c',q:'你论文 DKVMN 读记忆时 w = softmax(qe @ Mk.t())，这里的查询是什么？',o:['学生上一题的对错','下一题知识点的嵌入 qe','记忆矩阵 M','输出层'],a:1,why:'qe 和 20 个记忆槽的键 Mk 做点积，softmax 后的权重用来对记忆 M（值）加权求和。'},
  {t:'code',q:'写代码：一个查询 q = torch.tensor([1.0, 0.0])，三个键 k = torch.tensor([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]])，三个值 v = torch.tensor([10.0, 20.0, 30.0])。用缩放点积算权重 w（softmax(k @ q / √2)），再算输出 out = (w * v).sum()。',start:'import math\nq = torch.tensor([1.0, 0.0])\nk = torch.tensor([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]])\nv = torch.tensor([10.0, 20.0, 30.0])\nw = \nout = \nw, out',check:env=>{const w=env.vars.w,o=env.vars.out;const s=[1,0,1].map(x=>x/Math.SQRT2),e=s.map(Math.exp),z=e.reduce((a,b)=>a+b,0),ww=e.map(x=>x/z);if(!w||!MT.isT(w)||w.data.length!==3||ww.some((x,i)=>Math.abs(x-w.data[i])>1e-4))return`w 应该约等于 [${ww.map(x=>x.toFixed(4)).join(', ')}]。提示：torch.softmax(k @ q / math.sqrt(2), dim=0)`;const oo=ww[0]*10+ww[1]*20+ww[2]*30;if(!o||!MT.isT(o)||Math.abs(o.data[0]-oo)>1e-3)return`out 应该约等于 ${oo.toFixed(4)}`;return true},why:'分数是 [1, 0, 1] / √2，第 1 和第 3 个键和查询一样相似，权重相同且比第 2 个大。输出约 19.9，偏向 10 和 30 的平均值。'},
+],
+'16':[
+ {t:'c',q:'num_hiddens = 64、num_heads = 2 的多头注意力，每个头的查询和键是几维？',o:['64','32','128','2'],a:1,why:'每个头 num_hiddens / num_heads = 32 维。你论文 causal_attn 里的 dh = d // heads 就是这个。'},
+ {t:'shape',q:'transpose_qkv 之后的形状？（批量 2，4 个位置，num_hiddens 8，2 个头）',code:'X = torch.zeros(2, 4, 8)\nX = X.reshape(2, 4, 2, -1).permute(0, 2, 1, 3)\nX.reshape(-1, X.shape[2], X.shape[3])',why:'(2, 4, 8) → (2, 4, 2, 4) → 交换后 (2, 2, 4, 4) → 把头并进批量 (4, 4, 4)。'},
+ {t:'c',q:'自注意力里，查询、键、值来自哪里？',o:['三个不同的序列','同一个序列（各自再经过线性变换）','查询来自序列，键值是参数','只有值来自序列'],a:1,why:'所以叫“自”注意力。SAKT 稍有不同：查询来自下一题的知识点，键值来自做过的题。'},
+ {t:'c',q:'和 RNN 比，自注意力最大的优点是？',o:['参数更少','所有位置可以并行计算，任意两个位置一步就能连上','计算量随长度线性增长','不需要训练'],a:1,why:'代价是计算量和序列长度的平方成正比。'},
+ {t:'c',q:'为什么自注意力需要位置编码？',o:['让计算更快','自注意力本身看不出先后顺序，打乱顺序结果只是跟着换位置','为了归一化','为了加掩码'],a:1,why:'加上位置编码后，同一道题出现在第 3 步和第 90 步，表示就不一样了。'},
+ {t:'c',q:'你论文的 SAKT 用的是哪种位置编码？',o:['原书的正弦位置编码','可学习的位置嵌入 nn.Embedding(maxlen, d)','没有位置编码','二进制编码'],a:1,why:'self.pos = nn.Embedding(maxlen, d)，每个位置一个可训练的向量。两种做法都很常见。'},
+ {t:'c',q:'因果掩码 torch.triu(ones, diagonal=1) 把哪些位置遮住？',o:['对角线','对角线以下（过去）','对角线以上（未来）：第 i 个查询看不到第 j > i 个键','全部'],a:2,why:'预测第 t+1 题时只能用第 t 题及以前的记录，否则就是偷看答案。'},
+ {t:'c',q:'你论文 causal_attn 里 s.masked_fill((dist < 0)..., -1e9)，dist < 0 表示什么？',o:['键在查询之前','键的位置在查询之后，也就是未来','两题知识点不同','学生答错了'],a:1,why:'dist = qpos − jpos，小于 0 说明键的位置比查询还靠后。'},
+ {t:'code',q:'写代码：造一个 4 × 4 的因果掩码 mask（对角线以上为 True），把全 0 的分数矩阵 s = torch.zeros(4, 4) 中被掩码的位置填成 -1e9，softmax 后存成 w（按最后一维）。',start:'s = torch.zeros(4, 4)\nmask = \nw = \nw',check:env=>{const w=env.vars.w;if(!w||!MT.isT(w)||w.shape.join()!=='4,4')return'w 应该是 4 × 4 的张量';const want=[[1,0,0,0],[.5,.5,0,0],[1/3,1/3,1/3,0],[.25,.25,.25,.25]];for(let i=0;i<4;i++)for(let j=0;j<4;j++)if(Math.abs(w.data[i*4+j]-want[i][j])>1e-4)return`第 ${i+1} 行应该是 [${want[i].map(x=>x.toFixed(2)).join(', ')}]`;return true},why:'mask = torch.triu(torch.ones(4, 4, dtype=torch.bool), diagonal=1)；w = torch.softmax(s.masked_fill(mask, -1e9), dim=-1)。第 i 行把权重平分给前 i 个位置。'},
 ],
 };
 function quizState(day){return store.get('quiz'+day,{})}

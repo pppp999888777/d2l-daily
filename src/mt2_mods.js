@@ -69,6 +69,9 @@ torch.attrs.bmm=fn('bmm',a=>bmmT(asTensor(a[0]),asTensor(a[1])));
 torch.attrs.sort=fn('sort',(a,kw)=>sortT(asTensor(a[0]),intOf(kwOr(kw,a,'dim',1,I(-1))),kw.descending?truthy(kw.descending):false));
 torch.attrs.repeat_interleave=fn('repeat_interleave',(a,kw)=>{const d=kwOr(kw,a,'dim',2,NONE);return repeatInterleaveT(asTensor(a[0]),kwOr(kw,a,'repeats',1),d.t==='none'?null:intOf(d))});
 torch.attrs.transpose=fn('transpose',a=>transposeT(asTensor(a[0]),intOf(a[1]),intOf(a[2])));torch.attrs.permute=fn('permute',a=>permuteT(asTensor(a[0]),dimsArg([a[1]])));
+torch.attrs.pow=fn('pow',a=>binop('**',isT(a[0])?a[0]:a[0],a[1]));
+torch.attrs.triu=fn('triu',(a,kw)=>triT(asTensor(a[0]),intOf(kwOr(kw,a,'diagonal',1,I(0))),true));torch.attrs.tril=fn('tril',(a,kw)=>triT(asTensor(a[0]),intOf(kwOr(kw,a,'diagonal',1,I(0))),false));
+torch.attrs.masked_fill=fn('masked_fill',a=>maskedFillT(asTensor(a[0]),asTensor(a[1]),a[2]));
 torch.attrs.linspace=fn('linspace',(a,kw)=>{const s0=numOf(kwOr(kw,a,'start',0)),e=numOf(kwOr(kw,a,'end',1)),n=intOf(kwOr(kw,a,'steps',2));const st=n>1?(e-s0)/(n-1):0;
   return withGrad(mkT([n],Array.from({length:n},(_,i)=>n===1?s0:i<n/2?s0+i*st:e-(n-1-i)*st),dtypeKw(kw,'float32')),kw)});
 torch.attrs.device=fn('device',a=>({t:'device',name:str(a[0]).split(':')[0]}));
@@ -117,7 +120,7 @@ function toXY(v){if(isT(v))return[...v.data];if(v.items)return v.items.map(numOf
 function plotFig(ctx){if(!ctx.fig){ctx.fig={series:[],hlines:[],xlabel:'',ylabel:'',legend:false};ctx.plots.push(ctx.fig)}return ctx.fig}
 function d2lPlot(a,kw,ctx){let X=a[0],Y=kwOr(kw,a,'Y',1,null);const xl=kwOr(kw,a,'xlabel',2,NONE),yl=kwOr(kw,a,'ylabel',3,NONE),lg=kwOr(kw,a,'legend',4,NONE);
   const isList=v=>v&&(v.t==='list'||v.t==='tuple')&&v.items.length&&(isT(v.items[0])||v.items[0].t==='list');
-  let Xs=isList(X)?X.items:[X],Ys;if(!Y||Y.t==='none'){Ys=Xs;Xs=Ys.map(y=>null)}else Ys=isList(Y)?Y.items:[Y];if(Xs.length===1&&Ys.length>1)Xs=Ys.map(()=>Xs[0]);
+  const rows=v=>isT(v)&&v.shape.length===2?iterate(v):null;let Xs=isList(X)?X.items:rows(X)||[X],Ys;if(!Y||Y.t==='none'){Ys=Xs;Xs=Ys.map(y=>null)}else Ys=isList(Y)?Y.items:rows(Y)||[Y];if(Xs.length===1&&Ys.length>1)Xs=Ys.map(()=>Xs[0]);
   const labels=lg&&lg.t!=='none'?lg.items.map(str):[];const lim=v=>v&&v.t!=='none'?iterate(v).map(numOf):null,xlim=lim(kwOr(kw,a,'xlim',5,NONE)),ylim=lim(kwOr(kw,a,'ylim',6,NONE)),xs=kwOr(kw,a,'xscale',7,NONE),ys=kwOr(kw,a,'yscale',8,NONE);
   const fig={series:Ys.map((y,i)=>{const yv=toXY(y),xv=Xs[i]?toXY(Xs[i]):yv.map((_,k)=>k);return{x:xv,y:yv,label:labels[i]||''}}),hlines:[],xlabel:xl.t==='str'?xl.v:'',ylabel:yl.t==='str'?yl.v:'',legend:labels.length>0,xlim,ylim,xscale:xs.t==='str'?xs.v:'linear',yscale:ys.t==='str'?ys.v:'linear'};
   ctx.plots.push(fig);ctx.fig=fig;return NONE}

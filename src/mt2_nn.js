@@ -90,7 +90,7 @@ function nnForward(m,args,ctx){const x=args[0];
   switch(m.kind){
     case'RNN':case'LSTM':case'GRU':return rnnForward(m,args);case'Embedding':return embedForward(m,x);
     case'Linear':{const X=asTensor(x),W=m.params.weight,b=m.params.bias;if(X.shape[X.shape.length-1]!==W.shape[1])err('RuntimeError',`mat1 and mat2 shapes cannot be multiplied (${X.shape.length===1?1:prod(X.shape.slice(0,-1))}x${X.shape[X.shape.length-1]} and ${W.shape[1]}x${W.shape[0]})`);
-      let Xf=X.shape.length>2?reshapeT(X,[-1,X.shape[X.shape.length-1]]):X;let R=matmul(Xf,transpose2(W));if(b)R=binop('+',R,b);if(X.shape.length>2)R=reshapeT(R,[...X.shape.slice(0,-1),W.shape[0]]);else if(X.shape.length===2&&b)rename(R,'AddmmBackward0');return R}
+      let Xf=X.shape.length>2?reshapeT(X,[-1,X.shape[X.shape.length-1]]):X;let R=matmul(Xf,transpose2(W));if(b)R=binop('+',R,b);if(X.shape.length>2){R=reshapeT(R,[...X.shape.slice(0,-1),W.shape[0]]);if(!b)rename(R,'UnsafeViewBackward0')}else if(X.shape.length===2&&b)rename(R,'AddmmBackward0');return R}
     case'Sequential':{let h=x;for(const c of m.children)h=callValue(c[1],[h],{},ctx);return h}
     case'Flatten':{const X=asTensor(x);const s=m.cfg.start_dim;return reshapeT(X,[...X.shape.slice(0,s),-1])}
     case'ReLU':return unary(x,'relu');case'Sigmoid':return unary(x,'sigmoid');case'Tanh':return unary(x,'tanh');case'Identity':return x;

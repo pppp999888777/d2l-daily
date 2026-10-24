@@ -154,6 +154,17 @@ const QUIZ={
  {t:'c',q:'你论文 DKVMN 读记忆时 w = softmax(qe @ Mk.t())，这里的查询是什么？',o:['学生上一题的对错','下一题知识点的嵌入 qe','记忆矩阵 M','输出层'],a:1,why:'qe 和 20 个记忆槽的键 Mk 做点积，softmax 后的权重用来对记忆 M（值）加权求和。'},
  {t:'code',q:'写代码：一个查询 q = torch.tensor([1.0, 0.0])，三个键 k = torch.tensor([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]])，三个值 v = torch.tensor([10.0, 20.0, 30.0])。用缩放点积算权重 w（softmax(k @ q / √2)），再算输出 out = (w * v).sum()。',start:'import math\nq = torch.tensor([1.0, 0.0])\nk = torch.tensor([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]])\nv = torch.tensor([10.0, 20.0, 30.0])\nw = \nout = \nw, out',check:env=>{const w=env.vars.w,o=env.vars.out;const s=[1,0,1].map(x=>x/Math.SQRT2),e=s.map(Math.exp),z=e.reduce((a,b)=>a+b,0),ww=e.map(x=>x/z);if(!w||!MT.isT(w)||w.data.length!==3||ww.some((x,i)=>Math.abs(x-w.data[i])>1e-4))return`w 应该约等于 [${ww.map(x=>x.toFixed(4)).join(', ')}]。提示：torch.softmax(k @ q / math.sqrt(2), dim=0)`;const oo=ww[0]*10+ww[1]*20+ww[2]*30;if(!o||!MT.isT(o)||Math.abs(o.data[0]-oo)>1e-3)return`out 应该约等于 ${oo.toFixed(4)}`;return true},why:'分数是 [1, 0, 1] / √2，第 1 和第 3 个键和查询一样相似，权重相同且比第 2 个大。输出约 19.9，偏向 10 和 30 的平均值。'},
 ],
+'16':[
+ {t:'c',q:'num_hiddens = 64、num_heads = 2 的多头注意力，每个头的查询和键是几维？',o:['64','32','128','2'],a:1,why:'每个头 num_hiddens / num_heads = 32 维。你论文 causal_attn 里的 dh = d // heads 就是这个。'},
+ {t:'shape',q:'transpose_qkv 之后的形状？（批量 2，4 个位置，num_hiddens 8，2 个头）',code:'X = torch.zeros(2, 4, 8)\nX = X.reshape(2, 4, 2, -1).permute(0, 2, 1, 3)\nX.reshape(-1, X.shape[2], X.shape[3])',why:'(2, 4, 8) → (2, 4, 2, 4) → 交换后 (2, 2, 4, 4) → 把头并进批量 (4, 4, 4)。'},
+ {t:'c',q:'自注意力里，查询、键、值来自哪里？',o:['三个不同的序列','同一个序列（各自再经过线性变换）','查询来自序列，键值是参数','只有值来自序列'],a:1,why:'所以叫“自”注意力。SAKT 稍有不同：查询来自下一题的知识点，键值来自做过的题。'},
+ {t:'c',q:'和 RNN 比，自注意力最大的优点是？',o:['参数更少','所有位置可以并行计算，任意两个位置一步就能连上','计算量随长度线性增长','不需要训练'],a:1,why:'代价是计算量和序列长度的平方成正比。'},
+ {t:'c',q:'为什么自注意力需要位置编码？',o:['让计算更快','自注意力本身看不出先后顺序，打乱顺序结果只是跟着换位置','为了归一化','为了加掩码'],a:1,why:'加上位置编码后，同一道题出现在第 3 步和第 90 步，表示就不一样了。'},
+ {t:'c',q:'你论文的 SAKT 用的是哪种位置编码？',o:['原书的正弦位置编码','可学习的位置嵌入 nn.Embedding(maxlen, d)','没有位置编码','二进制编码'],a:1,why:'self.pos = nn.Embedding(maxlen, d)，每个位置一个可训练的向量。两种做法都很常见。'},
+ {t:'c',q:'因果掩码 torch.triu(ones, diagonal=1) 把哪些位置遮住？',o:['对角线','对角线以下（过去）','对角线以上（未来）：第 i 个查询看不到第 j > i 个键','全部'],a:2,why:'预测第 t+1 题时只能用第 t 题及以前的记录，否则就是偷看答案。'},
+ {t:'c',q:'你论文 causal_attn 里 s.masked_fill((dist < 0)..., -1e9)，dist < 0 表示什么？',o:['键在查询之前','键的位置在查询之后，也就是未来','两题知识点不同','学生答错了'],a:1,why:'dist = qpos − jpos，小于 0 说明键的位置比查询还靠后。'},
+ {t:'code',q:'写代码：造一个 4 × 4 的因果掩码 mask（对角线以上为 True），把全 0 的分数矩阵 s = torch.zeros(4, 4) 中被掩码的位置填成 -1e9，softmax 后存成 w（按最后一维）。',start:'s = torch.zeros(4, 4)\nmask = \nw = \nw',check:env=>{const w=env.vars.w;if(!w||!MT.isT(w)||w.shape.join()!=='4,4')return'w 应该是 4 × 4 的张量';const want=[[1,0,0,0],[.5,.5,0,0],[1/3,1/3,1/3,0],[.25,.25,.25,.25]];for(let i=0;i<4;i++)for(let j=0;j<4;j++)if(Math.abs(w.data[i*4+j]-want[i][j])>1e-4)return`第 ${i+1} 行应该是 [${want[i].map(x=>x.toFixed(2)).join(', ')}]`;return true},why:'mask = torch.triu(torch.ones(4, 4, dtype=torch.bool), diagonal=1)；w = torch.softmax(s.masked_fill(mask, -1e9), dim=-1)。第 i 行把权重平分给前 i 个位置。'},
+],
 };
 function quizState(day){return store.get('quiz'+day,{})}
 function quizSave(day,s){store.set('quiz'+day,s)}

@@ -146,6 +146,12 @@ function sortT(T,dim,desc){const nd=T.shape.length;if(dim<0)dim+=nd;const outer=
   for(let o=0;o<outer;o++)for(let i=0;i<inner;i++){const k=[...Array(D).keys()],v=j=>T.data[(o*D+j)*inner+i];k.sort((a,b)=>{const x=v(a),y=v(b);if(Number.isNaN(x)!==Number.isNaN(y))return Number.isNaN(x)?(desc?-1:1):(desc?1:-1);return desc?(y-x)||(a-b):(x-y)||(a-b)});k.forEach((j,r)=>{vals[(o*D+r)*inner+i]=v(j);ids[(o*D+r)*inner+i]=j})}
   const Ix=mkT(T.shape.slice(),ids,'int64');const V=track(mkT(T.shape.slice(),vals,T.dtype,T.np),[T],'SortBackward0',g=>{const r=new Float64Array(T.data.length);for(let o=0;o<outer;o++)for(let i=0;i<inner;i++)for(let rr=0;rr<D;rr++){const q=(o*D+rr)*inner+i;r[(o*D+ids[q])*inner+i]+=g[q]}return[r]});
   const t=tup([V,Ix]);t.rtype='sort';t.fields=['values','indices'];return t}
+// 上三角 / 下三角、masked_fill（按布尔掩码填值，掩码可以广播）
+function triT(T,k,upper){const[r,c]=T.shape.slice(-2),n=T.data.length,out=Float64Array.from(T.data);for(let q=0;q<n;q++){const i=Math.floor(q/c)%r,j=q%c;if(upper?j-i<k:j-i>k)out[q]=0}
+  return track(mkT(T.shape.slice(),out,T.dtype,T.np),[T],upper?'TriuBackward0':'TrilBackward0',g=>[Float64Array.from(g,(v,q)=>{const i=Math.floor(q/c)%r,j=q%c;return(upper?j-i<k:j-i>k)?0:v})])}
+function maskedFillT(T,M,v){const val=numOf(v),shape=bshape(T.shape,M.shape);if(shape.join()!==T.shape.join())err('RuntimeError',`The expanded size of the mask must match the tensor shape`);
+  const sb=bidx(M.shape,shape),n=T.data.length,hit=new Uint8Array(n),idx=new Array(shape.length).fill(0);for(let q=0;q<n;q++){let o=0;for(let d=0;d<shape.length;d++)o+=idx[d]*sb[d];hit[q]=M.data[o]?1:0;for(let d=shape.length-1;d>=0;d--){if(++idx[d]<shape[d])break;idx[d]=0}}
+  const out=Float64Array.from(T.data,(x,q)=>hit[q]?castVal(val,T.dtype):x);return track(mkT(T.shape.slice(),out,T.dtype,T.np),[T],'MaskedFillBackward0',g=>[Float64Array.from(g,(x,q)=>hit[q]?0:x)])}
 function clampT(T,lo,hi){const L=lo&&lo.t!=='none'?numOf(lo):-Infinity,H=hi&&hi.t!=='none'?numOf(hi):Infinity;if(L===-Infinity&&H===Infinity)err('RuntimeError',"torch.clamp: At least one of 'min' or 'max' must not be None");
   const dt=T.dtype==='bool'?'int64':T.dtype,out=Float64Array.from(T.data,v=>Number.isNaN(v)?v:Math.min(H,Math.max(L,v)));
   return track(mkT(T.shape.slice(),out,dt,T.np),[T],'ClampBackward1',g=>[Float64Array.from(g,(gv,k)=>T.data[k]>=L&&T.data[k]<=H?gv:0)])}

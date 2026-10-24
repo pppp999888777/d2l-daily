@@ -1,0 +1,242 @@
+<main class="wrap day" id="day16" data-day="16" hidden>
+<section class="hero">
+  <div class="eyebrow">第 16 天 · 原书第 10.5 节 + 第 10.6 节 · 论文路线第 9 课</div>
+  <h1>多头注意力、自注意力和位置编码</h1>
+  <p class="lead">昨天的注意力是“一个查询去看一组键值”。今天两个升级：<b>多头</b>，同时用几组不同的投影去看，每组关注不同的东西；<b>自注意力</b>，序列自己既当查询又当键和值，每个位置都去看其他位置。注意力本身不知道先后顺序，所以还要加<b>位置编码</b>。你论文的 SAKT 就是这三样东西加一个“不许偷看未来”的因果掩码。</p>
+  <div class="plan">
+    <div><b class="k">今天的时间</b>大约 70 分钟。代码格都很快，自动运行。</div>
+    <div><b class="k">学完你能</b><ul><li>说清多头注意力的形状变换</li><li>比较 CNN、RNN 和自注意力</li><li>写出正弦位置编码</li><li>用因果掩码让第 t 步看不到未来</li></ul></div>
+    <div><b class="k">和你的论文</b><ul><li>SAKT 的 <code>heads=2</code> 和 <code>causal_attn</code></li><li><code>self.pos = nn.Embedding(maxlen, d)</code></li><li>查询是下一题，键值是做过的题</li></ul></div>
+  </div>
+</section>
+
+<section class="part" id="mha">
+  <div class="part-h"><div class="eyebrow">第一部分</div><h2>10.5 多头注意力</h2><span class="src">对应原书第 10.5 节，代码来自原书 PyTorch 版</span></div>
+  <div class="prose"><div class="row"><button class="btn primary runAll" data-day="16">从头全部运行</button><span class="small muted runAllMsg"></span></div></div>
+  <div class="blk">
+    <div class="prose">
+      <p>同一组查询、键、值，用 h 组不同的线性变换投影，各自做一次注意力（每一组叫一个<b>头</b>），把 h 个结果拼起来，再用一个线性层 W_o 混合：</p>
+      <p class="math">headᵢ = Attention(Q W_qᵢ, K W_kᵢ, V W_vᵢ)<br>MultiHead = concat(head₁, …, head_h) W_o</p>
+      <p>不同的头可以学到不同的关注方式：比如一个头看“同一个知识点”，另一个头看“最近几步”。为了不增加计算量，每个头的维度是 num_hiddens / h。</p>
+    </div>
+    <div class="cell"><textarea>from d2l import torch as d2l
+import math
+import torch
+from torch import nn</textarea></div>
+    <div class="prose"><p>实现上有个技巧：不用循环 h 次，而是把 num_hiddens 维切成 h 段，把“头”这个维度并到批量维度里，一次 bmm 就算完所有头。</p></div>
+    <div class="cell"><textarea>#@save
+def transpose_qkv(X, num_heads):
+    """为了多注意力头的并行计算而变换形状"""
+    # 输入X的形状:(batch_size，查询或者“键－值”对的个数，num_hiddens)
+    # 输出X的形状:(batch_size，查询或者“键－值”对的个数，num_heads，
+    # num_hiddens/num_heads)
+    X = X.reshape(X.shape[0], X.shape[1], num_heads, -1)
+
+    # 输出X的形状:(batch_size，num_heads，查询或者“键－值”对的个数,
+    # num_hiddens/num_heads)
+    X = X.permute(0, 2, 1, 3)
+
+    # 最终输出的形状:(batch_size*num_heads,查询或者“键－值”对的个数,
+    # num_hiddens/num_heads)
+    return X.reshape(-1, X.shape[2], X.shape[3])
+
+
+#@save
+def transpose_output(X, num_heads):
+    """逆转transpose_qkv函数的操作"""
+    X = X.reshape(-1, num_heads, X.shape[1], X.shape[2])
+    X = X.permute(0, 2, 1, 3)
+    return X.reshape(X.shape[0], X.shape[1], -1)</textarea></div>
+    <div class="prose"><p>看一个小例子：1 个序列、3 个位置、每个位置 8 维，切成 2 个头。第 2 个头拿到的是每个位置的后 4 维：</p></div>
+    <div class="cell"><textarea>X = torch.arange(24.0).reshape(1, 3, 8)
+Y = transpose_qkv(X, 2)
+print(Y.shape)
+print(Y[1])
+print('能还原回去：', bool((transpose_output(Y, 2) == X).all()))</textarea></div>
+    <div class="cell"><textarea>#@save
+class MultiHeadAttention(nn.Module):
+    """多头注意力"""
+    def __init__(self, key_size, query_size, value_size, num_hiddens,
+                 num_heads, dropout, bias=False, **kwargs):
+        super(MultiHeadAttention, self).__init__(**kwargs)
+        self.num_heads = num_heads
+        self.attention = d2l.DotProductAttention(dropout)
+        self.W_q = nn.Linear(query_size, num_hiddens, bias=bias)
+        self.W_k = nn.Linear(key_size, num_hiddens, bias=bias)
+        self.W_v = nn.Linear(value_size, num_hiddens, bias=bias)
+        self.W_o = nn.Linear(num_hiddens, num_hiddens, bias=bias)
+
+    def forward(self, queries, keys, values, valid_lens):
+        # queries，keys，values的形状:
+        # (batch_size，查询或者“键－值”对的个数，num_hiddens)
+        # valid_lens　的形状:
+        # (batch_size，)或(batch_size，查询的个数)
+        # 经过变换后，输出的queries，keys，values　的形状:
+        # (batch_size*num_heads，查询或者“键－值”对的个数，
+        # num_hiddens/num_heads)
+        queries = transpose_qkv(self.W_q(queries), self.num_heads)
+        keys = transpose_qkv(self.W_k(keys), self.num_heads)
+        values = transpose_qkv(self.W_v(values), self.num_heads)
+
+        if valid_lens is not None:
+            # 在轴0，将第一项（标量或者矢量）复制num_heads次，
+            # 然后如此复制第二项，然后诸如此类。
+            valid_lens = torch.repeat_interleave(
+                valid_lens, repeats=self.num_heads, dim=0)
+
+        # output的形状:(batch_size*num_heads，查询的个数，
+        # num_hiddens/num_heads)
+        output = self.attention(queries, keys, values, valid_lens)
+
+        # output_concat的形状:(batch_size，查询的个数，num_hiddens)
+        output_concat = transpose_output(output, self.num_heads)
+        return self.W_o(output_concat)</textarea></div>
+    <div class="cell"><textarea>num_hiddens, num_heads = 100, 5
+attention = MultiHeadAttention(num_hiddens, num_hiddens, num_hiddens,
+                               num_hiddens, num_heads, 0.5)
+attention.eval()</textarea></div>
+    <div class="cell"><textarea>batch_size, num_queries = 2, 4
+num_kvpairs, valid_lens =  6, d2l.tensor([3, 2])
+X = d2l.ones((batch_size, num_queries, num_hiddens))
+Y = d2l.ones((batch_size, num_kvpairs, num_hiddens))
+attention(X, Y, Y, valid_lens).shape</textarea></div>
+  </div>
+</section>
+
+<section class="part" id="selfatt">
+  <div class="part-h"><div class="eyebrow">第二部分</div><h2>10.6 自注意力和位置编码</h2><span class="src">对应原书第 10.6 节，代码来自原书 PyTorch 版</span></div>
+  <div class="blk"><div class="blk-h"><span class="n">10.6.1</span><h3>自注意力</h3></div>
+    <div class="prose"><p>把同一个序列同时当查询、键和值：每个位置都去看序列里所有位置，输出和输入一样长。</p></div>
+    <div class="cell"><textarea>num_hiddens, num_heads = 100, 5
+attention = d2l.MultiHeadAttention(num_hiddens, num_hiddens, num_hiddens,
+                                   num_hiddens, num_heads, 0.5)
+attention.eval()</textarea></div>
+    <div class="cell"><textarea>batch_size, num_queries, valid_lens = 2, 4, d2l.tensor([3, 2])
+X = d2l.ones((batch_size, num_queries, num_hiddens))
+attention(X, X, X, valid_lens).shape</textarea></div>
+  </div>
+  <div class="blk"><div class="blk-h"><span class="n">10.6.2</span><h3>比较卷积神经网络、循环神经网络和自注意力</h3></div>
+    <div class="prose">
+      <p>把长度为 n、每个位置 d 维的序列变成同样长度的序列，三种做法比较如下（原书表格）：</p>
+      <div class="tblwrap"><table class="t">
+        <thead><tr><th></th><th>计算量</th><th>顺序操作（能不能并行）</th><th>最长路径（远处信息要走几步）</th></tr></thead>
+        <tbody>
+          <tr><td>卷积（核大小 k）</td><td>O(knd²)</td><td>O(1)</td><td>O(n/k)</td></tr>
+          <tr><td>循环神经网络</td><td>O(nd²)</td><td>O(n)：必须一步一步算</td><td>O(n)</td></tr>
+          <tr><td>自注意力</td><td>O(n²d)</td><td>O(1)：所有位置同时算</td><td>O(1)：任意两个位置直接相连</td></tr>
+        </tbody></table></div>
+      <p>自注意力的好处：可以并行，远处的信息一步就到。代价：计算量随序列长度的平方增长。KT 里一个窗口 100 步，n² = 10⁴，完全可以接受。</p>
+    </div>
+    <div class="callout"><h4>对照你的论文：DKT 和 SAKT 的区别</h4><p>DKT 用 LSTM，第 100 题的信息要从第 1 题开始一步步传过来，中间可能被遗忘（第 14 天的门控只是缓解）。SAKT 用自注意力，预测下一题时直接回头看所有做过的题，挑相关的看：比如下一题考“分数加法”，就重点看以前做过的分数加法题。</p></div>
+  </div>
+  <div class="blk"><div class="blk-h"><span class="n">10.6.3</span><h3>位置编码</h3></div>
+    <div class="prose">
+      <p>自注意力对位置是“看不见”的：把序列打乱顺序，每个位置的输出只是跟着换位置，值完全不变。可是顺序很重要（昨天做对和一个月前做对，意义不同）。所以要给每个位置加一个<b>位置编码</b>。原书用正弦和余弦：第 i 个位置、第 2j 和 2j+1 维是</p>
+      <p class="math">p_{i,2j} = sin(i / 10000^{2j/d})，p_{i,2j+1} = cos(i / 10000^{2j/d})</p>
+    </div>
+    <div class="cell"><textarea>#@save
+class PositionalEncoding(nn.Module):
+    """位置编码"""
+    def __init__(self, num_hiddens, dropout, max_len=1000):
+        super(PositionalEncoding, self).__init__()
+        self.dropout = nn.Dropout(dropout)
+        # 创建一个足够长的P
+        self.P = d2l.zeros((1, max_len, num_hiddens))
+        X = d2l.arange(max_len, dtype=torch.float32).reshape(
+            -1, 1) / torch.pow(10000, torch.arange(
+            0, num_hiddens, 2, dtype=torch.float32) / num_hiddens)
+        self.P[:, :, 0::2] = torch.sin(X)
+        self.P[:, :, 1::2] = torch.cos(X)
+
+    def forward(self, X):
+        X = X + self.P[:, :X.shape[1], :].to(X.device)
+        return self.dropout(X)</textarea></div>
+    <div class="prose"><p>第 6 到 9 列：越往后的列，频率越低（波越长）。</p></div>
+    <div class="cell"><textarea>encoding_dim, num_steps = 32, 60
+pos_encoding = PositionalEncoding(encoding_dim, 0)
+pos_encoding.eval()
+X = pos_encoding(d2l.zeros((1, num_steps, encoding_dim)))
+P = pos_encoding.P[:, :X.shape[1], :]
+d2l.plot(d2l.arange(num_steps), P[0, :, 6:10].T, xlabel='Row (position)',
+         figsize=(6, 2.5), legend=["Col %d" % d for d in d2l.arange(6, 10)])</textarea></div>
+    <div class="prose"><p>原书的类比：二进制数里，最低位每 1 个数变一次，第二位每 2 个数变一次，第三位每 4 个数变一次。位置编码也是这样，只是用连续的正弦波代替 0 和 1。</p></div>
+    <div class="cell"><textarea>for i in range(8):
+    print(f'{i}的二进制是：{i:>03b}')</textarea></div>
+    <div class="cell"><textarea>P = P[0, :, :].unsqueeze(0).unsqueeze(0)
+d2l.show_heatmaps(P, xlabel='Column (encoding dimension)',
+                  ylabel='Row (position)', figsize=(3.5, 4), cmap='Blues')</textarea></div>
+    <div class="panel stack" id="peLab">
+      <h4>位置编码能表示“相隔多远”</h4>
+      <p class="small muted">原书 10.6.3.2 节说：位置 i + δ 的编码可以由位置 i 的编码经过一个只和 δ 有关的线性变换得到，所以模型容易学到“相对位置”。直观地看：两个位置编码的点积只和它们隔了多远有关。选一个位置 i，下图是它和所有位置的编码的相似度（点积，除以维度）。</p>
+      <div class="row"><label class="ctrl" for="peI">位置 i <output id="peIv">20</output><input type="range" id="peI" min="0" max="59" step="1" value="20"></label><label class="ctrl" for="peD">编码维度 d <select id="peD"><option value="8">8</option><option value="32" selected>32</option><option value="64">64</option></select></label></div>
+      <div class="cv" id="peHost"><canvas id="peCv" aria-label="位置相似度"></canvas></div>
+      <div class="calc pw" id="peCalc"></div>
+    </div>
+  </div>
+</section>
+
+<section class="part" id="sakt">
+  <div class="part-h"><div class="eyebrow">第三部分</div><h2>补充：SAKT 的因果自注意力</h2><span class="src">本页补充，对照你论文 <code>experiment.py</code> 第 995 行的 causal_attn 和第 1141 行的 SAKT</span></div>
+  <div class="blk">
+    <div class="prose"><p>KT 里有一条铁律：预测第 t+1 题时，只能用第 t 题及以前的记录。自注意力默认每个位置都能看所有位置，所以要加<b>因果掩码</b>：第 i 个查询看第 j 个键时，如果 j &gt; i（在未来），就把分数设成很大的负数。</p></div>
+    <div class="cell"><textarea>T = 5
+scores = torch.zeros(1, T, T)          # 假设所有分数一样，方便看掩码的效果
+mask = torch.triu(torch.ones(T, T, dtype=torch.bool), diagonal=1)   # 对角线以上是未来
+print(mask)
+weights = torch.softmax(scores.masked_fill(mask, -1e9), dim=-1)
+weights[0]</textarea></div>
+    <div class="prose"><p>第 1 行只能看第 1 个位置（权重 1），第 2 行平分给前 2 个，第 5 行平分给全部 5 个。画成热图，右上角全是 0：</p></div>
+    <div class="cell"><textarea>d2l.show_heatmaps(weights.unsqueeze(0), xlabel='Keys（做过的题）',
+                  ylabel='Queries（要预测的题）')</textarea></div>
+    <div class="panel stack" id="skLab">
+      <h4>SAKT 预测下一题时在看什么</h4>
+      <p class="small muted">一个学生做了 10 道题（上面一排，格子里写着知识点和对错）。选下一题考哪个知识点。查询是“下一题的知识点”，键是“做过的题的知识点 + 位置”，值是“做过的题的对错”。这里用一个手工设计的打分：同一个知识点加分，越近加分越多（模拟模型学到的东西）。柱子是注意力权重，预测是值（对 = 1，错 = 0）的加权平均。</p>
+      <div class="row"><label class="ctrl" for="skQ">下一题的知识点 <select id="skQ"><option value="0">知识点 A</option><option value="1">知识点 B</option><option value="2" selected>知识点 C</option></select></label><label class="ctrl" for="skR">“越近越重要”的程度 <output id="skRv">0.3</output><input type="range" id="skR" min="0" max="1.5" step="0.05" value="0.3"></label><label class="ctrl" for="skM">掩码 <select id="skM"><option value="1">有因果掩码</option><option value="0">去掉掩码（会偷看）</option></select></label></div>
+      <div class="cv" id="skHost"><canvas id="skCv" aria-label="SAKT 注意力权重"></canvas></div>
+      <div class="calc pw" id="skCalc"></div>
+    </div>
+    <div class="callout"><h4>对照你的论文：causal_attn 逐行看</h4>
+<pre class="code">def causal_attn(Q, Kt, V, qpos, heads, decay=None):     <span class="c"># 第 995 行</span>
+    B, Tq, M, d = Q.shape
+    T = Kt.shape[1]; dh = d // heads                     <span class="c"># 每个头 dh = 64 / 2 = 32 维</span>
+    q = Q.reshape(B, Tq, M, heads, dh).permute(0, 3, 1, 2, 4)   <span class="c"># 和 transpose_qkv 一样：切头</span>
+    k = Kt.reshape(B, T, heads, dh).permute(0, 2, 1, 3)
+    v = V.reshape(B, T, heads, dh).permute(0, 2, 1, 3)
+    s = torch.einsum("bhtmd,bhjd->bhtmj", q, k) / math.sqrt(dh)   <span class="c"># 缩放点积</span>
+    jpos = torch.arange(T, device=Q.device)
+    dist = qpos.view(-1, 1) - jpos.view(1, -1)          <span class="c"># 查询位置减键位置</span>
+    ...
+    s = s.masked_fill((dist &lt; 0).view(1, 1, Tq, 1, T), -1e9)    <span class="c"># 键在未来：因果掩码</span>
+    a = torch.softmax(s, -1)
+    o = torch.einsum("bhtmj,bhjd->bhtmd", a, v)          <span class="c"># 加权求和</span>
+    return o.permute(0, 2, 3, 1, 4).reshape(B, Tq, M, d)   <span class="c"># 和 transpose_output 一样：拼回去</span></pre>
+      <p>和今天的 <code>MultiHeadAttention</code> 是同一个东西：<code>einsum</code> 只是 bmm 的另一种写法。SAKT（第 1141 行）里：键和值来自做过的题 <code>self.iemb(sk + self.K * rs.long())</code> 加上位置；查询来自下一题的知识点 <code>self.qemb(q)</code>；<code>heads=2</code>；位置编码用的是<b>可学习的</b> <code>nn.Embedding(maxlen, d)</code>，不是今天的正弦函数，两种都常见。被省略的那两行是 AKT 用的“距离衰减”（<code>decay</code>），明天讲。</p></div>
+  </div>
+</section>
+
+<section class="part quiz-sec">
+  <div class="part-h"><div class="eyebrow">课后题</div><h2>做几道题检查一下</h2><span class="src">选择题点选项马上出结果；写形状和写代码的题，网页会现场运行代码判断对错。答题记录只存在你这台设备的浏览器里。</span></div>
+  <div class="quiz dayquiz" data-day="16"></div>
+  <div class="row small muted quizscore" data-day="16"></div>
+</section>
+
+<section class="part">
+  <div class="part-h"><div class="eyebrow">今日小结</div><h2>今天学会了吗？</h2></div>
+  <div class="two">
+    <div class="panel stack">
+      <ul class="check-list" data-day="16">
+        <li><label><input type="checkbox" data-k="c1">多头：切成 h 段各做一次注意力，拼起来再过 W_o</label></li>
+        <li><label><input type="checkbox" data-k="c2">transpose_qkv 把“头”并进批量维，一次 bmm 算完</label></li>
+        <li><label><input type="checkbox" data-k="c3">自注意力：可并行、任意两位置一步相连，代价是 n²</label></li>
+        <li><label><input type="checkbox" data-k="c4">位置编码告诉模型顺序；正弦编码或可学习的嵌入</label></li>
+        <li><label><input type="checkbox" data-k="c5">因果掩码：未来的位置分数设成 −10⁹；SAKT 就是这样做的</label></li>
+      </ul>
+      <span class="small check-msg"></span>
+    </div>
+    <div class="panel stack">
+      <h3>明天（第 17 天）学什么</h3>
+      <p>原书 10.7 Transformer：残差连接、层规范化（LayerNorm）、前馈网络，把它们和多头注意力拼成一个完整的块。SAKT、AKT、simpleKT 的 <code>ln1</code>、<code>ln2</code>、<code>ffn</code> 就是这些。还会看 AKT 的距离衰减。</p>
+    </div>
+  </div>
+</section>
+</main>
