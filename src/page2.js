@@ -9,7 +9,7 @@ function colors(){const cs=getComputedStyle(document.documentElement),g=n=>cs.ge
 function fitCanvas(cv,W,H){const r=window.devicePixelRatio||1;cv.width=Math.round(W*r);cv.height=Math.round(H*r);cv.style.width=W+'px';cv.style.height=H+'px';const c=cv.getContext('2d');c.setTransform(r,0,0,r,0,0);return c}
 const MONO='11px "JetBrains Mono",ui-monospace,monospace';
 const bodyFont=px=>`${px}px ${getComputedStyle(document.body).fontFamily}`;
-const DAYS=['1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16','17','18'];
+const DAYS=['1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16','17','18','19'];
 
 // ---------- 张量图示 ----------
 function cellText(v,dtype){if(dtype==='bool')return v?'T':'F';if(dtype==='int64')return String(v);if(!Number.isFinite(v))return String(v);return Number.isInteger(v)?String(v):(Math.abs(v)>=100?v.toFixed(0):v.toFixed(2))}
@@ -135,7 +135,7 @@ function setupCells(){$$('.cell').forEach((cell,i)=>{const ta=cell.querySelector
     else if(e.key==='Tab'&&!e.shiftKey){e.preventDefault();const s=ta.selectionStart;ta.setRangeText('    ',s,ta.selectionEnd,'end');autoSize(ta)}})})}
 function runAll(day){ENVS[day]=MT.newEnv();EXEC[day]=0;MT.resetFS();let errs=0;const main=$('#day'+day);
   $$('.cell',main).forEach(c=>{if(c.dataset.manual){const out=c.querySelector('.out');out.className='out';out.textContent='';const t=document.createElement('span');t.className='tip';t.textContent=`这一格要手动运行：${c.dataset.manual}。准备好了点这一格右上角的“运行”。`;out.appendChild(t);out.hidden=false;return}if(!runCellEl(c))errs++});RAN[day]=true;
-  const expected={'1':0,'2':5,'3':3,'4':0,'5':0,'6':0,'7':0,'8':0,'9':0,'10':0,'11':2,'12':0,'13':0,'14':0,'15':0,'16':0,'17':0,'18':0}[day]||0;
+  const expected={'1':0,'2':5,'3':3,'4':0,'5':0,'6':0,'7':0,'8':0,'9':0,'10':0,'11':2,'12':0,'13':0,'14':0,'15':0,'16':0,'17':0,'18':0,'19':0}[day]||0;
   $$('.runAllMsg',main).forEach(m=>m.textContent=errs>expected?`运行完了，有 ${errs} 个格子报错，往下找红字。`:expected?`全部运行完了。其中 ${expected} 个格子是故意报错的，用来练习读报错。`:'全部运行完了，没有报错。')}
 document.addEventListener('click',e=>{const b=e.target.closest('.runAll');if(b)runAll(b.dataset.day)});
 
@@ -619,6 +619,28 @@ function opRender(){const host=$('#opHost');if(!host.offsetParent)return;const C
   const f=q=>0.1*q[0]**2+2*q[1]**2,last=k=>res[k][res[k].length-1],desc=k=>{const v=f(last(k));return!Number.isFinite(v)||v>1e6?'发散了':v.toExponential(2)};
   $('#opCalc').textContent=`学习率 η = ${eta.toFixed(3)}，动量 β = ${beta.toFixed(2)}；40 步后的函数值（越小越好）：\n梯度下降 ${desc('sgd')}\n动量法   ${desc('mom')}\nAdam     ${desc('adam')}\n\nx₂ 方向的梯度是 4x₂，梯度下降时 η > 0.5 就会在 x₂ 方向发散（每步乘 1 − 4η）。\nAdam 每一步对每个坐标走的距离大约都是 η（梯度被 √ŝ 归一化了），\n所以不管哪个方向陡、哪个方向平，它都差不多匀速前进；η 太大时会在最优点附近来回跳。`}
 ['#opLr','#opB'].forEach(s=>$(s).addEventListener('input',opRender));
+// ---------- 第 19 天：OPE 估计器游乐场 ----------
+const OE={seed:5};
+function oeSim(){const T=10**+$('#oeT').value,n=+$('#oeN').value,clip=+$('#oeC').value,qe=+$('#oeQ').value;$('#oeTv').textContent=T.toFixed(3);$('#oeNv').textContent=n;$('#oeQv').textContent=qe.toFixed(2);
+  const g=sgRng(OE.seed),u=(()=>{let s=OE.seed*977;return()=>{s=s+0x6D2B79F5>>>0;let t=Math.imul(s^s>>>15,1|s);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}})(),K=5;
+  const rm=p=>0.3*Math.exp(-(((p-0.6)/0.2)**2)),Q=p=>(1-qe)*rm(p)+qe*(0.6*rm(p)+0.05),sm=a=>{const m=Math.max(...a),e=a.map(v=>Math.exp(v-m)),z=e.reduce((x,y)=>x+y,0);return e.map(v=>v/z)};
+  const mu=p=>sm(p.map(v=>8*v)),pi=p=>sm(p.map(v=>-((v-0.7)**2)/T),0);
+  let V=0;for(let i=0;i<20000;i++){const p=Array.from({length:K},()=>u()*0.9+0.05),pp=pi(p);V+=pp.reduce((s,v,k)=>s+v*rm(p[k]),0)}V/=20000;
+  const R={IPS:[],SNIPS:[],DM:[],DR:[]},ess=[];
+  for(let rep=0;rep<200;rep++){let sw=0,sw2=0,swr=0,sdm=0,sdr=0;for(let i=0;i<n;i++){const p=Array.from({length:K},()=>u()*0.9+0.05),m=mu(p),pp=pi(p);let c=u(),a=0;while(a<K-1&&(c-=m[a])>=0)a++;
+      const r=rm(p[a])+0.05*g();let w=pp[a]/m[a];if(clip)w=Math.min(w,clip);const dm=pp.reduce((s,v,k)=>s+v*Q(p[k]),0);sw+=w;sw2+=w*w;swr+=w*r;sdm+=dm;sdr+=dm+w*(r-Q(p[a]))}
+    R.IPS.push(swr/n);R.SNIPS.push(swr/sw);R.DM.push(sdm/n);R.DR.push(sdr/n);ess.push(sw*sw/sw2/n)}
+  OE.res={V,R,ess:ess.reduce((a,b)=>a+b,0)/ess.length,T,clip,qe,n};oeDraw()}
+function oeDraw(){const host=$('#oeHost');if(!host.offsetParent||!OE.res)return;const{V,R,ess,T,clip,qe,n}=OE.res,C=colors(),names=['IPS','SNIPS','DM','DR'],cols=[C.neg,C.accent,C.muted,C.pos];
+  const all=names.flatMap(k=>R[k]),lo=Math.min(V,...all),hi=Math.max(V,...all),pad=(hi-lo)*0.08||0.01,y0=lo-pad,y1=hi+pad;
+  const W=Math.max(260,host.clientWidth),H=260,ctx=fitCanvas($('#oeCv'),W,H),pl=48,pb=24,cw=(W-pl-8)/4,sy=y=>8+(y1-y)/(y1-y0)*(H-8-pb);
+  ctx.font=MONO;ctx.fillStyle=C.muted;ctx.textAlign='right';ctx.textBaseline='middle';ctx.strokeStyle=C.line;for(let k=0;k<=4;k++){const y=y0+(y1-y0)*k/4;ctx.beginPath();ctx.moveTo(pl,sy(y));ctx.lineTo(W-8,sy(y));ctx.stroke();ctx.fillText(y.toFixed(3),pl-4,sy(y))}
+  ctx.strokeStyle=C.ink;ctx.setLineDash([5,4]);ctx.beginPath();ctx.moveTo(pl,sy(V));ctx.lineTo(W-8,sy(V));ctx.stroke();ctx.setLineDash([]);
+  names.forEach((k,i)=>{ctx.fillStyle=cols[i];ctx.globalAlpha=.55;R[k].forEach((v,j)=>{ctx.beginPath();ctx.arc(pl+cw*(i+0.5)+((j*37)%41-20)*cw/60,sy(v),2.2,0,7);ctx.fill()});ctx.globalAlpha=1;ctx.fillStyle=C.ink;ctx.textAlign='center';ctx.textBaseline='alphabetic';ctx.font=bodyFont(12);ctx.fillText(k,pl+cw*(i+0.5),H-6);ctx.font=MONO});
+  const st=a=>{const m=a.reduce((x,y)=>x+y,0)/a.length,s=Math.sqrt(a.reduce((x,y)=>x+(y-m)**2,0)/(a.length-1));return[m-V,s]};
+  $('#oeCalc').textContent=`真实 V(π) = ${V.toFixed(4)}（虚线）；n = ${n}，温度 ${T.toFixed(3)}，${clip?'截断到 '+clip:'不截断'}，模型误差 ${qe.toFixed(2)}\n平均 ESS = ${ess.toFixed(3)}\n\n         偏差      标准差\n${names.map(k=>{const[b,s]=st(R[k]);return`${k.padEnd(6)} ${(b>=0?'+':'')+b.toFixed(4)}   ${s.toFixed(4)}`}).join('\n')}\n\n${ess<0.15?'ESS 很低：新策略和旧策略差得太远，估计主要靠少数几条记录。':''}${qe===0?'模型完全正确：DM 和 DR 都没有偏差，DR 方差最小。':qe>0.7?'模型误差很大：DM 偏差明显，DR 仍然基本无偏。':''}${clip&&clip<=5?'\n截断很狠：IPS 方差变小，但出现了偏差。':''}`}
+$('#oeGo').onclick=()=>{OE.seed++;oeSim()};['#oeT','#oeN','#oeQ'].forEach(s=>$(s).addEventListener('change',oeSim));['#oeT','#oeN','#oeQ'].forEach(s=>$(s).addEventListener('input',()=>{$('#oeTv').textContent=(10**+$('#oeT').value).toFixed(3);$('#oeNv').textContent=$('#oeN').value;$('#oeQv').textContent=(+$('#oeQ').value).toFixed(2)}));$('#oeC').onchange=oeSim;
+function oeRender(){if(!OE.res)oeSim();else oeDraw()}
 // ---------- 小结勾选、课程表、切换天数 ----------
 function checksSetup(){$$('.check-list').forEach(ul=>{const day=ul.dataset.day,key='checks'+day,st=store.get(key,{});$$('input',ul).forEach(c=>{c.checked=!!st[c.dataset.k];c.onchange=()=>{const s=store.get(key,{});s[c.dataset.k]=c.checked;store.set(key,s);checkMsg(ul)}});checkMsg(ul)})}
 function checkMsg(ul){const day=ul.dataset.day,all=$$('input',ul),n=all.filter(c=>c.checked).length,msg=ul.parentElement.querySelector('.check-msg');const done=n===all.length;
@@ -631,7 +653,7 @@ const ROAD=[['1','第 1 章 引言 + 2.1 数据操作'],['2','2.2 数据预处�
   ['18','11.4 至 11.6 + 11.10 小批量随机梯度下降、动量、Adam（论文用的优化器）','paper'],['19','论文专题：离线策略评估 IPS、SNIPS、DR（书里没有）','paper'],['20','论文专题：逐行读你的 experiment.py','paper'],
   ['选学','4.7 前向传播、反向传播和计算图；4.10 Kaggle 房价预测'],['选学','第 6 至 7 章 卷积神经网络（LeNet、ResNet 等）'],['选学','9.3 至 9.8 深度和双向循环网络、机器翻译、seq2seq'],['选学','第 11 章其余优化算法、第 12 章计算性能'],['选学','第 13 至 15 章 计算机视觉、自然语言处理']];
 function roadRender(){$('#roadList').innerHTML=ROAD.map(([d,t,f])=>{const live=DAYS.includes(d);return`<div><span class="d">${/^\d+$/.test(d)?`第 ${d} 天`:d}</span><span>${live?`<a href="#day${d}">${esc(t)}</a>`:esc(t)}${f==='paper'?' <span class="mark">论文</span>':''}</span><span class="st${live?' now':''}">${live?'已上线':'未上线'}</span></div>`}).join('')}
-const REDRAW={'1':()=>{kRender();imRender();ofRender()},'2':()=>{dotRender();normRender()},'3':()=>{secRender();gradRender()},'4':()=>{diceRender();bayesRender();bktRender()},'5':()=>{houseRender();if(!sgd.X)sgdData();sgdRender()},'6':()=>{smRender();calRender()},'7':()=>{pixRender()},'8':()=>{uaRender();actRender()},'9':()=>{spRender();rdRender();dpRender()},'10':()=>{sgRender();shRender()},'11':()=>{pcRender()},'12':()=>{tkRender();ptRender();rnRender()},'13':()=>{clRender();btRender()},'14':()=>{gtRender()},'15':()=>{nwRender();sdRender()},'16':()=>{peRender();skRender()},'17':()=>{lnRender();dcRender()},'18':()=>{opRender()}};
+const REDRAW={'1':()=>{kRender();imRender();ofRender()},'2':()=>{dotRender();normRender()},'3':()=>{secRender();gradRender()},'4':()=>{diceRender();bayesRender();bktRender()},'5':()=>{houseRender();if(!sgd.X)sgdData();sgdRender()},'6':()=>{smRender();calRender()},'7':()=>{pixRender()},'8':()=>{uaRender();actRender()},'9':()=>{spRender();rdRender();dpRender()},'10':()=>{sgRender();shRender()},'11':()=>{pcRender()},'12':()=>{tkRender();ptRender();rnRender()},'13':()=>{clRender();btRender()},'14':()=>{gtRender()},'15':()=>{nwRender();sdRender()},'16':()=>{peRender();skRender()},'17':()=>{lnRender();dcRender()},'18':()=>{opRender()},'19':()=>{oeRender()}};
 function showDay(day,scroll){if(!DAYS.includes(day))day='1';$$('main.day').forEach(m=>m.hidden=m.dataset.day!==day);$$('[data-nav]').forEach(a=>a.classList.toggle('on',a.dataset.nav===day));store.set('lastDay',day);
   if(!RAN[day]){if(day==='7'&&!FM_U8){fmReady.then(ok=>{if(ok&&!RAN['7']){runAll('7');REDRAW['7']()}});}else runAll(day)}$$('#day'+day+' textarea').forEach(autoSize);REDRAW[day]();if(scroll)window.scrollTo(0,0)}
 function route(){const h=location.hash.replace('#','');const m=h.match(/^day(\d+)$/);if(m){showDay(m[1],true);return}

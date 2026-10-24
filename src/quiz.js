@@ -187,6 +187,17 @@ const QUIZ={
  {t:'c',q:'你论文第 1349 行 torch.optim.Adam(params, lr=lr)，DKT 用的 β₁、β₂ 是多少？',o:['0.9 和 0.999（默认值）','0.5 和 0.9','0 和 0','没有用 Adam'],a:0,why:'只传了 lr，其余都是 PyTorch 默认：β₁ = 0.9，β₂ = 0.999，ε = 10⁻⁸。'},
  {t:'code',q:'写代码：手动做 2 步 Adam。参数 x = 1.0，每一步的梯度都是 g = 2x（也就是 f = x²），lr = 0.1，β₁ = 0.9，β₂ = 0.999，ε = 1e-8，v 和 s 从 0 开始，带偏差修正。两步之后的 x 存成 x。',start:'x = 1.0\nv, s = 0.0, 0.0\nb1, b2, lr, eps = 0.9, 0.999, 0.1, 1e-8\nfor t in range(1, 3):\n    g = 2 * x\n    # 在这里更新 v、s、x\n    \nx',check:env=>{let x=1,v=0,s=0;for(let t=1;t<3;t++){const g=2*x;v=0.9*v+0.1*g;s=0.999*s+0.001*g*g;x-=0.1*(v/(1-0.9**t))/(Math.sqrt(s/(1-0.999**t))+1e-8)}const got=env.vars.x;const gv=got&&(MT.isT(got)?got.data[0]:got.v);if(gv==null||Math.abs(gv-x)>1e-4)return`两步之后 x 应该约等于 ${x.toFixed(5)}，现在是 ${gv}`;return true},why:'v = b1*v + (1-b1)*g；s = b2*s + (1-b2)*g*g；x -= lr * (v/(1-b1**t)) / ((s/(1-b2**t)) ** 0.5 + eps)。第一步正好走了 lr = 0.1（v̂/√ŝ = g/|g| = 1），第二步也接近 0.1。'},
 ],
+'19':[
+ {t:'c',q:'日志由旧策略 μ 收集。直接算日志里的平均收益，估计的是什么？',o:['新策略 π 的价值','旧策略 μ 的价值','两者的平均','什么都不是'],a:1,why:'日志里的动作是按 μ 选的，平均收益自然代表 μ。'},
+ {t:'c',q:'IPS 的权重 w = π(a | x) / μ(a | x)。某条记录 π(a | x) = 0.6，μ(a | x) = 0.05，权重是多少？',o:['0.03','12','0.55','1'],a:1,why:'0.6 / 0.05 = 12。旧策略很少选、新策略常选的动作，权重很大，IPS 的方差就来自这里。'},
+ {t:'c',q:'SNIPS 和 IPS 的区别是？',o:['SNIPS 不用权重','SNIPS 用 Σwᵢ 代替 n 做分母：有一点偏差，但方差小很多','SNIPS 需要结果模型','没有区别'],a:1,why:'V̂ = Σ wᵢ rᵢ / Σ wᵢ。'},
+ {t:'c',q:'DM（直接法）的结果模型 Q̂ 有系统偏差时，DM 估计会怎样？',o:['依然无偏','有偏差，而且样本再多也消除不了','方差变大','变成 IPS'],a:1,why:'DM 完全相信模型。今天的实验里 Q_bad 让 DM 偏了 −0.023，但标准差很小。'},
+ {t:'c',q:'DR 为什么叫“双重稳健”？',o:['算了两遍','μ（权重）对或者 Q̂（结果模型）对，只要有一个对就无偏','用了两个模型取平均','有两个超参数'],a:1,why:'V̂ = Σ π Q̂ + w (r − Q̂(a))：Q̂ 错了，加权残差把它修回来；Q̂ 对了，残差期望为 0。'},
+ {t:'c',q:'把权重截断到一个较小的上限（比如 5），会怎样？',o:['偏差和方差都变小','方差变小，但引入偏差','偏差变小，方差变大','没影响'],a:1,why:'今天的实验：截断到 5 时 IPS 的标准差从 0.020 降到 0.013，偏差从 +0.002 变成 −0.019。论文用的上限是 20。'},
+ {t:'c',q:'归一化的有效样本量 ESS = (Σw)² / Σw² / n 接近 0 说明什么？',o:['估计很准','权重集中在极少数记录上，估计实际上只靠几条数据，很不稳定','样本太多','μ 和 π 一样'],a:1,why:'所有权重相等时 ESS = 1。新旧策略差得越远，ESS 越小。'},
+ {t:'c',q:'你论文里 μ（旧策略）是怎么得到的？',o:['日志里直接记录了','按“上一题的知识点 → 这一题的知识点”的转移次数加平滑估计，并做交叉拟合','用神经网络学的','假设是均匀分布'],a:1,why:'prep_world 第 668 到 673 行。交叉拟合：一折学生用的 μ 在另一折上估计。'},
+ {t:'code',q:'写代码：三条日志，w = torch.tensor([0.5, 2.0, 4.0])（已经算好的权重），r = torch.tensor([1.0, 0.0, 0.5])，结果模型对日志动作的预测 qa = torch.tensor([0.6, 0.2, 0.4])，对新策略的期望 dm = torch.tensor([0.5, 0.3, 0.45])。算出 ips、snips、dr（都是 0 维张量或数字）。',start:'w = torch.tensor([0.5, 2.0, 4.0])\nr = torch.tensor([1.0, 0.0, 0.5])\nqa = torch.tensor([0.6, 0.2, 0.4])\ndm = torch.tensor([0.5, 0.3, 0.45])\nips = \nsnips = \ndr = \nips, snips, dr',check:env=>{const v=n=>{const x=env.vars[n];return x==null?null:MT.isT(x)?x.data[0]:x.v};const want={ips:(0.5+0+2)/3,snips:2.5/6.5,dr:((0.5+0.5*0.4)+(0.3+2*(-0.2))+(0.45+4*0.1))/3};for(const k of['ips','snips','dr']){const g=v(k);if(g==null||Math.abs(g-want[k])>1e-4)return`${k} 应该约等于 ${want[k].toFixed(4)}`}return true},why:'ips = (w * r).mean() = 0.8333；snips = (w * r).sum() / w.sum() = 0.3846；dr = (dm + w * (r - qa)).mean() = 0.4833。'},
+],
 };
 function quizState(day){return store.get('quiz'+day,{})}
 function quizSave(day,s){store.set('quiz'+day,s)}

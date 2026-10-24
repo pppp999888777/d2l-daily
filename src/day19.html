@@ -1,0 +1,211 @@
+<main class="wrap day" id="day19" data-day="19" hidden>
+<section class="hero">
+  <div class="eyebrow">第 19 天 · 书里没有的专题：离线策略评估（OPE） · 论文路线第 12 课</div>
+  <h1>只有旧日志，怎么评估一个新的出题策略？</h1>
+  <p class="lead">你论文最核心的问题之一：手里只有旧系统（策略 μ）出题时留下的日志，想知道新策略 π（比如 Safe-DFKT 的出题规则）如果上线，学生能学到多少。直接上线做实验太贵、有风险；直接拿日志里的平均收益又只代表 μ。离线策略评估（OPE）就是解决这个问题的。今天在一个答案已知的模拟环境里，从零实现 IPS、SNIPS、DM 和 DR 四种估计，看它们各自的偏差和方差，最后逐行读你论文第 1407 行的 <code>ope_eval</code>。</p>
+  <div class="plan">
+    <div><b class="k">今天的时间</b>大约 70 分钟。代码格都很快，自动运行。</div>
+    <div><b class="k">学完你能</b><ul><li>说清为什么日志的平均收益不能评估新策略</li><li>写出 IPS、SNIPS、DM、DR 四种估计</li><li>理解偏差和方差的取舍、权重截断和 ESS</li><li>读懂论文 <code>ope_eval</code> 的每一行</li></ul></div>
+    <div><b class="k">和你的论文</b><ul><li><code>w = (pia / W["mu"]).clamp(max=WCLIP)</code></li><li><code>dm + w * (r - qa)</code></li><li>μ 和 Q 是怎么从日志里估出来的</li></ul></div>
+  </div>
+</section>
+
+<section class="part" id="opesetup">
+  <div class="part-h"><div class="eyebrow">第一部分</div><h2>问题：日志来自旧策略</h2><span class="src">本页补充，第 10 天“重要性加权”的延续</span></div>
+  <div class="prose"><div class="row"><button class="btn primary runAll" data-day="19">从头全部运行</button><span class="small muted runAllMsg"></span></div></div>
+  <div class="blk">
+    <div class="prose">
+      <p>把出题看成一个反复进行的决策：每一步看到学生的<b>状态</b> x（这里用 KT 模型对 K 个知识点的答对概率预测 p），选一个<b>动作</b> a（下一题考哪个知识点），得到<b>收益</b> r（这一题带来的学习收益）。策略 π(a | x) 是“在状态 x 下选每个知识点的概率”。策略的价值是</p>
+      <p class="math">V(π) = E_x [ Σ_a π(a | x) · E[r | x, a] ]</p>
+      <p>日志是在旧策略 μ 下收集的：每条记录是 (xᵢ, aᵢ, rᵢ)，aᵢ ∼ μ(· | xᵢ)。只有被选中的那个动作的收益是看得到的，其余动作的收益不知道。</p>
+      <p>下面造一个模拟环境：答对概率在 0.6 附近的题学得最多（太难太易都学得少）。旧策略 μ 偏爱容易的题；新策略 π 用你论文的规则：偏向答对概率最接近 0.7 的知识点，温度 0.05（论文第 92 行 <code>TEMP = 0.05</code>，第 78 行 <code>C_TARGET = 0.7</code>）。因为是模拟，真实价值能直接算出来，用来检验各种估计准不准。</p>
+    </div>
+    <div class="cell"><textarea>import torch
+import math
+from d2l import torch as d2l
+torch.manual_seed(0)
+K = 5
+
+def reward_mean(p):
+    # 选知识点 a 的期望学习收益：答对概率在 0.6 附近时学得最多（太难太易都学得少）
+    return 0.3 * torch.exp(-((p - 0.6) / 0.2) ** 2)
+
+def sample_states(n):
+    # 每一步的“状态”：模型对 K 个知识点下一题答对概率的预测
+    return torch.rand(n, K) * 0.9 + 0.05
+
+def mu_policy(p):
+    # 收集日志时用的旧策略 μ：很偏爱容易的知识点（p 越大越常被选），难的很少出
+    return torch.softmax(8 * p, dim=-1)
+
+def pi_policy(p, T=0.05):
+    # 要评估的新策略 π：论文的规则，偏向答对概率最接近 0.7 的知识点
+    return torch.softmax(-(p - 0.7) ** 2 / T, dim=-1)
+
+x = sample_states(3)
+x.shape, torch.allclose(mu_policy(x).sum(1), torch.ones(3)), pi_policy(x).shape</textarea></div>
+    <div class="prose"><p>真实价值：用大量模拟状态直接算期望（实际中做不到，这里是为了对答案）。</p></div>
+    <div class="cell"><textarea>def true_value(policy, n=100000):
+    x = sample_states(n)
+    return (policy(x) * reward_mean(x)).sum(1).mean().item()
+
+V_pi, V_mu = true_value(pi_policy), true_value(mu_policy)
+print(f'新策略 π 的真实价值 {V_pi:.4f}，旧策略 μ 的真实价值 {V_mu:.4f}')
+0.05 &lt; V_mu &lt; V_pi &lt; 0.3</textarea></div>
+    <div class="prose"><p>按 μ 收集 500 条日志：</p></div>
+    <div class="cell"><textarea>def collect_logs(n):
+    x = sample_states(n)
+    a = torch.multinomial(mu_policy(x), 1).squeeze(1)       # 按 μ 抽一个知识点
+    r = reward_mean(x).gather(1, a[:, None]).squeeze(1) + 0.05 * torch.randn(n)   # 观察到的收益（期望值加噪声）
+    return x, a, r
+
+x, a, r = collect_logs(500)
+x.shape, a.shape, a.dtype, r.shape, r.dtype</textarea></div>
+    <div class="cell"><textarea>print('日志里的平均收益（只能代表 μ）：', round(r.mean().item(), 4), '  真实 V(μ)：', round(V_mu, 4))</textarea></div>
+    <div class="prose"><p>日志的平均收益接近 V(μ)，和我们关心的 V(π) 差得远。这就是第 10 天的分布偏移：日志里的动作分布是 μ，我们想要的是 π。</p></div>
+  </div>
+</section>
+
+<section class="part" id="opeest">
+  <div class="part-h"><div class="eyebrow">第二部分</div><h2>四种估计</h2><span class="src">本页补充</span></div>
+  <div class="blk">
+    <div class="prose">
+      <ul>
+        <li><b>IPS</b>（逆倾向得分）：给每条记录乘重要性权重 wᵢ = π(aᵢ | xᵢ) / μ(aᵢ | xᵢ)，V̂ = (1/n) Σ wᵢ rᵢ。无偏，但 μ 很小的动作权重会很大，方差大。</li>
+        <li><b>SNIPS</b>（自归一化 IPS）：V̂ = Σ wᵢ rᵢ / Σ wᵢ。分母不用 n 而用权重之和，有一点偏差，但方差小很多。</li>
+        <li><b>DM</b>（直接法）：学一个结果模型 Q̂(x, a) ≈ E[r | x, a]，V̂ = (1/n) Σ Σ_a π(a | xᵢ) Q̂(xᵢ, a)。不用权重，方差很小；但模型错了就有偏差。</li>
+        <li><b>DR</b>（双重稳健）：V̂ = (1/n) Σ [ Σ_a π(a | xᵢ) Q̂(xᵢ, a) + wᵢ (rᵢ − Q̂(xᵢ, aᵢ)) ]。用模型做基础，再用加权的残差修正。只要 μ 对或者 Q̂ 对，有一个对就无偏，所以叫“双重稳健”；Q̂ 越准，残差越小，方差也越小。</li>
+      </ul>
+      <p><b>有效样本量</b> ESS = (Σwᵢ)² / Σwᵢ² / n：权重全一样时是 1；权重越集中在少数记录上越接近 0，说明估计实际上只靠几条记录，方差会很大。</p>
+    </div>
+    <div class="cell"><textarea>def ope(x, a, r, Q, clip=None, pi=pi_policy):
+    mu_a = mu_policy(x).gather(1, a[:, None]).squeeze(1)      # μ(a | x)
+    pi_all = pi(x)
+    pi_a = pi_all.gather(1, a[:, None]).squeeze(1)            # π(a | x)
+    w = pi_a / mu_a                                           # 重要性权重
+    if clip is not None:
+        w = w.clamp(max=clip)
+    q = Q(x)                                                  # 结果模型：每个动作的预测收益 (n, K)
+    dm = (pi_all * q).sum(1)                                  # 直接法：用模型算 π 的期望收益
+    q_a = q.gather(1, a[:, None]).squeeze(1)
+    return {'IPS': (w * r).mean().item(),
+            'SNIPS': ((w * r).sum() / w.sum()).item(),
+            'DM': dm.mean().item(),
+            'DR': (dm + w * (r - q_a)).mean().item(),
+            'ESS': (w.sum() ** 2 / (w ** 2).sum() / len(w)).item()}
+
+Q_good = lambda x: reward_mean(x)                    # 完全正确的结果模型
+Q_bad = lambda x: 0.6 * reward_mean(x) + 0.05        # 有偏差的结果模型
+est = ope(x, a, r, Q_bad)
+sorted(est.keys()), 0 &lt; est['ESS'] &lt;= 1</textarea></div>
+    <div class="prose"><p>重复 100 次：每次收集一份新的 500 条日志，各算一次估计，看平均下来偏多少（偏差）、每次之间差多少（标准差）。这里用的是<b>有偏差的</b>结果模型 Q_bad。</p></div>
+    <div class="cell"><textarea>torch.manual_seed(1)
+runs = {k: [] for k in ['IPS', 'SNIPS', 'DM', 'DR']}
+for rep in range(100):
+    x, a, r = collect_logs(500)
+    e = ope(x, a, r, Q_bad)
+    for k in runs:
+        runs[k].append(e[k])
+for k, v in runs.items():
+    v = torch.tensor(v)
+    print(f'{k:6s} 平均 {v.mean():.4f}  偏差 {v.mean() - V_pi:+.4f}  标准差 {v.std():.4f}')</textarea></div>
+    <div class="prose"><p>我在真 PyTorch 上跑的结果：IPS 偏差 +0.001、标准差 0.014；SNIPS 偏差 −0.000、标准差 0.008；DM 偏差 −0.023（模型错了），标准差只有 0.002；DR 偏差 0.000、标准差 0.006。DR 既没有 DM 的偏差，方差又比 IPS 小一半多。验证一下这几条结论：</p></div>
+    <div class="cell"><textarea>(abs(torch.tensor(runs['DM']).mean().item() - V_pi) &gt; 0.02, abs(torch.tensor(runs['DR']).mean().item() - V_pi) &lt; 0.02, torch.tensor(runs['IPS']).std().item() &gt; torch.tensor(runs['DR']).std().item())</textarea></div>
+    <div class="prose"><p>结果模型正确时，DR 的方差更小：</p></div>
+    <div class="cell"><textarea>torch.manual_seed(1)
+dr_good = []
+for rep in range(100):
+    x, a, r = collect_logs(500)
+    dr_good.append(ope(x, a, r, Q_good)['DR'])
+v = torch.tensor(dr_good)
+print(f'DR（结果模型正确）平均 {v.mean():.4f}  偏差 {v.mean() - V_pi:+.4f}  标准差 {v.std():.4f}')</textarea></div>
+    <div class="prose"><p>把 100 次估计画出来（虚线是真实值）：</p></div>
+    <div class="cell"><textarea>names = ['IPS', 'SNIPS', 'DM', 'DR']
+for i, k in enumerate(names):
+    d2l.plt.scatter([i + 1 + 0.03 * (j % 9 - 4) for j in range(100)], runs[k], label=k)
+d2l.plt.axhline(y=V_pi, color='k', linestyle='--')
+d2l.plt.xlabel('1 = IPS，2 = SNIPS，3 = DM，4 = DR（每个点是一份日志的估计）')
+d2l.plt.ylabel('估计的 V(π)')
+d2l.plt.legend();</textarea></div>
+  </div>
+  <div class="blk"><div class="blk-h"><span class="n">权重截断</span><h3>用一点偏差换方差</h3></div>
+    <div class="prose"><p>新策略和旧策略差得越远，权重越大、越不稳定。常用办法是把权重截断到一个上限。换一个更“尖”的新策略（温度 0.01），看截断的效果：</p></div>
+    <div class="cell"><textarea>pi_sharp = lambda p: pi_policy(p, T=0.01)       # 更“尖”的新策略：和 μ 差得更远
+V_sharp = true_value(pi_sharp)
+torch.manual_seed(2)
+for clip in [None, 20, 5]:
+    ips, ess = [], []
+    for rep in range(100):
+        x, a, r = collect_logs(500)
+        e = ope(x, a, r, Q_bad, clip=clip, pi=pi_sharp)
+        ips.append(e['IPS']); ess.append(e['ESS'])
+    v = torch.tensor(ips)
+    print(f'截断 {str(clip):4s}：IPS 偏差 {v.mean() - V_sharp:+.4f}  标准差 {v.std():.4f}  平均 ESS {sum(ess) / len(ess):.3f}')</textarea></div>
+    <div class="prose"><p>真 PyTorch 上：不截断时偏差 +0.002、标准差 0.020；截断到 5 时标准差降到 0.013，但偏差变成 −0.019。截断到 20 几乎没影响（这个例子里很少有权重超过 20）。你论文用的上限就是 20。</p></div>
+    <div class="panel stack" id="opeLab">
+      <h4>估计器游乐场</h4>
+      <p class="small muted">和上面同样的模拟，在浏览器里直接重复 200 次。每个点是一份日志的估计，虚线是真实值。调新策略的“尖锐程度”（温度越小越尖，离 μ 越远）、日志条数、截断上限和结果模型的误差，看四种估计怎么变。</p>
+      <div class="row"><label class="ctrl" for="oeT">π 的温度 <output id="oeTv">0.050</output><input type="range" id="oeT" min="-2.5" max="-0.5" step="0.05" value="-1.3"></label><label class="ctrl" for="oeN">日志条数 n <output id="oeNv">500</output><input type="range" id="oeN" min="50" max="2000" step="50" value="500"></label></div>
+      <div class="row"><label class="ctrl" for="oeC">截断上限 <select id="oeC"><option value="0">不截断</option><option value="20" selected>20（论文）</option><option value="5">5</option><option value="2">2</option></select></label><label class="ctrl" for="oeQ">结果模型误差 <output id="oeQv">0.40</output><input type="range" id="oeQ" min="0" max="1" step="0.05" value="0.4"></label><button class="btn sm" id="oeGo">重新模拟</button></div>
+      <div class="cv" id="oeHost"><canvas id="oeCv" aria-label="四种估计的分布"></canvas></div>
+      <div class="calc pw" id="oeCalc"></div>
+    </div>
+  </div>
+</section>
+
+<section class="part" id="opepaper">
+  <div class="part-h"><div class="eyebrow">第三部分</div><h2>逐行读论文的 ope_eval</h2><span class="src"><code>experiment.py</code> 第 1407 到 1450 行</span></div>
+  <div class="blk">
+    <div class="prose"><p>先看 μ 和 Q 是怎么来的（<code>prep_world</code>，第 662 到 677 行）。论文假设旧策略只取决于上一题的知识点：数一数“上一题是 i、这一题是 j”出现了多少次，加平滑后归一化，就是 μ(j | i)。Q 是每个知识点的平均收益表（<code>qtab</code>）。还用了<b>交叉拟合</b>：训练集学生分两折，第 f 折学生用的 μ 和 Q 是在另一折上估计的，避免“用同一批数据既估计模型又做评估”带来的偏差。</p></div>
+<pre class="code">C = np.bincount(prev * K + cur, ...).reshape(K + 1, K)       <span class="c"># 转移次数：上一题 → 这一题</span>
+uni = C.sum(0) + 1.0; uni = uni / uni.sum()
+mut[g] = (C + 5 * uni[None]) / (C.sum(1, keepdims=True) + 5)  <span class="c"># 平滑后的 μ(这一题 | 上一题)</span>
+Qn[g] = qtab(cur, rn, mn, K)                                  <span class="c"># 结果模型：每个知识点的平均收益</span></pre>
+    <div class="prose"><p>然后是评估本身（删掉了处理三种收益的循环外壳）：</p></div>
+<pre class="code">H = model.encode(sk, rs); qpos = torch.arange(Lb - 1)
+p = torch.sigmoid(model.readout_all(H, qpos))       <span class="c"># 状态 x：对每个知识点的答对概率</span>
+score = -(p - tgt) ** 2 / TEMP                      <span class="c"># 新策略 π 的打分：离 0.7 越近越高</span>
+pb = model.policy_bias(H, qpos)
+if pb is not None:
+    score = score + pb                              <span class="c"># Safe-DFKT 的策略头 g 加的修正</span>
+pi = torch.softmax(score, -1)                       <span class="c"># π(· | x)</span>
+pia = pi.gather(-1, a.unsqueeze(-1)).squeeze(-1)    <span class="c"># π(a | x)：日志里实际出的那道题</span>
+w = (pia / W["mu"][bt, 1:Lb]).clamp(max=WCLIP)      <span class="c"># 重要性权重，截断到 20</span>
+qa = Q[a]; dm = (pi * Q.view(1, 1, -1)).sum(-1)    <span class="c"># Q̂(a) 和 Σ π(a) Q̂(a)</span>
+...
+out["ips"]   = np.mean(w * r)                       <span class="c"># IPS</span>
+out["snips"] = np.sum(w * r) / max(np.sum(w), 1e-8) <span class="c"># SNIPS</span>
+out["dr"]    = np.mean(dm + w * (r - qa))           <span class="c"># DR</span>
+out["dr_se"] = np.std(V) / sqrt(len(V))             <span class="c"># DR 的标准误</span>
+out["ess"]   = np.sum(w) ** 2 / np.sum(w ** 2) / len(w)   <span class="c"># 归一化的有效样本量</span></pre>
+    <div class="callout"><h4>和今天的代码对照</h4><p>完全是同一套公式：<code>pia / mu</code> 是 w，<code>dm</code> 是 DM 那一项，<code>dm + w * (r - qa)</code> 是 DR。两个区别：（1）论文的 Q 只依赖知识点、不依赖学生状态（一个很简单的结果模型），所以 DR 主要靠权重修正；（2）论文注释说明，估计的是“一步偏离”的价值：只在这一个决策点换成 π，之后仍按日志的行为走。所以 OPE 列里的数字衡量的是“单步出题选得好不好”。</p></div>
+    <div class="callout"><h4>为什么这对论文的结论很重要</h4><p>论文同时报告了模拟器里的真实价值（<code>sim_ope_true</code>）和 DR 估计（<code>sim_ope_dr</code>），两者的差就是 OPE 的偏差（<code>sim_ope_bias</code>）。今天的实验告诉你怎么读这些数：ESS 低说明新旧策略差得远、估计不稳；截断会引入偏差；Q 模型太简单时 DR 主要靠权重，方差接近 IPS。</p></div>
+  </div>
+</section>
+
+<section class="part quiz-sec">
+  <div class="part-h"><div class="eyebrow">课后题</div><h2>做几道题检查一下</h2><span class="src">选择题点选项马上出结果；写形状和写代码的题，网页会现场运行代码判断对错。答题记录只存在你这台设备的浏览器里。</span></div>
+  <div class="quiz dayquiz" data-day="19"></div>
+  <div class="row small muted quizscore" data-day="19"></div>
+</section>
+
+<section class="part">
+  <div class="part-h"><div class="eyebrow">今日小结</div><h2>今天学会了吗？</h2></div>
+  <div class="two">
+    <div class="panel stack">
+      <ul class="check-list" data-day="19">
+        <li><label><input type="checkbox" data-k="c1">日志的平均收益只代表收集日志的旧策略 μ</label></li>
+        <li><label><input type="checkbox" data-k="c2">IPS 无偏但方差大；SNIPS 换分母降方差</label></li>
+        <li><label><input type="checkbox" data-k="c3">DM 靠结果模型，模型错就有偏差；DR 两者结合</label></li>
+        <li><label><input type="checkbox" data-k="c4">截断权重：用偏差换方差；ESS 衡量权重有多集中</label></li>
+        <li><label><input type="checkbox" data-k="c5">论文 ope_eval：w = π/μ 截断到 20，DR = dm + w(r − qa)</label></li>
+      </ul>
+      <span class="small check-msg"></span>
+    </div>
+    <div class="panel stack">
+      <h3>明天（第 20 天，最后一天）学什么</h3>
+      <p>把前 19 天学的东西串起来，按运行顺序通读你论文的 <code>experiment.py</code>：数据准备、各个 KT 模型、决策损失、训练、检查点选择、模拟器评估、OPE 和统计检验。每一段都标出对应的是哪一天的内容。</p>
+    </div>
+  </div>
+</section>
+</main>

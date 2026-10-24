@@ -215,7 +215,7 @@ code.big{font-size:.8em;background:var(--sunk);padding:0 .25em;border-radius:6px
 </style><header class="top"><div class="wrap">
   <span class="brand">动手学深度学习每日课</span>
   <nav class="days" id="dayNav" aria-label="课程天数">
-    <a href="#day1" data-nav="1">第 1 天</a><a href="#day2" data-nav="2">第 2 天</a><a href="#day3" data-nav="3">第 3 天</a><a href="#day4" data-nav="4">第 4 天</a><a href="#day5" data-nav="5">第 5 天</a><a href="#day6" data-nav="6">第 6 天</a><a href="#day7" data-nav="7">第 7 天</a><a href="#day8" data-nav="8">第 8 天</a><a href="#day9" data-nav="9">第 9 天</a><a href="#day10" data-nav="10">第 10 天</a><a href="#day11" data-nav="11">第 11 天</a><a href="#day12" data-nav="12">第 12 天</a><a href="#day13" data-nav="13">第 13 天</a><a href="#day14" data-nav="14">第 14 天</a><a href="#day15" data-nav="15">第 15 天</a><a href="#day16" data-nav="16">第 16 天</a><a href="#day17" data-nav="17">第 17 天</a><a href="#day18" data-nav="18">第 18 天</a>
+    <a href="#day1" data-nav="1">第 1 天</a><a href="#day2" data-nav="2">第 2 天</a><a href="#day3" data-nav="3">第 3 天</a><a href="#day4" data-nav="4">第 4 天</a><a href="#day5" data-nav="5">第 5 天</a><a href="#day6" data-nav="6">第 6 天</a><a href="#day7" data-nav="7">第 7 天</a><a href="#day8" data-nav="8">第 8 天</a><a href="#day9" data-nav="9">第 9 天</a><a href="#day10" data-nav="10">第 10 天</a><a href="#day11" data-nav="11">第 11 天</a><a href="#day12" data-nav="12">第 12 天</a><a href="#day13" data-nav="13">第 13 天</a><a href="#day14" data-nav="14">第 14 天</a><a href="#day15" data-nav="15">第 15 天</a><a href="#day16" data-nav="16">第 16 天</a><a href="#day17" data-nav="17">第 17 天</a><a href="#day18" data-nav="18">第 18 天</a><a href="#day19" data-nav="19">第 19 天</a>
     <a href="#road" class="road-link">课程表</a>
     <a class="soon" href="#road">第 9 天</a><a class="soon" href="#road">第 10 天</a>
   </nav>
@@ -5572,6 +5572,218 @@ d2l.train_ch11(yogi, init_adam_states(feature_dim),
 </section>
 </main>
 
+<main class="wrap day" id="day19" data-day="19" hidden>
+<section class="hero">
+  <div class="eyebrow">第 19 天 · 书里没有的专题：离线策略评估（OPE） · 论文路线第 12 课</div>
+  <h1>只有旧日志，怎么评估一个新的出题策略？</h1>
+  <p class="lead">你论文最核心的问题之一：手里只有旧系统（策略 μ）出题时留下的日志，想知道新策略 π（比如 Safe-DFKT 的出题规则）如果上线，学生能学到多少。直接上线做实验太贵、有风险；直接拿日志里的平均收益又只代表 μ。离线策略评估（OPE）就是解决这个问题的。今天在一个答案已知的模拟环境里，从零实现 IPS、SNIPS、DM 和 DR 四种估计，看它们各自的偏差和方差，最后逐行读你论文第 1407 行的 <code>ope_eval</code>。</p>
+  <div class="plan">
+    <div><b class="k">今天的时间</b>大约 70 分钟。代码格都很快，自动运行。</div>
+    <div><b class="k">学完你能</b><ul><li>说清为什么日志的平均收益不能评估新策略</li><li>写出 IPS、SNIPS、DM、DR 四种估计</li><li>理解偏差和方差的取舍、权重截断和 ESS</li><li>读懂论文 <code>ope_eval</code> 的每一行</li></ul></div>
+    <div><b class="k">和你的论文</b><ul><li><code>w = (pia / W["mu"]).clamp(max=WCLIP)</code></li><li><code>dm + w * (r - qa)</code></li><li>μ 和 Q 是怎么从日志里估出来的</li></ul></div>
+  </div>
+</section>
+
+<section class="part" id="opesetup">
+  <div class="part-h"><div class="eyebrow">第一部分</div><h2>问题：日志来自旧策略</h2><span class="src">本页补充，第 10 天“重要性加权”的延续</span></div>
+  <div class="prose"><div class="row"><button class="btn primary runAll" data-day="19">从头全部运行</button><span class="small muted runAllMsg"></span></div></div>
+  <div class="blk">
+    <div class="prose">
+      <p>把出题看成一个反复进行的决策：每一步看到学生的<b>状态</b> x（这里用 KT 模型对 K 个知识点的答对概率预测 p），选一个<b>动作</b> a（下一题考哪个知识点），得到<b>收益</b> r（这一题带来的学习收益）。策略 π(a | x) 是“在状态 x 下选每个知识点的概率”。策略的价值是</p>
+      <p class="math">V(π) = E_x [ Σ_a π(a | x) · E[r | x, a] ]</p>
+      <p>日志是在旧策略 μ 下收集的：每条记录是 (xᵢ, aᵢ, rᵢ)，aᵢ ∼ μ(· | xᵢ)。只有被选中的那个动作的收益是看得到的，其余动作的收益不知道。</p>
+      <p>下面造一个模拟环境：答对概率在 0.6 附近的题学得最多（太难太易都学得少）。旧策略 μ 偏爱容易的题；新策略 π 用你论文的规则：偏向答对概率最接近 0.7 的知识点，温度 0.05（论文第 92 行 <code>TEMP = 0.05</code>，第 78 行 <code>C_TARGET = 0.7</code>）。因为是模拟，真实价值能直接算出来，用来检验各种估计准不准。</p>
+    </div>
+    <div class="cell"><textarea>import torch
+import math
+from d2l import torch as d2l
+torch.manual_seed(0)
+K = 5
+
+def reward_mean(p):
+    # 选知识点 a 的期望学习收益：答对概率在 0.6 附近时学得最多（太难太易都学得少）
+    return 0.3 * torch.exp(-((p - 0.6) / 0.2) ** 2)
+
+def sample_states(n):
+    # 每一步的“状态”：模型对 K 个知识点下一题答对概率的预测
+    return torch.rand(n, K) * 0.9 + 0.05
+
+def mu_policy(p):
+    # 收集日志时用的旧策略 μ：很偏爱容易的知识点（p 越大越常被选），难的很少出
+    return torch.softmax(8 * p, dim=-1)
+
+def pi_policy(p, T=0.05):
+    # 要评估的新策略 π：论文的规则，偏向答对概率最接近 0.7 的知识点
+    return torch.softmax(-(p - 0.7) ** 2 / T, dim=-1)
+
+x = sample_states(3)
+x.shape, torch.allclose(mu_policy(x).sum(1), torch.ones(3)), pi_policy(x).shape</textarea></div>
+    <div class="prose"><p>真实价值：用大量模拟状态直接算期望（实际中做不到，这里是为了对答案）。</p></div>
+    <div class="cell"><textarea>def true_value(policy, n=100000):
+    x = sample_states(n)
+    return (policy(x) * reward_mean(x)).sum(1).mean().item()
+
+V_pi, V_mu = true_value(pi_policy), true_value(mu_policy)
+print(f'新策略 π 的真实价值 {V_pi:.4f}，旧策略 μ 的真实价值 {V_mu:.4f}')
+0.05 &lt; V_mu &lt; V_pi &lt; 0.3</textarea></div>
+    <div class="prose"><p>按 μ 收集 500 条日志：</p></div>
+    <div class="cell"><textarea>def collect_logs(n):
+    x = sample_states(n)
+    a = torch.multinomial(mu_policy(x), 1).squeeze(1)       # 按 μ 抽一个知识点
+    r = reward_mean(x).gather(1, a[:, None]).squeeze(1) + 0.05 * torch.randn(n)   # 观察到的收益（期望值加噪声）
+    return x, a, r
+
+x, a, r = collect_logs(500)
+x.shape, a.shape, a.dtype, r.shape, r.dtype</textarea></div>
+    <div class="cell"><textarea>print('日志里的平均收益（只能代表 μ）：', round(r.mean().item(), 4), '  真实 V(μ)：', round(V_mu, 4))</textarea></div>
+    <div class="prose"><p>日志的平均收益接近 V(μ)，和我们关心的 V(π) 差得远。这就是第 10 天的分布偏移：日志里的动作分布是 μ，我们想要的是 π。</p></div>
+  </div>
+</section>
+
+<section class="part" id="opeest">
+  <div class="part-h"><div class="eyebrow">第二部分</div><h2>四种估计</h2><span class="src">本页补充</span></div>
+  <div class="blk">
+    <div class="prose">
+      <ul>
+        <li><b>IPS</b>（逆倾向得分）：给每条记录乘重要性权重 wᵢ = π(aᵢ | xᵢ) / μ(aᵢ | xᵢ)，V̂ = (1/n) Σ wᵢ rᵢ。无偏，但 μ 很小的动作权重会很大，方差大。</li>
+        <li><b>SNIPS</b>（自归一化 IPS）：V̂ = Σ wᵢ rᵢ / Σ wᵢ。分母不用 n 而用权重之和，有一点偏差，但方差小很多。</li>
+        <li><b>DM</b>（直接法）：学一个结果模型 Q̂(x, a) ≈ E[r | x, a]，V̂ = (1/n) Σ Σ_a π(a | xᵢ) Q̂(xᵢ, a)。不用权重，方差很小；但模型错了就有偏差。</li>
+        <li><b>DR</b>（双重稳健）：V̂ = (1/n) Σ [ Σ_a π(a | xᵢ) Q̂(xᵢ, a) + wᵢ (rᵢ − Q̂(xᵢ, aᵢ)) ]。用模型做基础，再用加权的残差修正。只要 μ 对或者 Q̂ 对，有一个对就无偏，所以叫“双重稳健”；Q̂ 越准，残差越小，方差也越小。</li>
+      </ul>
+      <p><b>有效样本量</b> ESS = (Σwᵢ)² / Σwᵢ² / n：权重全一样时是 1；权重越集中在少数记录上越接近 0，说明估计实际上只靠几条记录，方差会很大。</p>
+    </div>
+    <div class="cell"><textarea>def ope(x, a, r, Q, clip=None, pi=pi_policy):
+    mu_a = mu_policy(x).gather(1, a[:, None]).squeeze(1)      # μ(a | x)
+    pi_all = pi(x)
+    pi_a = pi_all.gather(1, a[:, None]).squeeze(1)            # π(a | x)
+    w = pi_a / mu_a                                           # 重要性权重
+    if clip is not None:
+        w = w.clamp(max=clip)
+    q = Q(x)                                                  # 结果模型：每个动作的预测收益 (n, K)
+    dm = (pi_all * q).sum(1)                                  # 直接法：用模型算 π 的期望收益
+    q_a = q.gather(1, a[:, None]).squeeze(1)
+    return {'IPS': (w * r).mean().item(),
+            'SNIPS': ((w * r).sum() / w.sum()).item(),
+            'DM': dm.mean().item(),
+            'DR': (dm + w * (r - q_a)).mean().item(),
+            'ESS': (w.sum() ** 2 / (w ** 2).sum() / len(w)).item()}
+
+Q_good = lambda x: reward_mean(x)                    # 完全正确的结果模型
+Q_bad = lambda x: 0.6 * reward_mean(x) + 0.05        # 有偏差的结果模型
+est = ope(x, a, r, Q_bad)
+sorted(est.keys()), 0 &lt; est['ESS'] &lt;= 1</textarea></div>
+    <div class="prose"><p>重复 100 次：每次收集一份新的 500 条日志，各算一次估计，看平均下来偏多少（偏差）、每次之间差多少（标准差）。这里用的是<b>有偏差的</b>结果模型 Q_bad。</p></div>
+    <div class="cell"><textarea>torch.manual_seed(1)
+runs = {k: [] for k in ['IPS', 'SNIPS', 'DM', 'DR']}
+for rep in range(100):
+    x, a, r = collect_logs(500)
+    e = ope(x, a, r, Q_bad)
+    for k in runs:
+        runs[k].append(e[k])
+for k, v in runs.items():
+    v = torch.tensor(v)
+    print(f'{k:6s} 平均 {v.mean():.4f}  偏差 {v.mean() - V_pi:+.4f}  标准差 {v.std():.4f}')</textarea></div>
+    <div class="prose"><p>我在真 PyTorch 上跑的结果：IPS 偏差 +0.001、标准差 0.014；SNIPS 偏差 −0.000、标准差 0.008；DM 偏差 −0.023（模型错了），标准差只有 0.002；DR 偏差 0.000、标准差 0.006。DR 既没有 DM 的偏差，方差又比 IPS 小一半多。验证一下这几条结论：</p></div>
+    <div class="cell"><textarea>(abs(torch.tensor(runs['DM']).mean().item() - V_pi) &gt; 0.02, abs(torch.tensor(runs['DR']).mean().item() - V_pi) &lt; 0.02, torch.tensor(runs['IPS']).std().item() &gt; torch.tensor(runs['DR']).std().item())</textarea></div>
+    <div class="prose"><p>结果模型正确时，DR 的方差更小：</p></div>
+    <div class="cell"><textarea>torch.manual_seed(1)
+dr_good = []
+for rep in range(100):
+    x, a, r = collect_logs(500)
+    dr_good.append(ope(x, a, r, Q_good)['DR'])
+v = torch.tensor(dr_good)
+print(f'DR（结果模型正确）平均 {v.mean():.4f}  偏差 {v.mean() - V_pi:+.4f}  标准差 {v.std():.4f}')</textarea></div>
+    <div class="prose"><p>把 100 次估计画出来（虚线是真实值）：</p></div>
+    <div class="cell"><textarea>names = ['IPS', 'SNIPS', 'DM', 'DR']
+for i, k in enumerate(names):
+    d2l.plt.scatter([i + 1 + 0.03 * (j % 9 - 4) for j in range(100)], runs[k], label=k)
+d2l.plt.axhline(y=V_pi, color='k', linestyle='--')
+d2l.plt.xlabel('1 = IPS，2 = SNIPS，3 = DM，4 = DR（每个点是一份日志的估计）')
+d2l.plt.ylabel('估计的 V(π)')
+d2l.plt.legend();</textarea></div>
+  </div>
+  <div class="blk"><div class="blk-h"><span class="n">权重截断</span><h3>用一点偏差换方差</h3></div>
+    <div class="prose"><p>新策略和旧策略差得越远，权重越大、越不稳定。常用办法是把权重截断到一个上限。换一个更“尖”的新策略（温度 0.01），看截断的效果：</p></div>
+    <div class="cell"><textarea>pi_sharp = lambda p: pi_policy(p, T=0.01)       # 更“尖”的新策略：和 μ 差得更远
+V_sharp = true_value(pi_sharp)
+torch.manual_seed(2)
+for clip in [None, 20, 5]:
+    ips, ess = [], []
+    for rep in range(100):
+        x, a, r = collect_logs(500)
+        e = ope(x, a, r, Q_bad, clip=clip, pi=pi_sharp)
+        ips.append(e['IPS']); ess.append(e['ESS'])
+    v = torch.tensor(ips)
+    print(f'截断 {str(clip):4s}：IPS 偏差 {v.mean() - V_sharp:+.4f}  标准差 {v.std():.4f}  平均 ESS {sum(ess) / len(ess):.3f}')</textarea></div>
+    <div class="prose"><p>真 PyTorch 上：不截断时偏差 +0.002、标准差 0.020；截断到 5 时标准差降到 0.013，但偏差变成 −0.019。截断到 20 几乎没影响（这个例子里很少有权重超过 20）。你论文用的上限就是 20。</p></div>
+    <div class="panel stack" id="opeLab">
+      <h4>估计器游乐场</h4>
+      <p class="small muted">和上面同样的模拟，在浏览器里直接重复 200 次。每个点是一份日志的估计，虚线是真实值。调新策略的“尖锐程度”（温度越小越尖，离 μ 越远）、日志条数、截断上限和结果模型的误差，看四种估计怎么变。</p>
+      <div class="row"><label class="ctrl" for="oeT">π 的温度 <output id="oeTv">0.050</output><input type="range" id="oeT" min="-2.5" max="-0.5" step="0.05" value="-1.3"></label><label class="ctrl" for="oeN">日志条数 n <output id="oeNv">500</output><input type="range" id="oeN" min="50" max="2000" step="50" value="500"></label></div>
+      <div class="row"><label class="ctrl" for="oeC">截断上限 <select id="oeC"><option value="0">不截断</option><option value="20" selected>20（论文）</option><option value="5">5</option><option value="2">2</option></select></label><label class="ctrl" for="oeQ">结果模型误差 <output id="oeQv">0.40</output><input type="range" id="oeQ" min="0" max="1" step="0.05" value="0.4"></label><button class="btn sm" id="oeGo">重新模拟</button></div>
+      <div class="cv" id="oeHost"><canvas id="oeCv" aria-label="四种估计的分布"></canvas></div>
+      <div class="calc pw" id="oeCalc"></div>
+    </div>
+  </div>
+</section>
+
+<section class="part" id="opepaper">
+  <div class="part-h"><div class="eyebrow">第三部分</div><h2>逐行读论文的 ope_eval</h2><span class="src"><code>experiment.py</code> 第 1407 到 1450 行</span></div>
+  <div class="blk">
+    <div class="prose"><p>先看 μ 和 Q 是怎么来的（<code>prep_world</code>，第 662 到 677 行）。论文假设旧策略只取决于上一题的知识点：数一数“上一题是 i、这一题是 j”出现了多少次，加平滑后归一化，就是 μ(j | i)。Q 是每个知识点的平均收益表（<code>qtab</code>）。还用了<b>交叉拟合</b>：训练集学生分两折，第 f 折学生用的 μ 和 Q 是在另一折上估计的，避免“用同一批数据既估计模型又做评估”带来的偏差。</p></div>
+<pre class="code">C = np.bincount(prev * K + cur, ...).reshape(K + 1, K)       <span class="c"># 转移次数：上一题 → 这一题</span>
+uni = C.sum(0) + 1.0; uni = uni / uni.sum()
+mut[g] = (C + 5 * uni[None]) / (C.sum(1, keepdims=True) + 5)  <span class="c"># 平滑后的 μ(这一题 | 上一题)</span>
+Qn[g] = qtab(cur, rn, mn, K)                                  <span class="c"># 结果模型：每个知识点的平均收益</span></pre>
+    <div class="prose"><p>然后是评估本身（删掉了处理三种收益的循环外壳）：</p></div>
+<pre class="code">H = model.encode(sk, rs); qpos = torch.arange(Lb - 1)
+p = torch.sigmoid(model.readout_all(H, qpos))       <span class="c"># 状态 x：对每个知识点的答对概率</span>
+score = -(p - tgt) ** 2 / TEMP                      <span class="c"># 新策略 π 的打分：离 0.7 越近越高</span>
+pb = model.policy_bias(H, qpos)
+if pb is not None:
+    score = score + pb                              <span class="c"># Safe-DFKT 的策略头 g 加的修正</span>
+pi = torch.softmax(score, -1)                       <span class="c"># π(· | x)</span>
+pia = pi.gather(-1, a.unsqueeze(-1)).squeeze(-1)    <span class="c"># π(a | x)：日志里实际出的那道题</span>
+w = (pia / W["mu"][bt, 1:Lb]).clamp(max=WCLIP)      <span class="c"># 重要性权重，截断到 20</span>
+qa = Q[a]; dm = (pi * Q.view(1, 1, -1)).sum(-1)    <span class="c"># Q̂(a) 和 Σ π(a) Q̂(a)</span>
+...
+out["ips"]   = np.mean(w * r)                       <span class="c"># IPS</span>
+out["snips"] = np.sum(w * r) / max(np.sum(w), 1e-8) <span class="c"># SNIPS</span>
+out["dr"]    = np.mean(dm + w * (r - qa))           <span class="c"># DR</span>
+out["dr_se"] = np.std(V) / sqrt(len(V))             <span class="c"># DR 的标准误</span>
+out["ess"]   = np.sum(w) ** 2 / np.sum(w ** 2) / len(w)   <span class="c"># 归一化的有效样本量</span></pre>
+    <div class="callout"><h4>和今天的代码对照</h4><p>完全是同一套公式：<code>pia / mu</code> 是 w，<code>dm</code> 是 DM 那一项，<code>dm + w * (r - qa)</code> 是 DR。两个区别：（1）论文的 Q 只依赖知识点、不依赖学生状态（一个很简单的结果模型），所以 DR 主要靠权重修正；（2）论文注释说明，估计的是“一步偏离”的价值：只在这一个决策点换成 π，之后仍按日志的行为走。所以 OPE 列里的数字衡量的是“单步出题选得好不好”。</p></div>
+    <div class="callout"><h4>为什么这对论文的结论很重要</h4><p>论文同时报告了模拟器里的真实价值（<code>sim_ope_true</code>）和 DR 估计（<code>sim_ope_dr</code>），两者的差就是 OPE 的偏差（<code>sim_ope_bias</code>）。今天的实验告诉你怎么读这些数：ESS 低说明新旧策略差得远、估计不稳；截断会引入偏差；Q 模型太简单时 DR 主要靠权重，方差接近 IPS。</p></div>
+  </div>
+</section>
+
+<section class="part quiz-sec">
+  <div class="part-h"><div class="eyebrow">课后题</div><h2>做几道题检查一下</h2><span class="src">选择题点选项马上出结果；写形状和写代码的题，网页会现场运行代码判断对错。答题记录只存在你这台设备的浏览器里。</span></div>
+  <div class="quiz dayquiz" data-day="19"></div>
+  <div class="row small muted quizscore" data-day="19"></div>
+</section>
+
+<section class="part">
+  <div class="part-h"><div class="eyebrow">今日小结</div><h2>今天学会了吗？</h2></div>
+  <div class="two">
+    <div class="panel stack">
+      <ul class="check-list" data-day="19">
+        <li><label><input type="checkbox" data-k="c1">日志的平均收益只代表收集日志的旧策略 μ</label></li>
+        <li><label><input type="checkbox" data-k="c2">IPS 无偏但方差大；SNIPS 换分母降方差</label></li>
+        <li><label><input type="checkbox" data-k="c3">DM 靠结果模型，模型错就有偏差；DR 两者结合</label></li>
+        <li><label><input type="checkbox" data-k="c4">截断权重：用偏差换方差；ESS 衡量权重有多集中</label></li>
+        <li><label><input type="checkbox" data-k="c5">论文 ope_eval：w = π/μ 截断到 20，DR = dm + w(r − qa)</label></li>
+      </ul>
+      <span class="small check-msg"></span>
+    </div>
+    <div class="panel stack">
+      <h3>明天（第 20 天，最后一天）学什么</h3>
+      <p>把前 19 天学的东西串起来，按运行顺序通读你论文的 <code>experiment.py</code>：数据准备、各个 KT 模型、决策损失、训练、检查点选择、模拟器评估、OPE 和统计检验。每一段都标出对应的是哪一天的内容。</p>
+    </div>
+  </div>
+</section>
+</main>
+
 <div class="wrap"><section class="part road-sec" id="road">
   <div class="part-h"><div class="eyebrow">课程表</div><h2>按你的论文排的学习路线</h2><span class="src">第 1 到 7 天是基础，按原书顺序。从第 8 天起只挑你论文用到的章节：多层感知机、正则化、自定义模型、循环网络和 LSTM（DKT）、注意力和 Transformer（SAKT、AKT、simpleKT）、Adam，最后是两个书里没有的论文专题。卷积、计算机视觉、NLP 应用等和论文关系不大的章节放到最后选学。</span></div>
   <div class="road" id="roadList"></div>
@@ -10794,6 +11006,10 @@ if(!torch.attrs.mv)torch.attrs.mv=fn('mv',a=>matmul(asTensor(a[0]),asTensor(a[1]
 torch.attrs.from_numpy=fn('from_numpy',a=>{const T=a[0];const R=mkT(T.shape.slice(),[],T.dtype);R.data=T.data;return R});
 if(!torch.attrs.square)torch.attrs.square=fn('square',a=>unary(asTensor(a[0]),'square'));
 if(!torch.attrs.sign)torch.attrs.sign=fn('sign',a=>{const T=asTensor(a[0]);return track(mkT(T.shape.slice(),Float64Array.from(T.data,Math.sign),T.dtype,T.np),[T],'SignBackward0',g=>[new Float64Array(g.length)])});
+torch.attrs.multinomial=fn('multinomial',(a,kw)=>{const P=asTensor(a[0]),k=intOf(kwOr(kw,a,'num_samples',1)),rep=kw.replacement?truthy(kw.replacement):(a[2]?truthy(a[2]):false),two=P.shape.length===2,R=two?P.shape[0]:1,C=P.shape[two?1:0],out=[];
+  for(let i=0;i<R;i++){const w=Array.from({length:C},(_,j)=>P.data[i*C+j]);if(!rep&&k>w.filter(v=>v>0).length)err('RuntimeError','cannot sample n_sample > prob_dist.size(-1) samples without replacement');for(let t=0;t<k;t++){const z=w.reduce((x,y)=>x+y,0);if(!(z>0))err('RuntimeError','invalid multinomial distribution (sum of probabilities <= 0)');let u=rand()*z,j=0;while(j<C-1&&(u-=w[j])>=0)j++;while(w[j]===0&&j>0)j--;out.push(j);if(!rep)w[j]=0}}
+  return mkT(two?[R,k]:[k],out,'int64')});
+torch.attrs.bernoulli=fn('bernoulli',a=>{const P=asTensor(a[0]);return mkT(P.shape.slice(),Array.from(P.data,p=>rand()<p?1:0),P.dtype)});
 torch.attrs.linspace=fn('linspace',(a,kw)=>{const s0=numOf(kwOr(kw,a,'start',0)),e=numOf(kwOr(kw,a,'end',1)),n=intOf(kwOr(kw,a,'steps',2));const st=n>1?(e-s0)/(n-1):0;
   return withGrad(mkT([n],Array.from({length:n},(_,i)=>n===1?s0:i<n/2?s0+i*st:e-(n-1-i)*st),dtypeKw(kw,'float32')),kw)});
 torch.attrs.device=fn('device',a=>({t:'device',name:str(a[0]).split(':')[0]}));
@@ -12272,7 +12488,7 @@ function colors(){const cs=getComputedStyle(document.documentElement),g=n=>cs.ge
 function fitCanvas(cv,W,H){const r=window.devicePixelRatio||1;cv.width=Math.round(W*r);cv.height=Math.round(H*r);cv.style.width=W+'px';cv.style.height=H+'px';const c=cv.getContext('2d');c.setTransform(r,0,0,r,0,0);return c}
 const MONO='11px "JetBrains Mono",ui-monospace,monospace';
 const bodyFont=px=>`${px}px ${getComputedStyle(document.body).fontFamily}`;
-const DAYS=['1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16','17','18'];
+const DAYS=['1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16','17','18','19'];
 
 // ---------- 张量图示 ----------
 function cellText(v,dtype){if(dtype==='bool')return v?'T':'F';if(dtype==='int64')return String(v);if(!Number.isFinite(v))return String(v);return Number.isInteger(v)?String(v):(Math.abs(v)>=100?v.toFixed(0):v.toFixed(2))}
@@ -12398,7 +12614,7 @@ function setupCells(){$$('.cell').forEach((cell,i)=>{const ta=cell.querySelector
     else if(e.key==='Tab'&&!e.shiftKey){e.preventDefault();const s=ta.selectionStart;ta.setRangeText('    ',s,ta.selectionEnd,'end');autoSize(ta)}})})}
 function runAll(day){ENVS[day]=MT.newEnv();EXEC[day]=0;MT.resetFS();let errs=0;const main=$('#day'+day);
   $$('.cell',main).forEach(c=>{if(c.dataset.manual){const out=c.querySelector('.out');out.className='out';out.textContent='';const t=document.createElement('span');t.className='tip';t.textContent=`这一格要手动运行：${c.dataset.manual}。准备好了点这一格右上角的“运行”。`;out.appendChild(t);out.hidden=false;return}if(!runCellEl(c))errs++});RAN[day]=true;
-  const expected={'1':0,'2':5,'3':3,'4':0,'5':0,'6':0,'7':0,'8':0,'9':0,'10':0,'11':2,'12':0,'13':0,'14':0,'15':0,'16':0,'17':0,'18':0}[day]||0;
+  const expected={'1':0,'2':5,'3':3,'4':0,'5':0,'6':0,'7':0,'8':0,'9':0,'10':0,'11':2,'12':0,'13':0,'14':0,'15':0,'16':0,'17':0,'18':0,'19':0}[day]||0;
   $$('.runAllMsg',main).forEach(m=>m.textContent=errs>expected?`运行完了，有 ${errs} 个格子报错，往下找红字。`:expected?`全部运行完了。其中 ${expected} 个格子是故意报错的，用来练习读报错。`:'全部运行完了，没有报错。')}
 document.addEventListener('click',e=>{const b=e.target.closest('.runAll');if(b)runAll(b.dataset.day)});
 
@@ -12882,6 +13098,28 @@ function opRender(){const host=$('#opHost');if(!host.offsetParent)return;const C
   const f=q=>0.1*q[0]**2+2*q[1]**2,last=k=>res[k][res[k].length-1],desc=k=>{const v=f(last(k));return!Number.isFinite(v)||v>1e6?'发散了':v.toExponential(2)};
   $('#opCalc').textContent=`学习率 η = ${eta.toFixed(3)}，动量 β = ${beta.toFixed(2)}；40 步后的函数值（越小越好）：\n梯度下降 ${desc('sgd')}\n动量法   ${desc('mom')}\nAdam     ${desc('adam')}\n\nx₂ 方向的梯度是 4x₂，梯度下降时 η > 0.5 就会在 x₂ 方向发散（每步乘 1 − 4η）。\nAdam 每一步对每个坐标走的距离大约都是 η（梯度被 √ŝ 归一化了），\n所以不管哪个方向陡、哪个方向平，它都差不多匀速前进；η 太大时会在最优点附近来回跳。`}
 ['#opLr','#opB'].forEach(s=>$(s).addEventListener('input',opRender));
+// ---------- 第 19 天：OPE 估计器游乐场 ----------
+const OE={seed:5};
+function oeSim(){const T=10**+$('#oeT').value,n=+$('#oeN').value,clip=+$('#oeC').value,qe=+$('#oeQ').value;$('#oeTv').textContent=T.toFixed(3);$('#oeNv').textContent=n;$('#oeQv').textContent=qe.toFixed(2);
+  const g=sgRng(OE.seed),u=(()=>{let s=OE.seed*977;return()=>{s=s+0x6D2B79F5>>>0;let t=Math.imul(s^s>>>15,1|s);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}})(),K=5;
+  const rm=p=>0.3*Math.exp(-(((p-0.6)/0.2)**2)),Q=p=>(1-qe)*rm(p)+qe*(0.6*rm(p)+0.05),sm=a=>{const m=Math.max(...a),e=a.map(v=>Math.exp(v-m)),z=e.reduce((x,y)=>x+y,0);return e.map(v=>v/z)};
+  const mu=p=>sm(p.map(v=>8*v)),pi=p=>sm(p.map(v=>-((v-0.7)**2)/T),0);
+  let V=0;for(let i=0;i<20000;i++){const p=Array.from({length:K},()=>u()*0.9+0.05),pp=pi(p);V+=pp.reduce((s,v,k)=>s+v*rm(p[k]),0)}V/=20000;
+  const R={IPS:[],SNIPS:[],DM:[],DR:[]},ess=[];
+  for(let rep=0;rep<200;rep++){let sw=0,sw2=0,swr=0,sdm=0,sdr=0;for(let i=0;i<n;i++){const p=Array.from({length:K},()=>u()*0.9+0.05),m=mu(p),pp=pi(p);let c=u(),a=0;while(a<K-1&&(c-=m[a])>=0)a++;
+      const r=rm(p[a])+0.05*g();let w=pp[a]/m[a];if(clip)w=Math.min(w,clip);const dm=pp.reduce((s,v,k)=>s+v*Q(p[k]),0);sw+=w;sw2+=w*w;swr+=w*r;sdm+=dm;sdr+=dm+w*(r-Q(p[a]))}
+    R.IPS.push(swr/n);R.SNIPS.push(swr/sw);R.DM.push(sdm/n);R.DR.push(sdr/n);ess.push(sw*sw/sw2/n)}
+  OE.res={V,R,ess:ess.reduce((a,b)=>a+b,0)/ess.length,T,clip,qe,n};oeDraw()}
+function oeDraw(){const host=$('#oeHost');if(!host.offsetParent||!OE.res)return;const{V,R,ess,T,clip,qe,n}=OE.res,C=colors(),names=['IPS','SNIPS','DM','DR'],cols=[C.neg,C.accent,C.muted,C.pos];
+  const all=names.flatMap(k=>R[k]),lo=Math.min(V,...all),hi=Math.max(V,...all),pad=(hi-lo)*0.08||0.01,y0=lo-pad,y1=hi+pad;
+  const W=Math.max(260,host.clientWidth),H=260,ctx=fitCanvas($('#oeCv'),W,H),pl=48,pb=24,cw=(W-pl-8)/4,sy=y=>8+(y1-y)/(y1-y0)*(H-8-pb);
+  ctx.font=MONO;ctx.fillStyle=C.muted;ctx.textAlign='right';ctx.textBaseline='middle';ctx.strokeStyle=C.line;for(let k=0;k<=4;k++){const y=y0+(y1-y0)*k/4;ctx.beginPath();ctx.moveTo(pl,sy(y));ctx.lineTo(W-8,sy(y));ctx.stroke();ctx.fillText(y.toFixed(3),pl-4,sy(y))}
+  ctx.strokeStyle=C.ink;ctx.setLineDash([5,4]);ctx.beginPath();ctx.moveTo(pl,sy(V));ctx.lineTo(W-8,sy(V));ctx.stroke();ctx.setLineDash([]);
+  names.forEach((k,i)=>{ctx.fillStyle=cols[i];ctx.globalAlpha=.55;R[k].forEach((v,j)=>{ctx.beginPath();ctx.arc(pl+cw*(i+0.5)+((j*37)%41-20)*cw/60,sy(v),2.2,0,7);ctx.fill()});ctx.globalAlpha=1;ctx.fillStyle=C.ink;ctx.textAlign='center';ctx.textBaseline='alphabetic';ctx.font=bodyFont(12);ctx.fillText(k,pl+cw*(i+0.5),H-6);ctx.font=MONO});
+  const st=a=>{const m=a.reduce((x,y)=>x+y,0)/a.length,s=Math.sqrt(a.reduce((x,y)=>x+(y-m)**2,0)/(a.length-1));return[m-V,s]};
+  $('#oeCalc').textContent=`真实 V(π) = ${V.toFixed(4)}（虚线）；n = ${n}，温度 ${T.toFixed(3)}，${clip?'截断到 '+clip:'不截断'}，模型误差 ${qe.toFixed(2)}\n平均 ESS = ${ess.toFixed(3)}\n\n         偏差      标准差\n${names.map(k=>{const[b,s]=st(R[k]);return`${k.padEnd(6)} ${(b>=0?'+':'')+b.toFixed(4)}   ${s.toFixed(4)}`}).join('\n')}\n\n${ess<0.15?'ESS 很低：新策略和旧策略差得太远，估计主要靠少数几条记录。':''}${qe===0?'模型完全正确：DM 和 DR 都没有偏差，DR 方差最小。':qe>0.7?'模型误差很大：DM 偏差明显，DR 仍然基本无偏。':''}${clip&&clip<=5?'\n截断很狠：IPS 方差变小，但出现了偏差。':''}`}
+$('#oeGo').onclick=()=>{OE.seed++;oeSim()};['#oeT','#oeN','#oeQ'].forEach(s=>$(s).addEventListener('change',oeSim));['#oeT','#oeN','#oeQ'].forEach(s=>$(s).addEventListener('input',()=>{$('#oeTv').textContent=(10**+$('#oeT').value).toFixed(3);$('#oeNv').textContent=$('#oeN').value;$('#oeQv').textContent=(+$('#oeQ').value).toFixed(2)}));$('#oeC').onchange=oeSim;
+function oeRender(){if(!OE.res)oeSim();else oeDraw()}
 // ---------- 小结勾选、课程表、切换天数 ----------
 function checksSetup(){$$('.check-list').forEach(ul=>{const day=ul.dataset.day,key='checks'+day,st=store.get(key,{});$$('input',ul).forEach(c=>{c.checked=!!st[c.dataset.k];c.onchange=()=>{const s=store.get(key,{});s[c.dataset.k]=c.checked;store.set(key,s);checkMsg(ul)}});checkMsg(ul)})}
 function checkMsg(ul){const day=ul.dataset.day,all=$$('input',ul),n=all.filter(c=>c.checked).length,msg=ul.parentElement.querySelector('.check-msg');const done=n===all.length;
@@ -12894,7 +13132,7 @@ const ROAD=[['1','第 1 章 引言 + 2.1 数据操作'],['2','2.2 数据预处�
   ['18','11.4 至 11.6 + 11.10 小批量随机梯度下降、动量、Adam（论文用的优化器）','paper'],['19','论文专题：离线策略评估 IPS、SNIPS、DR（书里没有）','paper'],['20','论文专题：逐行读你的 experiment.py','paper'],
   ['选学','4.7 前向传播、反向传播和计算图；4.10 Kaggle 房价预测'],['选学','第 6 至 7 章 卷积神经网络（LeNet、ResNet 等）'],['选学','9.3 至 9.8 深度和双向循环网络、机器翻译、seq2seq'],['选学','第 11 章其余优化算法、第 12 章计算性能'],['选学','第 13 至 15 章 计算机视觉、自然语言处理']];
 function roadRender(){$('#roadList').innerHTML=ROAD.map(([d,t,f])=>{const live=DAYS.includes(d);return`<div><span class="d">${/^\d+$/.test(d)?`第 ${d} 天`:d}</span><span>${live?`<a href="#day${d}">${esc(t)}</a>`:esc(t)}${f==='paper'?' <span class="mark">论文</span>':''}</span><span class="st${live?' now':''}">${live?'已上线':'未上线'}</span></div>`}).join('')}
-const REDRAW={'1':()=>{kRender();imRender();ofRender()},'2':()=>{dotRender();normRender()},'3':()=>{secRender();gradRender()},'4':()=>{diceRender();bayesRender();bktRender()},'5':()=>{houseRender();if(!sgd.X)sgdData();sgdRender()},'6':()=>{smRender();calRender()},'7':()=>{pixRender()},'8':()=>{uaRender();actRender()},'9':()=>{spRender();rdRender();dpRender()},'10':()=>{sgRender();shRender()},'11':()=>{pcRender()},'12':()=>{tkRender();ptRender();rnRender()},'13':()=>{clRender();btRender()},'14':()=>{gtRender()},'15':()=>{nwRender();sdRender()},'16':()=>{peRender();skRender()},'17':()=>{lnRender();dcRender()},'18':()=>{opRender()}};
+const REDRAW={'1':()=>{kRender();imRender();ofRender()},'2':()=>{dotRender();normRender()},'3':()=>{secRender();gradRender()},'4':()=>{diceRender();bayesRender();bktRender()},'5':()=>{houseRender();if(!sgd.X)sgdData();sgdRender()},'6':()=>{smRender();calRender()},'7':()=>{pixRender()},'8':()=>{uaRender();actRender()},'9':()=>{spRender();rdRender();dpRender()},'10':()=>{sgRender();shRender()},'11':()=>{pcRender()},'12':()=>{tkRender();ptRender();rnRender()},'13':()=>{clRender();btRender()},'14':()=>{gtRender()},'15':()=>{nwRender();sdRender()},'16':()=>{peRender();skRender()},'17':()=>{lnRender();dcRender()},'18':()=>{opRender()},'19':()=>{oeRender()}};
 function showDay(day,scroll){if(!DAYS.includes(day))day='1';$$('main.day').forEach(m=>m.hidden=m.dataset.day!==day);$$('[data-nav]').forEach(a=>a.classList.toggle('on',a.dataset.nav===day));store.set('lastDay',day);
   if(!RAN[day]){if(day==='7'&&!FM_U8){fmReady.then(ok=>{if(ok&&!RAN['7']){runAll('7');REDRAW['7']()}});}else runAll(day)}$$('#day'+day+' textarea').forEach(autoSize);REDRAW[day]();if(scroll)window.scrollTo(0,0)}
 function route(){const h=location.hash.replace('#','');const m=h.match(/^day(\d+)$/);if(m){showDay(m[1],true);return}
@@ -13098,6 +13336,17 @@ const QUIZ={
  {t:'c',q:'Adam 的更新 η·v̂/(√ŝ + ε) 中，除以 √ŝ 起什么作用？',o:['让学习率变大','按每个参数梯度的典型大小归一化：梯度大的参数步子缩小，梯度小的放大','防止过拟合','让更新变成整数'],a:1,why:'所以每个参数每步大约走 η 那么远，对学习率没那么敏感。'},
  {t:'c',q:'你论文第 1349 行 torch.optim.Adam(params, lr=lr)，DKT 用的 β₁、β₂ 是多少？',o:['0.9 和 0.999（默认值）','0.5 和 0.9','0 和 0','没有用 Adam'],a:0,why:'只传了 lr，其余都是 PyTorch 默认：β₁ = 0.9，β₂ = 0.999，ε = 10⁻⁸。'},
  {t:'code',q:'写代码：手动做 2 步 Adam。参数 x = 1.0，每一步的梯度都是 g = 2x（也就是 f = x²），lr = 0.1，β₁ = 0.9，β₂ = 0.999，ε = 1e-8，v 和 s 从 0 开始，带偏差修正。两步之后的 x 存成 x。',start:'x = 1.0\nv, s = 0.0, 0.0\nb1, b2, lr, eps = 0.9, 0.999, 0.1, 1e-8\nfor t in range(1, 3):\n    g = 2 * x\n    # 在这里更新 v、s、x\n    \nx',check:env=>{let x=1,v=0,s=0;for(let t=1;t<3;t++){const g=2*x;v=0.9*v+0.1*g;s=0.999*s+0.001*g*g;x-=0.1*(v/(1-0.9**t))/(Math.sqrt(s/(1-0.999**t))+1e-8)}const got=env.vars.x;const gv=got&&(MT.isT(got)?got.data[0]:got.v);if(gv==null||Math.abs(gv-x)>1e-4)return`两步之后 x 应该约等于 ${x.toFixed(5)}，现在是 ${gv}`;return true},why:'v = b1*v + (1-b1)*g；s = b2*s + (1-b2)*g*g；x -= lr * (v/(1-b1**t)) / ((s/(1-b2**t)) ** 0.5 + eps)。第一步正好走了 lr = 0.1（v̂/√ŝ = g/|g| = 1），第二步也接近 0.1。'},
+],
+'19':[
+ {t:'c',q:'日志由旧策略 μ 收集。直接算日志里的平均收益，估计的是什么？',o:['新策略 π 的价值','旧策略 μ 的价值','两者的平均','什么都不是'],a:1,why:'日志里的动作是按 μ 选的，平均收益自然代表 μ。'},
+ {t:'c',q:'IPS 的权重 w = π(a | x) / μ(a | x)。某条记录 π(a | x) = 0.6，μ(a | x) = 0.05，权重是多少？',o:['0.03','12','0.55','1'],a:1,why:'0.6 / 0.05 = 12。旧策略很少选、新策略常选的动作，权重很大，IPS 的方差就来自这里。'},
+ {t:'c',q:'SNIPS 和 IPS 的区别是？',o:['SNIPS 不用权重','SNIPS 用 Σwᵢ 代替 n 做分母：有一点偏差，但方差小很多','SNIPS 需要结果模型','没有区别'],a:1,why:'V̂ = Σ wᵢ rᵢ / Σ wᵢ。'},
+ {t:'c',q:'DM（直接法）的结果模型 Q̂ 有系统偏差时，DM 估计会怎样？',o:['依然无偏','有偏差，而且样本再多也消除不了','方差变大','变成 IPS'],a:1,why:'DM 完全相信模型。今天的实验里 Q_bad 让 DM 偏了 −0.023，但标准差很小。'},
+ {t:'c',q:'DR 为什么叫“双重稳健”？',o:['算了两遍','μ（权重）对或者 Q̂（结果模型）对，只要有一个对就无偏','用了两个模型取平均','有两个超参数'],a:1,why:'V̂ = Σ π Q̂ + w (r − Q̂(a))：Q̂ 错了，加权残差把它修回来；Q̂ 对了，残差期望为 0。'},
+ {t:'c',q:'把权重截断到一个较小的上限（比如 5），会怎样？',o:['偏差和方差都变小','方差变小，但引入偏差','偏差变小，方差变大','没影响'],a:1,why:'今天的实验：截断到 5 时 IPS 的标准差从 0.020 降到 0.013，偏差从 +0.002 变成 −0.019。论文用的上限是 20。'},
+ {t:'c',q:'归一化的有效样本量 ESS = (Σw)² / Σw² / n 接近 0 说明什么？',o:['估计很准','权重集中在极少数记录上，估计实际上只靠几条数据，很不稳定','样本太多','μ 和 π 一样'],a:1,why:'所有权重相等时 ESS = 1。新旧策略差得越远，ESS 越小。'},
+ {t:'c',q:'你论文里 μ（旧策略）是怎么得到的？',o:['日志里直接记录了','按“上一题的知识点 → 这一题的知识点”的转移次数加平滑估计，并做交叉拟合','用神经网络学的','假设是均匀分布'],a:1,why:'prep_world 第 668 到 673 行。交叉拟合：一折学生用的 μ 在另一折上估计。'},
+ {t:'code',q:'写代码：三条日志，w = torch.tensor([0.5, 2.0, 4.0])（已经算好的权重），r = torch.tensor([1.0, 0.0, 0.5])，结果模型对日志动作的预测 qa = torch.tensor([0.6, 0.2, 0.4])，对新策略的期望 dm = torch.tensor([0.5, 0.3, 0.45])。算出 ips、snips、dr（都是 0 维张量或数字）。',start:'w = torch.tensor([0.5, 2.0, 4.0])\nr = torch.tensor([1.0, 0.0, 0.5])\nqa = torch.tensor([0.6, 0.2, 0.4])\ndm = torch.tensor([0.5, 0.3, 0.45])\nips = \nsnips = \ndr = \nips, snips, dr',check:env=>{const v=n=>{const x=env.vars[n];return x==null?null:MT.isT(x)?x.data[0]:x.v};const want={ips:(0.5+0+2)/3,snips:2.5/6.5,dr:((0.5+0.5*0.4)+(0.3+2*(-0.2))+(0.45+4*0.1))/3};for(const k of['ips','snips','dr']){const g=v(k);if(g==null||Math.abs(g-want[k])>1e-4)return`${k} 应该约等于 ${want[k].toFixed(4)}`}return true},why:'ips = (w * r).mean() = 0.8333；snips = (w * r).sum() / w.sum() = 0.3846；dr = (dm + w * (r - qa)).mean() = 0.4833。'},
 ],
 };
 function quizState(day){return store.get('quiz'+day,{})}

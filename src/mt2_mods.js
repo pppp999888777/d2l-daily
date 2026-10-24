@@ -79,6 +79,10 @@ if(!torch.attrs.mv)torch.attrs.mv=fn('mv',a=>matmul(asTensor(a[0]),asTensor(a[1]
 torch.attrs.from_numpy=fn('from_numpy',a=>{const T=a[0];const R=mkT(T.shape.slice(),[],T.dtype);R.data=T.data;return R});
 if(!torch.attrs.square)torch.attrs.square=fn('square',a=>unary(asTensor(a[0]),'square'));
 if(!torch.attrs.sign)torch.attrs.sign=fn('sign',a=>{const T=asTensor(a[0]);return track(mkT(T.shape.slice(),Float64Array.from(T.data,Math.sign),T.dtype,T.np),[T],'SignBackward0',g=>[new Float64Array(g.length)])});
+torch.attrs.multinomial=fn('multinomial',(a,kw)=>{const P=asTensor(a[0]),k=intOf(kwOr(kw,a,'num_samples',1)),rep=kw.replacement?truthy(kw.replacement):(a[2]?truthy(a[2]):false),two=P.shape.length===2,R=two?P.shape[0]:1,C=P.shape[two?1:0],out=[];
+  for(let i=0;i<R;i++){const w=Array.from({length:C},(_,j)=>P.data[i*C+j]);if(!rep&&k>w.filter(v=>v>0).length)err('RuntimeError','cannot sample n_sample > prob_dist.size(-1) samples without replacement');for(let t=0;t<k;t++){const z=w.reduce((x,y)=>x+y,0);if(!(z>0))err('RuntimeError','invalid multinomial distribution (sum of probabilities <= 0)');let u=rand()*z,j=0;while(j<C-1&&(u-=w[j])>=0)j++;while(w[j]===0&&j>0)j--;out.push(j);if(!rep)w[j]=0}}
+  return mkT(two?[R,k]:[k],out,'int64')});
+torch.attrs.bernoulli=fn('bernoulli',a=>{const P=asTensor(a[0]);return mkT(P.shape.slice(),Array.from(P.data,p=>rand()<p?1:0),P.dtype)});
 torch.attrs.linspace=fn('linspace',(a,kw)=>{const s0=numOf(kwOr(kw,a,'start',0)),e=numOf(kwOr(kw,a,'end',1)),n=intOf(kwOr(kw,a,'steps',2));const st=n>1?(e-s0)/(n-1):0;
   return withGrad(mkT([n],Array.from({length:n},(_,i)=>n===1?s0:i<n/2?s0+i*st:e-(n-1-i)*st),dtypeKw(kw,'float32')),kw)});
 torch.attrs.device=fn('device',a=>({t:'device',name:str(a[0]).split(':')[0]}));
