@@ -16,7 +16,8 @@ function pairedGather(T,items){const advs=items.filter(it=>it.tensor);const L=ad
   const rest=T.shape.slice(items.length),rn=prod(rest),vals=[];for(const o of offs)for(let r=0;r<rn;r++)vals.push(T.data[o+r]);const R=mkT([L,...rest],vals,T.dtype,T.np);
   if(T.shape.length<=3&&T.data.length<=300){const mask=new Uint8Array(T.data.length);offs.forEach(o=>{for(let r=0;r<rn;r++)mask[o+r]=1});R.meta={kind:'index',src:snapshot(T),mask}}
   return track(R,[T],'IndexBackward0',g=>{const r=new Float64Array(T.data.length);offs.forEach((o,k)=>{for(let q=0;q<rn;q++)r[o+q]+=g[k*rn+q]});return[r]})}
-function getItem(T,items){if(items.filter(it=>it.tensor).length>=2)return pairedGather(T,items);if(items.length===1&&items[0].bool){const M=items[0].bool;const vals=[];T.data.forEach((v,i)=>{if(M.data[i])vals.push(v)});return mkT([vals.length],vals,T.dtype,T.np)}
+function getItem(T,items){if(items.filter(it=>it.tensor).length>=2)return pairedGather(T,items);
+  if(items.length===1&&items[0].tensor&&items[0].tensor.shape.length>1){const I=items[0].tensor,flat=getItem(T,[{tensor:reshapeT(I,[-1])}]);return reshapeT(flat,[...I.shape,...T.shape.slice(1)])}if(items.length===1&&items[0].bool){const M=items[0].bool;const vals=[];T.data.forEach((v,i)=>{if(M.data[i])vals.push(v)});return mkT([vals.length],vals,T.dtype,T.np)}
   const sel=selection(T,items),shape=selShape(sel),vals=[],offs=[],mask=new Uint8Array(T.data.length);
   forEachSel(T,sel,off=>{vals.push(T.data[off]);offs.push(off);mask[off]=1});const R=mkT(shape,vals,T.dtype,T.np);
   if(T.shape.length>=1&&T.shape.length<=3&&T.data.length<=300)R.meta={kind:'index',src:snapshot(T),mask};

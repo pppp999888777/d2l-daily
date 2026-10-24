@@ -15,11 +15,16 @@
 
 ```bash
 python3 src/build.py                 # 生成 daily.html、playground.html、index.html
-python src/cmp.py cells7.py ref7.json "" FMNIST   # 和真 PyTorch 的输出对比（需要 numpy 的 Python）
-python src/runall.py                 # 运行所有天的代码格
+python3 src/chksyntax.py             # 检查页面脚本有没有语法错误
+python3 src/cmp.py cells7.py ref7.json "" FMNIST   # 和真 PyTorch 的输出对比（参照输出用 src/runref2.py 生成）
+python3 src/runall.py                # 运行所有天的代码格
 ```
+
+测试脚本用 macOS 自带的 JavaScriptCore（`jsc`）运行网页里的解释器。
 
 ## 版权说明
 
 - 课程内容改编自《动手学深度学习》（阿斯顿·张、李沐、扎卡里·C. 立顿、亚历山大·J. 斯莫拉），原书以 Apache 2.0 许可证发布：https://zh.d2l.ai/
+- 《时光机器》（H. G. Wells，1895）全文为公有领域作品，文本取自原书的数据仓库（d2l-data）。
+- 翼型自噪声数据集（Airfoil Self-Noise）来自 UCI 机器学习库，CC BY 4.0 许可证：https://archive.ics.uci.edu/dataset/291/airfoil+self+noise
 - Fashion-MNIST 数据集（训练集前 6000 张、测试集前 1000 张）来自 Zalando Research，MIT 许可证：https://github.com/zalandoresearch/fashion-mnist

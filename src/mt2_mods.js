@@ -95,6 +95,7 @@ function npGenfromtxt(a,kw){const f=openFile(str(a[0]),'r'),txt=FS.get(f.p),dl=k
   const C=Math.max(...rows.map(r=>r.length)),dt=kw.dtype?dtypeKw({dtype:kw.dtype},'float64'):'float64';return mkT([rows.length,C],rows.flatMap(r=>Array.from({length:C},(_,j)=>j<r.length?r[j]:NaN)),dt,true)}
 const numpy=mod('numpy',{genfromtxt:fn('genfromtxt',(a,kw)=>npGenfromtxt(a,kw)),
   arange:fn('arange',(a,kw)=>{const nums=a.map(numOf);let s=0,e,st=1;if(nums.length===1)e=nums[0];else[s,e,st=1]=nums;const fl=a.some(v=>v.t==='float');const d=[];for(let k=0;;k++){const v=s+k*st;if(st>0?v>=e-1e-12:v<=e+1e-12)break;d.push(v)}return mkT([d.length],d,fl?'float64':'int64',true)}),
+  asarray:fn('asarray',(a,kw)=>{if(isT(a[0])&&a[0].np&&!kw.dtype)return a[0];const n=nested(a[0]);const dt=kw.dtype?dtypeKw(kw,'float64'):(n.dt==='float32'?'float64':n.dt);return mkT(n.shape,n.flat,dt,true)}),
   array:fn('array',a=>{const n=nested(a[0]);return mkT(n.shape,n.flat,n.dt==='float32'?'float64':n.dt,true)}),
   linspace:fn('linspace',a=>{const s=numOf(a[0]),e=numOf(a[1]),n=a[2]?intOf(a[2]):50;return mkT([n],Array.from({length:n},(_,i)=>n===1?s:s+(e-s)*i/(n-1)),'float64',true)}),
   ...Object.fromEntries(['exp','log','sqrt','sin','cos','abs','tanh'].map(n=>[n,fn(n,a=>{const v=a[0];if(!isT(v)&&pyNum(v)!=null){const r=F(UN[n][0](pyNum(v)));r.np=true;return r}return unary(isT(v)?v:asTensor(v),n)})])),
@@ -147,8 +148,9 @@ function pltMod(ctx){return{t:'mod',name:'matplotlib.pyplot',attrs:new Proxy({},
     gca_old_unused:()=>({t:'mod',name:'Axes',attrs:{set_xlabel:fn('set_xlabel',a=>{plotFig(ctx).xlabel=str(a[0]);return NONE}),set_ylabel:fn('set_ylabel',a=>{plotFig(ctx).ylabel=str(a[0]);return NONE}),set_title:fn('set_title',()=>NONE)}}),
     subplots:(a,kw)=>subplots(a,kw),show:()=>NONE,title:()=>NONE,figure:()=>NONE,grid:()=>NONE,rcParams:DUMMY};
   return P[name]?fn(name,P[name]):DUMMY}})}}
+// 计时：浏览器（特别是 Safari）的计时精度可能只有 1 毫秒，很快的操作会测出 0，书上的 2 / t 就会除以零，所以每次至少记 0.1 毫秒
 function makeTimer(){const o={times:[],tik:0};const now=()=>(typeof performance!=='undefined'?performance.now():Date.now())/1000;o.tik=now();
-  return{t:'mod',name:'Timer',attrs:{times:{get t(){return'list'},get items(){return o.times.map(F)}},start:fn('start',()=>{o.tik=now();return NONE}),stop:fn('stop',()=>{o.times.push(now()-o.tik);return F(o.times[o.times.length-1])}),
+  return{t:'mod',name:'Timer',attrs:{times:{get t(){return'list'},get items(){return o.times.map(F)}},start:fn('start',()=>{o.tik=now();return NONE}),stop:fn('stop',()=>{o.times.push(Math.max(now()-o.tik,1e-4));return F(o.times[o.times.length-1])}),
     avg:fn('avg',()=>F(o.times.reduce((a,b)=>a+b,0)/o.times.length)),sum:fn('sum',()=>F(o.times.reduce((a,b)=>a+b,0))),cumsum:fn('cumsum',()=>{let s=0;return list(o.times.map(v=>F(s+=v)))})}}}
 const D2L_ALIAS={meshgrid:'meshgrid',cosh:'cosh',sinh:'sinh',eye:'eye',bmm:'bmm',ones:'ones',zeros:'zeros',tensor:'tensor',normal:'normal',matmul:'matmul',arange:'arange',exp:'exp',sin:'sin',cos:'cos',tanh:'tanh',abs:'abs',float32:'float32',int64:'int64',concat:'cat',stack:'stack',randn:'randn',rand:'rand',zeros_like:'zeros_like',ones_like:'ones_like',sigmoid:'sigmoid',log:'log',sqrt:'sqrt'};
 function d2lMod(ctx){return mod('d2l',{

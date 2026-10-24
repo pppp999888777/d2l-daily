@@ -1,0 +1,215 @@
+<main class="wrap day" id="day20" data-day="20" hidden>
+<section class="hero">
+  <div class="eyebrow">第 20 天 · 专题：通读你论文的 experiment.py · 论文路线最后一课</div>
+  <h1>3081 行代码，现在每一段你都学过了</h1>
+  <p class="lead">最后一天把前 19 天串起来。你论文的全部实验都在一个文件 <code>experiment.py</code> 里，3081 行。今天按“先看说明、再看配置、然后跟着 main 往下走”的顺序读一遍，每一段都标出它用到的是哪一天学的东西。点开每一段看代码摘录和解释。中间有两个能运行的代码格：论文的 NLG 收益函数原样照抄，以及 Safe-DFKT 决策损失的缩小版（可以看到梯度怎样推动策略头）。</p>
+  <div class="plan">
+    <div><b class="k">今天的时间</b>大约 90 分钟，可以分两次读。</div>
+    <div><b class="k">学完你能</b><ul><li>说出整个实验流程的顺序</li><li>找到任何一个结果数字是在哪里算出来的</li><li>读懂 Safe-DFKT 的损失函数每一项</li></ul></div>
+    <div><b class="k">读代码的顺序</b><ul><li>文件开头的说明（docstring）</li><li>配置常量</li><li><code>main()</code>，再按调用顺序往下</li></ul></div>
+  </div>
+</section>
+
+<section class="part" id="cmap">
+  <div class="part-h"><div class="eyebrow">第一部分</div><h2>代码地图</h2><span class="src">行号对应你论文项目 code/experiment.py 的当前版本</span></div>
+  <div class="prose"><div class="row"><button class="btn primary runAll" data-day="20">从头全部运行</button><span class="small muted runAllMsg"></span></div>
+    <p>整个流程（文件开头的说明里写的）：对每个数据集，<b>A 线</b>在真实日志上训练和评估预测（AUC、ECE）并做 OPE；<b>B 线</b>先用日志拟合一个 BKT 风格的模拟器，再让每个模型在模拟器里当“出题依据”，测真实的学习收益（NLG）。每个方法跑 5 个随机种子，最后做配对检验。</p></div>
+  <div class="cmap">
+    <details><summary><span class="ln">1–51</span><b>说明和导入</b><span class="days">从这里开始读</span></summary>
+      <p>文件开头的大段说明是全文最重要的部分：A 线（真实日志：80/20 划分，再留 10% 验证，按验证集 BCE 选检查点；预测指标；OPE）和 B 线（校准过的模拟器：每个知识点拟合 p0、learn、guess、slip、forget 五个参数；按日志策略生成日志；每个 KT 模型当状态估计器；真实 NLG、掌握所需步数、保持率；OPE 估计和真实值的偏差）。还列了审稿意见要求的修改：两种检查点标准、Safe-DFKT-AG、5 个种子、配对检验、单步偏离的估计量。</p></details>
+    <details><summary><span class="ln">53–170</span><b>配置常量</b><span class="days">第 9、12、18、19 天</span></summary>
+<pre class="code">DATASETS = ["assist2009", "ednet", "algebra2005", "junyi"]
+MAX_SEQ = 500        <span class="c"># 每个学生只保留最近 500 步</span>
+WIN = 100            <span class="c"># 窗口长度（第 12、13 天：切窗口 = 截断）</span>
+D_MODEL = 64; BS = 256; E_MAIN = pf.epochs(15)   <span class="c"># 第 18 天：批量 256，训练 15 轮</span>
+SEEDS = pf.seeds(list(range(5)))                 <span class="c"># 5 个随机种子</span>
+AG_ETA, AG_THR, HEAD_L2 = 1.0, 0.85, 1e-3        <span class="c"># 反刷分惩罚、阈值、策略头 L2（第 9 天）</span>
+C_TARGET = 0.7; TEMP = 0.05; WCLIP = 20.0        <span class="c"># 出题规则的目标、温度、权重截断（第 19 天）</span>
+N_SIM_SKILLS = 12; SIM_T = 60                    <span class="c"># 模拟器：12 个知识点、每个学生 60 步</span>
+DF_CFG = {"Safe-DFKT": dict(lam=1.0, gamma=10.0, eps=0.005, beta=0.1, reward="nlg"), ...}</pre>
+      <p>第 123 到 131 行的 <code>DF_CFG</code> 定义了决策损失的各个系数：λ（DR 价值的权重）、γ 和 ε（安全屏障）、β（方差惩罚，POEM）、用哪种收益。几个消融实验就是把其中一项设成 0。</p></details>
+    <details><summary><span class="ln">173–312</span><b>记录、超时保护、指标函数</b><span class="days">第 6、14 天</span></summary>
+      <p>记录结果的工具、每次运行 8 分钟的超时保护。<code>metrics_bin</code>（第 287 行）算 AUC、ACC、RMSE、ECE（10 个区间）和 BCE：AUC 是第 14 天手写过的，ECE 是第 6 天可靠性图里的“期望校准误差”。</p></details>
+    <details><summary><span class="ln">313–612</span><b>读数据、找列、建序列</b><span class="days">第 2 天</span></summary>
+      <p>用 pandas 读四个数据集，自动识别“学生、知识点、对错、顺序”这几列（<code>detect_columns</code>），一行有多个知识点时拆开（<code>maybe_explode</code>），按学生排好序得到每个学生的序列（<code>build_sequences</code>）。Junyi 还提取了知识点之间的先修关系。这部分是第 2 天数据预处理的“工业版”。</p></details>
+    <details><summary><span class="ln">614–644</span><b>NLG 步收益和收益表</b><span class="days">第 19 天</span></summary>
+      <p><code>step_rewards</code> 给每一步算一个收益：做这道题之前，这个知识点的平滑正确率是 pre；之后在同一知识点上接下来最多两次的平均正确率是 post。收益是归一化增益：post ≥ pre 时 (post − pre)/(1 − pre)，否则 (post − pre)/pre，截到 [−1, 1]。<code>qtab</code> 把每个知识点的平均收益做成 Q 表（OPE 里 DM 用的结果模型）。下面第二部分可以直接运行这个函数。</p></details>
+    <details><summary><span class="ln">646–721</span><b>prep_world：划分、窗口、μ、Q</b><span class="days">第 9、12、19 天</span></summary>
+<pre class="code">nt = max(1, int(round(0.2 * n))); test = perm[:nt]; rest = perm[nt:]      <span class="c"># 20% 测试（第 9 天）</span>
+nv = max(1, int(round(0.1 * len(rest)))); val = rest[:nv]; train = rest[nv:]
+...
+mut[g] = ((C + 5 * uni[None]) / (C.sum(1, keepdims=True) + 5))           <span class="c"># 旧策略 μ（第 19 天）</span>
+...
+for st in range(0, L, win):                                              <span class="c"># 100 步窗口（第 12 天）</span></pre>
+      <p>最后把所有东西打包成字典 <code>W</code>：<code>W["sk"]</code>、<code>W["rs"]</code> 是 (窗口数, 100) 的整数和 0/1 张量，<code>W["m"]</code> 是掩码，<code>W["mu"]</code> 是每一步的 μ，<code>W["train_idx"]</code> 等是划分。</p></details>
+    <details><summary><span class="ln">723–858</span><b>BKT 拟合、模拟器、推演</b><span class="days">第 4、12 天</span></summary>
+      <p><code>fit_bkt</code> 对每个知识点网格搜索 BKT 的参数（第 4 天的 BKT）；<code>fit_simulator</code> 选 12 个知识点（<code>choose_skills</code>：一般按出现次数；Junyi 有先修关系，就从关系最多的知识点出发，沿先修关系挑一组相连的），加上遗忘率（每步最多 0.003）和先修关系。<code>rollout</code> 让一群模拟学生（能力 θ ∼ N(0, 0.7²)，各不相同）在某个出题策略下做 60 步题，记录前测和后测：这是第 12 天说的“多步推演”。</p></details>
+    <details><summary><span class="ln">859–994</span><b>各种出题策略</b><span class="days">第 19 天</span></summary>
+      <p><code>LoggingPolicy</code>：生成模拟日志用的随机策略（OPE 里的 μ）；<code>RandomPolicy</code>；<code>OneStepDevPolicy</code>：只在一个决策点换成新策略、之后照旧，用来算 OPE 估计量的真实值；<code>ModelPolicy</code>：用某个 KT 模型的预测按“最接近 0.7”出题（加上 Safe-DFKT 的策略头）。</p></details>
+    <details><summary><span class="ln">995–1240</span><b>所有 KT 模型</b><span class="days">第 11、13 到 17 天</span></summary>
+      <ul>
+        <li><code>causal_attn</code>（995）：多头因果注意力，第 16 天。</li>
+        <li><code>KTBase</code>、<code>DKT</code>（1012、1032）：第 11、14 天。</li>
+        <li><code>CountKT</code>、<code>LRKT</code>、<code>PFAKT</code>、<code>EmpAcc</code>（1056 到 1110）：按次数统计的模型，Heuristic-0.7 和 Random 也基于它。</li>
+        <li><code>DKVMN</code>（1112）：第 15 天的点积注意力读记忆。</li>
+        <li><code>SAKT</code>（1141）：第 16、17 天。</li>
+        <li><code>RaschMixin</code>、<code>SimpleKT</code>、<code>AKT</code>（1166 到 1236）：加了 Rasch 难度参数的嵌入，AKT 带距离衰减（第 17 天）。</li>
+        <li><code>NEURAL</code>（1237）：每个模型的学习率。</li>
+      </ul></details>
+    <details open><summary><span class="ln">1248–1299</span><b>batch_loss：Safe-DFKT 的损失</b><span class="days">第 9、14、19 天</span></summary>
+<pre class="code">bce = (F.binary_cross_entropy_with_logits(logit, y, reduction="none") * mm).sum() / mm.sum().clamp(min=1.0)
+loss = bce                                                  <span class="c"># 所有模型都有的预测损失（第 14 天）</span>
+if cfg is not None:                                         <span class="c"># 下面只有决策导向的方法才有</span>
+    p = torch.sigmoid(model.readout_all(H, qpos))
+    score = -(p - cfg.get("c", C_TARGET)) ** 2 / TEMP + model.policy_bias(H, qpos)
+    pi = torch.softmax(score, -1)                           <span class="c"># 可求导的出题策略</span>
+    loss += cfg["ag_eta"] * agm                             <span class="c"># 反刷分：别把概率放在已掌握的知识点上</span>
+    loss += cfg["head_l2"] * sum((q ** 2).sum() for q in model.g.parameters())   <span class="c"># 第 9 天</span>
+    V = dm + w * (r - qa)                                   <span class="c"># 每一步的 DR 价值（第 19 天）</span>
+    loss += -cfg["lam"] * Vs.mean()                         <span class="c"># 最小化损失 = 最大化 DR 价值</span>
+    loss += cfg["beta"] * Vs.var()                          <span class="c"># POEM：惩罚价值估计的方差</span>
+loss += cfg["gamma"] * F.relu(bce - (1 + cfg["eps"]) * cfg["bce_base"])   <span class="c"># 安全屏障</span></pre>
+      <p>上面是节选，省略了 if 判断和中间变量的计算（完整代码见第 1248 到 1299 行）。这是整篇论文的核心。前 19 天的东西全在这里：BCE、softmax 策略、gather、截断的重要性权重、DR、L2。<b>安全屏障</b>的意思是：BCE 只要不比原始 DKT（<code>bce_base</code>）差超过 0.5%，这一项就是 0；一旦超过，就以系数 10 拉回来。所以 Safe-DFKT 在提高出题价值的同时，预测能力几乎不变。</p></details>
+    <details><summary><span class="ln">1301–1405</span><b>评估和训练循环</b><span class="days">第 9、11、13、18 天</span></summary>
+      <p><code>eval_bce</code>（1315）：验证集 BCE。<code>check_dr_identity</code>（1328）：第一批数据时检查 DR 那一项的正负号是不是对的（防止写反了“最大化”和“最小化”）。<code>train_kt</code>（1340）：Adam、批量 256、裁剪到 5、每轮按验证集 BCE 存最佳检查点；决策导向方法还额外存一个“决策价值最好”的检查点（审稿意见要求的第二种标准）。</p></details>
+    <details><summary><span class="ln">1407–1455</span><b>ope_eval</b><span class="days">第 19 天</span></summary>
+      <p>昨天逐行读过：IPS、SNIPS、DR、DR 的标准误、ESS，对三种收益各算一遍。</p></details>
+    <details><summary><span class="ln">1456–1600</span><b>真实价值、重新校准、分解</b><span class="days">第 6、19 天</span></summary>
+      <p><code>onestep_dev_value</code>：在模拟器里算 OPE 估计量的真实值。<code>fit_platt</code>（1489）：Platt 缩放，对 logit 做一个 a·z + b 的逻辑回归，重新校准预测概率（第 6 天的校准）。<code>decision_decomp</code>（1512）：在模拟器的测试状态上统计，（1）主干微调（和同种子的两阶段 DKT 比）和（2）策略头 g，各自有多常改变“最接近 0.7”规则选出的知识点。</p></details>
+    <details><summary><span class="ln">1601–1730</span><b>准备数据集、两阶段训练</b><span class="days">第 11、14 天</span></summary>
+<pre class="code">if method in NEURAL:                         <span class="c"># 普通 KT 模型：直接训练</span>
+    cls, lr = NEURAL[method]; m = cls(W["K"]); train_kt(m, W, E_MAIN, lr, None, log_cb, seed)
+...
+base = ensure_base(D, world, seed)            <span class="c"># 决策导向方法：先拿训练好的 DKT</span>
+m = DKT(W["K"], policy_head=True)
+m.load_state_dict(base["state"], strict=False)   <span class="c"># 第 11 天：strict=False，策略头 g 不在 base 里</span>
+train_kt(m, W, E_FT, 1e-3, cfg, ...)          <span class="c"># 再用决策损失微调，lr = 1e-3</span></pre>
+      <p>上面是节选（原代码在加载时还有 <code>.to(DEV)</code>）。注意 <code>strict=False</code>：基础 DKT 的 state_dict 里没有 <code>g.weight</code>、<code>g.bias</code>，严格模式会报 Missing key（第 11 天看过这个报错）；这里故意放宽，让策略头保持初始化的 0。</p></details>
+    <details><summary><span class="ln">1731–1837</span><b>一个方法的完整评估</b><span class="days">第 9、19 天</span></summary>
+      <p><code>run_method</code>：真实日志上训练、算预测指标和 OPE；模拟器里用模拟日志训练、上线出题、算 NLG、掌握步数、保持率、OPE 偏差。论文表格里的每个数字都来自这里返回的 <code>row</code>。</p></details>
+    <details><summary><span class="ln">1838–2099</span><b>汇总和统计检验</b><span class="days">课程里没讲，下面简单说</span></summary>
+      <p><code>paired_test</code>（1908）：同一个种子、同一个数据集上两个方法的配对差，做 Wilcoxon 符号秩检验、t 检验和 bootstrap 置信区间（5000 次重抽样）。<code>holm</code>（1942）：Holm 多重比较校正：同时做很多次检验时，把 p 值按从小到大依次放宽门槛，控制“至少错一次”的概率。</p></details>
+    <details><summary><span class="ln">2100–2830</span><b>附加分析</b><span class="days">各种敏感性和稳健性检查</span></summary>
+      <p>参数量审计、24 个知识点的规模检查、安全屏障 ε 的扫描、DR 正负号检查、校准分析、决策分解、检查点标准分析、目标值 c（0.3、0.5、0.7）的扫描。都是“换一个设置再跑一遍，看结论变不变”。</p></details>
+    <details><summary><span class="ln">2833–3081</span><b>main()</b><span class="days">读代码的入口</span></summary>
+      <p>先准备 4 个数据集，然后<b>广度优先</b>：种子 0 把所有方法在所有数据集上跑一遍，再种子 1……这样中途超时也能保证每个方法都有结果。最后运行统计检验和附加分析，存表。</p></details>
+  </div>
+</section>
+
+<section class="part" id="crun">
+  <div class="part-h"><div class="eyebrow">第二部分</div><h2>亲手运行论文的两段核心代码</h2><span class="src">第一个格是论文原文；第二个格是缩小的决策损失</span></div>
+  <div class="blk"><div class="blk-h"><span class="n">1</span><h3>NLG 步收益（原样照抄第 614 行）</h3></div>
+    <div class="cell"><textarea>import numpy as np
+import torch
+from torch.nn import functional as F
+
+def step_rewards(sk, rs, smean, alpha=2.0):
+    """NLG step reward (pre = smoothed prior accuracy on the skill BEFORE this attempt,
+    post = mean of the next &lt;=2 attempts on the same skill) and the old r_gain = y_next - y_now."""
+    sk = np.asarray(sk).tolist(); rs = np.asarray(rs, dtype=np.float64).tolist()
+    n = len(sk)
+    nxt = [-1] * n; last = {}
+    for i in range(n - 1, -1, -1):
+        k = sk[i]; nxt[i] = last.get(k, -1); last[k] = i
+    rn = np.zeros(n, np.float32); mn = np.zeros(n, np.float32)
+    rg = np.zeros(n, np.float32); mg = np.zeros(n, np.float32)
+    Sd, Cd = {}, {}
+    for i in range(n):
+        k = sk[i]; s = Sd.get(k, 0.0); c = Cd.get(k, 0)
+        j = nxt[i]
+        if j &gt;= 0:
+            pre = (s + alpha * smean[k]) / (c + alpha)
+            j2 = nxt[j]
+            post = rs[j] if j2 &lt; 0 else 0.5 * (rs[j] + rs[j2])
+            v = (post - pre) / max(1 - pre, 1e-3) if post &gt;= pre else (post - pre) / max(pre, 1e-3)
+            rn[i] = max(-1.0, min(1.0, v)); mn[i] = 1.0
+            rg[i] = rs[j] - rs[i]; mg[i] = 1.0
+        Sd[k] = s + rs[i]; Cd[k] = c + 1
+    return rn, mn, rg, mg</textarea></div>
+    <div class="prose"><p>一个学生 7 步：知识点 [0, 1, 0, 0, 1, 2, 0]，对错 [0, 0, 1, 1, 0, 1, 1]，三个知识点的总体正确率（平滑用）是 [0.5, 0.7, 0.4]。</p></div>
+    <div class="cell"><textarea>sk = [0, 1, 0, 0, 1, 2, 0]
+rs = [0, 0, 1, 1, 0, 1, 1]
+smean = [0.5, 0.7, 0.4]
+rn, mn, rg, mg = step_rewards(sk, rs, smean)
+print('NLG 收益 rn：', rn)
+print('有没有定义 mn：', mn)
+print('r_gain rg：', rg)</textarea></div>
+    <div class="prose"><p>逐个看：第 1 步做知识点 0（错），之前没做过，pre = (0 + 2×0.5)/(0 + 2) = 0.5；之后两次知识点 0 都对，post = 1，收益 (1 − 0.5)/(1 − 0.5) = 1。第 2 步做知识点 1（错），pre = 0.7；下一次知识点 1 还是错，post = 0，收益 (0 − 0.7)/0.7 = −1。最后出现的几步后面没有同知识点的题了，收益没有定义（mn = 0），训练时被掩码掉。</p></div>
+  </div>
+  <div class="blk"><div class="blk-h"><span class="n">2</span><h3>决策损失的缩小版</h3></div>
+    <div class="prose"><p>2 个学生、5 步、3 个知识点。策略头 g 初始化为 0，所以一开始策略就是“选最接近 0.7 的”。算出 DR 价值和整个损失，反向传播，看 g 的梯度：</p></div>
+    <div class="cell"><textarea>torch.manual_seed(0)
+B, T, K = 2, 5, 3
+TEMP, WCLIP, C_TARGET = 0.05, 20.0, 0.7
+lam, gamma, eps, beta = 1.0, 10.0, 0.005, 0.1
+p = torch.tensor([[[0.9, 0.6, 0.3]] * T, [[0.5, 0.75, 0.2]] * T])   # KT 主干预测的各知识点答对概率
+g = torch.zeros(B, T, K, requires_grad=True)                     # 策略头 g 的输出，初始为 0
+a = torch.tensor([[0, 1, 1, 2, 0], [1, 1, 0, 1, 2]])               # 日志里实际出的知识点
+mu = torch.full((B, T), 1 / 3)                                   # 旧策略选它的概率
+r = torch.tensor([[0.0, 0.4, 0.3, -0.1, 0.0], [0.5, 0.2, -0.2, 0.3, 0.0]])   # NLG 收益
+Q = torch.tensor([0.0, 0.3, 0.1])                                # 每个知识点的平均收益
+bce, bce_base = torch.tensor(0.56), torch.tensor(0.55)
+
+score = -(p - C_TARGET) ** 2 / TEMP + g
+pi = torch.softmax(score, -1)
+dm = (pi * Q.view(1, 1, -1)).sum(-1)
+pia = pi.gather(-1, a.unsqueeze(-1)).squeeze(-1)
+w = (pia / mu).clamp(max=WCLIP)
+qa = Q[a]
+V = dm + w * (r - qa)
+loss = bce - lam * V.mean() + beta * V.var() + gamma * F.relu(bce - (1 + eps) * bce_base)
+loss.backward()
+print('π（第 1 个学生）：', pi[0, 0])
+print('V_DR =', round(V.mean().item(), 4), '  loss =', round(loss.item(), 4))
+print('g 的梯度（第 1 个学生、第 2 步）：', g.grad[0, 1])</textarea></div>
+    <div class="prose"><p>第 1 个学生的预测是 [0.9, 0.6, 0.3]，知识点 1（0.6）离 0.7 最近，所以 π 给它 0.63。g 的梯度对知识点 1 是负的：梯度下降会让 g 在知识点 1 上变大，也就是让策略更倾向知识点 1。原因是日志里这一步出的正是知识点 1，收益 0.4 比 Q 表的平均值 0.3 高，DR 认为“多选它更好”。这就是“决策导向”的意思：用出题的价值，而不只是预测准确率，去训练模型。</p></div>
+  </div>
+</section>
+
+<section class="part" id="crecap">
+  <div class="part-h"><div class="eyebrow">第三部分</div><h2>20 天回顾</h2></div>
+  <div class="blk">
+    <div class="tblwrap"><table class="t">
+      <thead><tr><th>天</th><th>学了什么</th><th>在论文代码里</th></tr></thead>
+      <tbody>
+        <tr><td>1–3</td><td>张量、数据预处理、线性代数、自动求导</td><td>到处都是</td></tr>
+        <tr><td>4</td><td>概率、贝叶斯、BKT</td><td>模拟器 <code>fit_bkt</code></td></tr>
+        <tr><td>5–7</td><td>线性回归、softmax、交叉熵、校准</td><td>LR、PFA、ECE、<code>fit_platt</code></td></tr>
+        <tr><td>8–10</td><td>多层感知机、过拟合、正则、初始化、分布偏移</td><td>Dropout、验证集、策略头 L2、重要性权重</td></tr>
+        <tr><td>11</td><td>nn.Module、参数、保存加载</td><td><code>class DKT(KTBase)</code>、<code>best_state</code></td></tr>
+        <tr><td>12–14</td><td>序列、RNN、梯度裁剪、LSTM</td><td>DKT、100 步窗口、<code>clip_grad_norm_</code></td></tr>
+        <tr><td>15–17</td><td>注意力、多头、位置编码、Transformer</td><td>DKVMN、SAKT、AKT、simpleKT</td></tr>
+        <tr><td>18</td><td>SGD、动量、Adam</td><td><code>torch.optim.Adam</code>，lr 2e-3</td></tr>
+        <tr><td>19</td><td>离线策略评估</td><td><code>ope_eval</code>、决策损失里的 DR</td></tr>
+        <tr><td>20</td><td>通读代码</td><td><code>experiment.py</code> 全文</td></tr>
+      </tbody></table></div>
+    <div class="prose"><p>论文路线到这里就完成了。课程表里还列着“选学”的章节（卷积、计算机视觉、自然语言处理的应用等），和你的论文关系不大，有兴趣再看。建议接下来做两件事：一是打开你自己的 <code>experiment.py</code>，挑一个函数（比如 <code>batch_loss</code>）在上面这张地图的帮助下从头读到尾；二是回到第 14、17 天的代码格，改改数据或模型（比如把 d 改大、把知识点改多），看结果怎么变。</p></div>
+  </div>
+</section>
+
+<section class="part quiz-sec">
+  <div class="part-h"><div class="eyebrow">课后题</div><h2>做几道题检查一下</h2><span class="src">选择题点选项马上出结果；写形状和写代码的题，网页会现场运行代码判断对错。答题记录只存在你这台设备的浏览器里。</span></div>
+  <div class="quiz dayquiz" data-day="20"></div>
+  <div class="row small muted quizscore" data-day="20"></div>
+</section>
+
+<section class="part">
+  <div class="part-h"><div class="eyebrow">今日小结</div><h2>今天学会了吗？</h2></div>
+  <div class="two">
+    <div class="panel stack">
+      <ul class="check-list" data-day="20">
+        <li><label><input type="checkbox" data-k="c1">实验分两条线：真实日志（预测、OPE）和模拟器（真实学习收益）</label></li>
+        <li><label><input type="checkbox" data-k="c2">决策导向方法：先训练 DKT，再加策略头用决策损失微调</label></li>
+        <li><label><input type="checkbox" data-k="c3">决策损失 = BCE − λ·V_DR + β·Var + 安全屏障 + 反刷分 + L2</label></li>
+        <li><label><input type="checkbox" data-k="c4">NLG 收益：做题前后同一知识点正确率的归一化增益</label></li>
+        <li><label><input type="checkbox" data-k="c5">我能在 experiment.py 里找到任何一个结果是在哪里算的</label></li>
+      </ul>
+      <span class="small check-msg"></span>
+    </div>
+    <div class="panel stack">
+      <h3>课程完成</h3>
+      <p>20 天的论文路线全部上线了。之后可以随时回到任何一天重新运行、改代码；调试台页面里还有论文 8 个章节的交互讲解。</p>
+    </div>
+  </div>
+</section>
+</main>

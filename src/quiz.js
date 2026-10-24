@@ -198,6 +198,17 @@ const QUIZ={
  {t:'c',q:'你论文里 μ（旧策略）是怎么得到的？',o:['日志里直接记录了','按“上一题的知识点 → 这一题的知识点”的转移次数加平滑估计，并做交叉拟合','用神经网络学的','假设是均匀分布'],a:1,why:'prep_world 第 668 到 673 行。交叉拟合：一折学生用的 μ 在另一折上估计。'},
  {t:'code',q:'写代码：三条日志，w = torch.tensor([0.5, 2.0, 4.0])（已经算好的权重），r = torch.tensor([1.0, 0.0, 0.5])，结果模型对日志动作的预测 qa = torch.tensor([0.6, 0.2, 0.4])，对新策略的期望 dm = torch.tensor([0.5, 0.3, 0.45])。算出 ips、snips、dr（都是 0 维张量或数字）。',start:'w = torch.tensor([0.5, 2.0, 4.0])\nr = torch.tensor([1.0, 0.0, 0.5])\nqa = torch.tensor([0.6, 0.2, 0.4])\ndm = torch.tensor([0.5, 0.3, 0.45])\nips = \nsnips = \ndr = \nips, snips, dr',check:env=>{const v=n=>{const x=env.vars[n];return x==null?null:MT.isT(x)?x.data[0]:x.v};const want={ips:(0.5+0+2)/3,snips:2.5/6.5,dr:((0.5+0.5*0.4)+(0.3+2*(-0.2))+(0.45+4*0.1))/3};for(const k of['ips','snips','dr']){const g=v(k);if(g==null||Math.abs(g-want[k])>1e-4)return`${k} 应该约等于 ${want[k].toFixed(4)}`}return true},why:'ips = (w * r).mean() = 0.8333；snips = (w * r).sum() / w.sum() = 0.3846；dr = (dm + w * (r - qa)).mean() = 0.4833。'},
 ],
+'20':[
+ {t:'c',q:'你论文的实验分两条线，模拟器那条线最主要的作用是？',o:['让训练更快','能算出“真实的学习收益”（NLG 等）和 OPE 估计的真实值，这在真实日志里做不到','代替真实数据集','生成更多训练数据'],a:1,why:'真实日志里无法让同一个学生按新策略再学一遍；模拟器可以，所以能给出真值。'},
+ {t:'c',q:'Safe-DFKT 是怎么训练出来的？',o:['从零开始用决策损失训练','先训练普通 DKT，再加策略头 g，用决策损失以 lr = 1e-3 微调','只训练策略头','用 SAKT 初始化'],a:1,why:'build_and_train：ensure_base 拿到训练好的 DKT，load_state_dict(..., strict=False)，再 train_kt(m, W, E_FT, 1e-3, cfg, ...)。'},
+ {t:'c',q:'决策损失里的 −λ · V_DR 这一项，为什么是负号？',o:['写错了','最小化损失等价于最大化 DR 估计的出题价值','为了正则化','让 BCE 变小'],a:1,why:'优化器只会“最小化”。check_dr_identity 专门在运行时检查这个正负号。'},
+ {t:'c',q:'安全屏障 γ · ReLU(BCE − (1 + ε) · BCE_base) 什么时候不起作用？',o:['总是起作用','BCE 不比原始 DKT 的 BCE 差超过 ε（0.5%）时，这一项等于 0','γ = 10 时','训练开始时'],a:1,why:'ReLU 让它只在预测明显变差时才惩罚，保证决策导向不以牺牲预测为代价。'},
+ {t:'c',q:'NLG 步收益里，pre 是什么？',o:['做这道题之后的正确率','做这道题之前，这个知识点的平滑正确率','这道题的对错','全体学生的平均正确率'],a:1,why:'pre = (之前在这个知识点上答对的次数 + α × 总体正确率) / (之前做过的次数 + α)。post 是之后最多两次同知识点的平均正确率。'},
+ {t:'c',q:'main() 为什么按“种子 0 跑完所有方法，再种子 1……”的顺序？',o:['更快','万一超时，每个方法至少都有一部分种子的结果，不会只跑完前几个方法','为了随机性','没有原因'],a:1,why:'代码注释写的是 breadth first（广度优先）。'},
+ {t:'c',q:'load_state_dict(base_state, strict=False) 里为什么要 strict=False？',o:['为了更快','基础 DKT 没有策略头 g 的参数，严格模式会报 Missing key；放宽后 g 保持初始的 0','为了随机初始化','strict=False 会自动训练 g'],a:1,why:'第 11 天见过 Missing key(s) in state_dict 的报错。'},
+ {t:'c',q:'paired_test 里的“配对”是指？',o:['两两比较所有模型','同一个种子、同一个数据集上，两个方法的结果配成一对，看差值','两个数据集配对','训练集和测试集配对'],a:1,why:'这样种子带来的随机波动在差值里抵消掉了，检验更灵敏。Holm 校正再处理多次检验的问题。'},
+ {t:'code',q:'写代码：照论文的 step_rewards 公式，算一步的 NLG 收益。pre = 0.6，post = 0.9，结果存成 v（post ≥ pre 时 (post − pre)/(1 − pre)，否则 (post − pre)/pre，最后截到 [−1, 1]）。再算 pre = 0.6、post = 0.3 时的 v2。',start:'def nlg(pre, post):\n    # 在这里写公式\n    \n\nv = nlg(0.6, 0.9)\nv2 = nlg(0.6, 0.3)\nv, v2',check:env=>{const g=n=>{const x=env.vars[n];return x==null?null:MT.isT(x)?x.data[0]:x.v};const v=g('v'),v2=g('v2');if(v==null||Math.abs(v-0.75)>1e-6)return'v 应该是 (0.9 − 0.6)/(1 − 0.6) = 0.75';if(v2==null||Math.abs(v2+0.5)>1e-6)return'v2 应该是 (0.3 − 0.6)/0.6 = −0.5';return true},why:'v = (post - pre) / max(1 - pre, 1e-3) if post >= pre else (post - pre) / max(pre, 1e-3)，再 max(-1.0, min(1.0, v))。提高到 0.9 用掉了 75% 的“提升空间”，降到 0.3 掉了一半。'},
+],
 };
 function quizState(day){return store.get('quiz'+day,{})}
 function quizSave(day,s){store.set('quiz'+day,s)}

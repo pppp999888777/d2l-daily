@@ -94,6 +94,12 @@ input[type=text]{font:inherit;font-family:var(--f-mono);font-size:14px;color:var
 .calc.pw{white-space:pre-wrap}
 canvas.hm{image-rendering:pixelated;border:1px solid var(--line)}
 .lngrid{display:grid;gap:4px;align-content:start}.lnrow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px}.lnc{font:inherit;font-family:var(--f-mono);font-size:13px;padding:6px 4px;border:1px solid var(--line);border-radius:6px;color:var(--ink);cursor:pointer}.lnc:disabled{cursor:default;opacity:1}
+.cmap{display:grid;gap:6px;margin-top:12px}
+.cmap details{border:1px solid var(--line);border-radius:10px;background:var(--surface);padding:8px 12px;min-width:0}
+.cmap summary{cursor:pointer;display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline}
+.cmap .ln{font-family:var(--f-mono);font-size:12.5px;color:var(--accent);min-width:84px}
+.cmap .days{font-size:12.5px;color:var(--muted);margin-left:auto}
+.cmap details>p,.cmap details>ul,.cmap details>pre{margin-top:8px}
 .math{font-family:var(--f-mono);font-size:14px;padding:6px 10px;background:var(--sunk);border-radius:8px;overflow-x:auto;margin:0}
 .tkrow{display:grid;grid-template-columns:repeat(auto-fill,minmax(70px,1fr));gap:6px}
 .tk{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:6px 8px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:inherit;font-size:13px;cursor:pointer;text-align:left;min-width:0}
@@ -215,7 +221,7 @@ code.big{font-size:.8em;background:var(--sunk);padding:0 .25em;border-radius:6px
 </style><header class="top"><div class="wrap">
   <span class="brand">动手学深度学习每日课</span>
   <nav class="days" id="dayNav" aria-label="课程天数">
-    <a href="#day1" data-nav="1">第 1 天</a><a href="#day2" data-nav="2">第 2 天</a><a href="#day3" data-nav="3">第 3 天</a><a href="#day4" data-nav="4">第 4 天</a><a href="#day5" data-nav="5">第 5 天</a><a href="#day6" data-nav="6">第 6 天</a><a href="#day7" data-nav="7">第 7 天</a><a href="#day8" data-nav="8">第 8 天</a><a href="#day9" data-nav="9">第 9 天</a><a href="#day10" data-nav="10">第 10 天</a><a href="#day11" data-nav="11">第 11 天</a><a href="#day12" data-nav="12">第 12 天</a><a href="#day13" data-nav="13">第 13 天</a><a href="#day14" data-nav="14">第 14 天</a><a href="#day15" data-nav="15">第 15 天</a><a href="#day16" data-nav="16">第 16 天</a><a href="#day17" data-nav="17">第 17 天</a><a href="#day18" data-nav="18">第 18 天</a><a href="#day19" data-nav="19">第 19 天</a>
+    <a href="#day1" data-nav="1">第 1 天</a><a href="#day2" data-nav="2">第 2 天</a><a href="#day3" data-nav="3">第 3 天</a><a href="#day4" data-nav="4">第 4 天</a><a href="#day5" data-nav="5">第 5 天</a><a href="#day6" data-nav="6">第 6 天</a><a href="#day7" data-nav="7">第 7 天</a><a href="#day8" data-nav="8">第 8 天</a><a href="#day9" data-nav="9">第 9 天</a><a href="#day10" data-nav="10">第 10 天</a><a href="#day11" data-nav="11">第 11 天</a><a href="#day12" data-nav="12">第 12 天</a><a href="#day13" data-nav="13">第 13 天</a><a href="#day14" data-nav="14">第 14 天</a><a href="#day15" data-nav="15">第 15 天</a><a href="#day16" data-nav="16">第 16 天</a><a href="#day17" data-nav="17">第 17 天</a><a href="#day18" data-nav="18">第 18 天</a><a href="#day19" data-nav="19">第 19 天</a><a href="#day20" data-nav="20">第 20 天</a>
     <a href="#road" class="road-link">课程表</a>
     <a class="soon" href="#road">第 9 天</a><a class="soon" href="#road">第 10 天</a>
   </nav>
@@ -5784,6 +5790,222 @@ out["ess"]   = np.sum(w) ** 2 / np.sum(w ** 2) / len(w)   <span class="c"># 归�
 </section>
 </main>
 
+<main class="wrap day" id="day20" data-day="20" hidden>
+<section class="hero">
+  <div class="eyebrow">第 20 天 · 专题：通读你论文的 experiment.py · 论文路线最后一课</div>
+  <h1>3081 行代码，现在每一段你都学过了</h1>
+  <p class="lead">最后一天把前 19 天串起来。你论文的全部实验都在一个文件 <code>experiment.py</code> 里，3081 行。今天按“先看说明、再看配置、然后跟着 main 往下走”的顺序读一遍，每一段都标出它用到的是哪一天学的东西。点开每一段看代码摘录和解释。中间有两个能运行的代码格：论文的 NLG 收益函数原样照抄，以及 Safe-DFKT 决策损失的缩小版（可以看到梯度怎样推动策略头）。</p>
+  <div class="plan">
+    <div><b class="k">今天的时间</b>大约 90 分钟，可以分两次读。</div>
+    <div><b class="k">学完你能</b><ul><li>说出整个实验流程的顺序</li><li>找到任何一个结果数字是在哪里算出来的</li><li>读懂 Safe-DFKT 的损失函数每一项</li></ul></div>
+    <div><b class="k">读代码的顺序</b><ul><li>文件开头的说明（docstring）</li><li>配置常量</li><li><code>main()</code>，再按调用顺序往下</li></ul></div>
+  </div>
+</section>
+
+<section class="part" id="cmap">
+  <div class="part-h"><div class="eyebrow">第一部分</div><h2>代码地图</h2><span class="src">行号对应你论文项目 code/experiment.py 的当前版本</span></div>
+  <div class="prose"><div class="row"><button class="btn primary runAll" data-day="20">从头全部运行</button><span class="small muted runAllMsg"></span></div>
+    <p>整个流程（文件开头的说明里写的）：对每个数据集，<b>A 线</b>在真实日志上训练和评估预测（AUC、ECE）并做 OPE；<b>B 线</b>先用日志拟合一个 BKT 风格的模拟器，再让每个模型在模拟器里当“出题依据”，测真实的学习收益（NLG）。每个方法跑 5 个随机种子，最后做配对检验。</p></div>
+  <div class="cmap">
+    <details><summary><span class="ln">1–51</span><b>说明和导入</b><span class="days">从这里开始读</span></summary>
+      <p>文件开头的大段说明是全文最重要的部分：A 线（真实日志：80/20 划分，再留 10% 验证，按验证集 BCE 选检查点；预测指标；OPE）和 B 线（校准过的模拟器：每个知识点拟合 p0、learn、guess、slip、forget 五个参数；按日志策略生成日志；每个 KT 模型当状态估计器；真实 NLG、掌握所需步数、保持率；OPE 估计和真实值的偏差）。还列了审稿意见要求的修改：两种检查点标准、Safe-DFKT-AG、5 个种子、配对检验、单步偏离的估计量。</p></details>
+    <details><summary><span class="ln">53–170</span><b>配置常量</b><span class="days">第 9、12、18、19 天</span></summary>
+<pre class="code">DATASETS = ["assist2009", "ednet", "algebra2005", "junyi"]
+MAX_SEQ = 500        <span class="c"># 每个学生只保留最近 500 步</span>
+WIN = 100            <span class="c"># 窗口长度（第 12、13 天：切窗口 = 截断）</span>
+D_MODEL = 64; BS = 256; E_MAIN = pf.epochs(15)   <span class="c"># 第 18 天：批量 256，训练 15 轮</span>
+SEEDS = pf.seeds(list(range(5)))                 <span class="c"># 5 个随机种子</span>
+AG_ETA, AG_THR, HEAD_L2 = 1.0, 0.85, 1e-3        <span class="c"># 反刷分惩罚、阈值、策略头 L2（第 9 天）</span>
+C_TARGET = 0.7; TEMP = 0.05; WCLIP = 20.0        <span class="c"># 出题规则的目标、温度、权重截断（第 19 天）</span>
+N_SIM_SKILLS = 12; SIM_T = 60                    <span class="c"># 模拟器：12 个知识点、每个学生 60 步</span>
+DF_CFG = {"Safe-DFKT": dict(lam=1.0, gamma=10.0, eps=0.005, beta=0.1, reward="nlg"), ...}</pre>
+      <p>第 123 到 131 行的 <code>DF_CFG</code> 定义了决策损失的各个系数：λ（DR 价值的权重）、γ 和 ε（安全屏障）、β（方差惩罚，POEM）、用哪种收益。几个消融实验就是把其中一项设成 0。</p></details>
+    <details><summary><span class="ln">173–312</span><b>记录、超时保护、指标函数</b><span class="days">第 6、14 天</span></summary>
+      <p>记录结果的工具、每次运行 8 分钟的超时保护。<code>metrics_bin</code>（第 287 行）算 AUC、ACC、RMSE、ECE（10 个区间）和 BCE：AUC 是第 14 天手写过的，ECE 是第 6 天可靠性图里的“期望校准误差”。</p></details>
+    <details><summary><span class="ln">313–612</span><b>读数据、找列、建序列</b><span class="days">第 2 天</span></summary>
+      <p>用 pandas 读四个数据集，自动识别“学生、知识点、对错、顺序”这几列（<code>detect_columns</code>），一行有多个知识点时拆开（<code>maybe_explode</code>），按学生排好序得到每个学生的序列（<code>build_sequences</code>）。Junyi 还提取了知识点之间的先修关系。这部分是第 2 天数据预处理的“工业版”。</p></details>
+    <details><summary><span class="ln">614–644</span><b>NLG 步收益和收益表</b><span class="days">第 19 天</span></summary>
+      <p><code>step_rewards</code> 给每一步算一个收益：做这道题之前，这个知识点的平滑正确率是 pre；之后在同一知识点上接下来最多两次的平均正确率是 post。收益是归一化增益：post ≥ pre 时 (post − pre)/(1 − pre)，否则 (post − pre)/pre，截到 [−1, 1]。<code>qtab</code> 把每个知识点的平均收益做成 Q 表（OPE 里 DM 用的结果模型）。下面第二部分可以直接运行这个函数。</p></details>
+    <details><summary><span class="ln">646–721</span><b>prep_world：划分、窗口、μ、Q</b><span class="days">第 9、12、19 天</span></summary>
+<pre class="code">nt = max(1, int(round(0.2 * n))); test = perm[:nt]; rest = perm[nt:]      <span class="c"># 20% 测试（第 9 天）</span>
+nv = max(1, int(round(0.1 * len(rest)))); val = rest[:nv]; train = rest[nv:]
+...
+mut[g] = ((C + 5 * uni[None]) / (C.sum(1, keepdims=True) + 5))           <span class="c"># 旧策略 μ（第 19 天）</span>
+...
+for st in range(0, L, win):                                              <span class="c"># 100 步窗口（第 12 天）</span></pre>
+      <p>最后把所有东西打包成字典 <code>W</code>：<code>W["sk"]</code>、<code>W["rs"]</code> 是 (窗口数, 100) 的整数和 0/1 张量，<code>W["m"]</code> 是掩码，<code>W["mu"]</code> 是每一步的 μ，<code>W["train_idx"]</code> 等是划分。</p></details>
+    <details><summary><span class="ln">723–858</span><b>BKT 拟合、模拟器、推演</b><span class="days">第 4、12 天</span></summary>
+      <p><code>fit_bkt</code> 对每个知识点网格搜索 BKT 的参数（第 4 天的 BKT）；<code>fit_simulator</code> 选 12 个知识点（<code>choose_skills</code>：一般按出现次数；Junyi 有先修关系，就从关系最多的知识点出发，沿先修关系挑一组相连的），加上遗忘率（每步最多 0.003）和先修关系。<code>rollout</code> 让一群模拟学生（能力 θ ∼ N(0, 0.7²)，各不相同）在某个出题策略下做 60 步题，记录前测和后测：这是第 12 天说的“多步推演”。</p></details>
+    <details><summary><span class="ln">859–994</span><b>各种出题策略</b><span class="days">第 19 天</span></summary>
+      <p><code>LoggingPolicy</code>：生成模拟日志用的随机策略（OPE 里的 μ）；<code>RandomPolicy</code>；<code>OneStepDevPolicy</code>：只在一个决策点换成新策略、之后照旧，用来算 OPE 估计量的真实值；<code>ModelPolicy</code>：用某个 KT 模型的预测按“最接近 0.7”出题（加上 Safe-DFKT 的策略头）。</p></details>
+    <details><summary><span class="ln">995–1240</span><b>所有 KT 模型</b><span class="days">第 11、13 到 17 天</span></summary>
+      <ul>
+        <li><code>causal_attn</code>（995）：多头因果注意力，第 16 天。</li>
+        <li><code>KTBase</code>、<code>DKT</code>（1012、1032）：第 11、14 天。</li>
+        <li><code>CountKT</code>、<code>LRKT</code>、<code>PFAKT</code>、<code>EmpAcc</code>（1056 到 1110）：按次数统计的模型，Heuristic-0.7 和 Random 也基于它。</li>
+        <li><code>DKVMN</code>（1112）：第 15 天的点积注意力读记忆。</li>
+        <li><code>SAKT</code>（1141）：第 16、17 天。</li>
+        <li><code>RaschMixin</code>、<code>SimpleKT</code>、<code>AKT</code>（1166 到 1236）：加了 Rasch 难度参数的嵌入，AKT 带距离衰减（第 17 天）。</li>
+        <li><code>NEURAL</code>（1237）：每个模型的学习率。</li>
+      </ul></details>
+    <details open><summary><span class="ln">1248–1299</span><b>batch_loss：Safe-DFKT 的损失</b><span class="days">第 9、14、19 天</span></summary>
+<pre class="code">bce = (F.binary_cross_entropy_with_logits(logit, y, reduction="none") * mm).sum() / mm.sum().clamp(min=1.0)
+loss = bce                                                  <span class="c"># 所有模型都有的预测损失（第 14 天）</span>
+if cfg is not None:                                         <span class="c"># 下面只有决策导向的方法才有</span>
+    p = torch.sigmoid(model.readout_all(H, qpos))
+    score = -(p - cfg.get("c", C_TARGET)) ** 2 / TEMP + model.policy_bias(H, qpos)
+    pi = torch.softmax(score, -1)                           <span class="c"># 可求导的出题策略</span>
+    loss += cfg["ag_eta"] * agm                             <span class="c"># 反刷分：别把概率放在已掌握的知识点上</span>
+    loss += cfg["head_l2"] * sum((q ** 2).sum() for q in model.g.parameters())   <span class="c"># 第 9 天</span>
+    V = dm + w * (r - qa)                                   <span class="c"># 每一步的 DR 价值（第 19 天）</span>
+    loss += -cfg["lam"] * Vs.mean()                         <span class="c"># 最小化损失 = 最大化 DR 价值</span>
+    loss += cfg["beta"] * Vs.var()                          <span class="c"># POEM：惩罚价值估计的方差</span>
+loss += cfg["gamma"] * F.relu(bce - (1 + cfg["eps"]) * cfg["bce_base"])   <span class="c"># 安全屏障</span></pre>
+      <p>上面是节选，省略了 if 判断和中间变量的计算（完整代码见第 1248 到 1299 行）。这是整篇论文的核心。前 19 天的东西全在这里：BCE、softmax 策略、gather、截断的重要性权重、DR、L2。<b>安全屏障</b>的意思是：BCE 只要不比原始 DKT（<code>bce_base</code>）差超过 0.5%，这一项就是 0；一旦超过，就以系数 10 拉回来。所以 Safe-DFKT 在提高出题价值的同时，预测能力几乎不变。</p></details>
+    <details><summary><span class="ln">1301–1405</span><b>评估和训练循环</b><span class="days">第 9、11、13、18 天</span></summary>
+      <p><code>eval_bce</code>（1315）：验证集 BCE。<code>check_dr_identity</code>（1328）：第一批数据时检查 DR 那一项的正负号是不是对的（防止写反了“最大化”和“最小化”）。<code>train_kt</code>（1340）：Adam、批量 256、裁剪到 5、每轮按验证集 BCE 存最佳检查点；决策导向方法还额外存一个“决策价值最好”的检查点（审稿意见要求的第二种标准）。</p></details>
+    <details><summary><span class="ln">1407–1455</span><b>ope_eval</b><span class="days">第 19 天</span></summary>
+      <p>昨天逐行读过：IPS、SNIPS、DR、DR 的标准误、ESS，对三种收益各算一遍。</p></details>
+    <details><summary><span class="ln">1456–1600</span><b>真实价值、重新校准、分解</b><span class="days">第 6、19 天</span></summary>
+      <p><code>onestep_dev_value</code>：在模拟器里算 OPE 估计量的真实值。<code>fit_platt</code>（1489）：Platt 缩放，对 logit 做一个 a·z + b 的逻辑回归，重新校准预测概率（第 6 天的校准）。<code>decision_decomp</code>（1512）：在模拟器的测试状态上统计，（1）主干微调（和同种子的两阶段 DKT 比）和（2）策略头 g，各自有多常改变“最接近 0.7”规则选出的知识点。</p></details>
+    <details><summary><span class="ln">1601–1730</span><b>准备数据集、两阶段训练</b><span class="days">第 11、14 天</span></summary>
+<pre class="code">if method in NEURAL:                         <span class="c"># 普通 KT 模型：直接训练</span>
+    cls, lr = NEURAL[method]; m = cls(W["K"]); train_kt(m, W, E_MAIN, lr, None, log_cb, seed)
+...
+base = ensure_base(D, world, seed)            <span class="c"># 决策导向方法：先拿训练好的 DKT</span>
+m = DKT(W["K"], policy_head=True)
+m.load_state_dict(base["state"], strict=False)   <span class="c"># 第 11 天：strict=False，策略头 g 不在 base 里</span>
+train_kt(m, W, E_FT, 1e-3, cfg, ...)          <span class="c"># 再用决策损失微调，lr = 1e-3</span></pre>
+      <p>上面是节选（原代码在加载时还有 <code>.to(DEV)</code>）。注意 <code>strict=False</code>：基础 DKT 的 state_dict 里没有 <code>g.weight</code>、<code>g.bias</code>，严格模式会报 Missing key（第 11 天看过这个报错）；这里故意放宽，让策略头保持初始化的 0。</p></details>
+    <details><summary><span class="ln">1731–1837</span><b>一个方法的完整评估</b><span class="days">第 9、19 天</span></summary>
+      <p><code>run_method</code>：真实日志上训练、算预测指标和 OPE；模拟器里用模拟日志训练、上线出题、算 NLG、掌握步数、保持率、OPE 偏差。论文表格里的每个数字都来自这里返回的 <code>row</code>。</p></details>
+    <details><summary><span class="ln">1838–2099</span><b>汇总和统计检验</b><span class="days">课程里没讲，下面简单说</span></summary>
+      <p><code>paired_test</code>（1908）：同一个种子、同一个数据集上两个方法的配对差，做 Wilcoxon 符号秩检验、t 检验和 bootstrap 置信区间（5000 次重抽样）。<code>holm</code>（1942）：Holm 多重比较校正：同时做很多次检验时，把 p 值按从小到大依次放宽门槛，控制“至少错一次”的概率。</p></details>
+    <details><summary><span class="ln">2100–2830</span><b>附加分析</b><span class="days">各种敏感性和稳健性检查</span></summary>
+      <p>参数量审计、24 个知识点的规模检查、安全屏障 ε 的扫描、DR 正负号检查、校准分析、决策分解、检查点标准分析、目标值 c（0.3、0.5、0.7）的扫描。都是“换一个设置再跑一遍，看结论变不变”。</p></details>
+    <details><summary><span class="ln">2833–3081</span><b>main()</b><span class="days">读代码的入口</span></summary>
+      <p>先准备 4 个数据集，然后<b>广度优先</b>：种子 0 把所有方法在所有数据集上跑一遍，再种子 1……这样中途超时也能保证每个方法都有结果。最后运行统计检验和附加分析，存表。</p></details>
+  </div>
+</section>
+
+<section class="part" id="crun">
+  <div class="part-h"><div class="eyebrow">第二部分</div><h2>亲手运行论文的两段核心代码</h2><span class="src">第一个格是论文原文；第二个格是缩小的决策损失</span></div>
+  <div class="blk"><div class="blk-h"><span class="n">1</span><h3>NLG 步收益（原样照抄第 614 行）</h3></div>
+    <div class="cell"><textarea>import numpy as np
+import torch
+from torch.nn import functional as F
+
+def step_rewards(sk, rs, smean, alpha=2.0):
+    """NLG step reward (pre = smoothed prior accuracy on the skill BEFORE this attempt,
+    post = mean of the next &lt;=2 attempts on the same skill) and the old r_gain = y_next - y_now."""
+    sk = np.asarray(sk).tolist(); rs = np.asarray(rs, dtype=np.float64).tolist()
+    n = len(sk)
+    nxt = [-1] * n; last = {}
+    for i in range(n - 1, -1, -1):
+        k = sk[i]; nxt[i] = last.get(k, -1); last[k] = i
+    rn = np.zeros(n, np.float32); mn = np.zeros(n, np.float32)
+    rg = np.zeros(n, np.float32); mg = np.zeros(n, np.float32)
+    Sd, Cd = {}, {}
+    for i in range(n):
+        k = sk[i]; s = Sd.get(k, 0.0); c = Cd.get(k, 0)
+        j = nxt[i]
+        if j &gt;= 0:
+            pre = (s + alpha * smean[k]) / (c + alpha)
+            j2 = nxt[j]
+            post = rs[j] if j2 &lt; 0 else 0.5 * (rs[j] + rs[j2])
+            v = (post - pre) / max(1 - pre, 1e-3) if post &gt;= pre else (post - pre) / max(pre, 1e-3)
+            rn[i] = max(-1.0, min(1.0, v)); mn[i] = 1.0
+            rg[i] = rs[j] - rs[i]; mg[i] = 1.0
+        Sd[k] = s + rs[i]; Cd[k] = c + 1
+    return rn, mn, rg, mg</textarea></div>
+    <div class="prose"><p>一个学生 7 步：知识点 [0, 1, 0, 0, 1, 2, 0]，对错 [0, 0, 1, 1, 0, 1, 1]，三个知识点的总体正确率（平滑用）是 [0.5, 0.7, 0.4]。</p></div>
+    <div class="cell"><textarea>sk = [0, 1, 0, 0, 1, 2, 0]
+rs = [0, 0, 1, 1, 0, 1, 1]
+smean = [0.5, 0.7, 0.4]
+rn, mn, rg, mg = step_rewards(sk, rs, smean)
+print('NLG 收益 rn：', rn)
+print('有没有定义 mn：', mn)
+print('r_gain rg：', rg)</textarea></div>
+    <div class="prose"><p>逐个看：第 1 步做知识点 0（错），之前没做过，pre = (0 + 2×0.5)/(0 + 2) = 0.5；之后两次知识点 0 都对，post = 1，收益 (1 − 0.5)/(1 − 0.5) = 1。第 2 步做知识点 1（错），pre = 0.7；下一次知识点 1 还是错，post = 0，收益 (0 − 0.7)/0.7 = −1。最后出现的几步后面没有同知识点的题了，收益没有定义（mn = 0），训练时被掩码掉。</p></div>
+  </div>
+  <div class="blk"><div class="blk-h"><span class="n">2</span><h3>决策损失的缩小版</h3></div>
+    <div class="prose"><p>2 个学生、5 步、3 个知识点。策略头 g 初始化为 0，所以一开始策略就是“选最接近 0.7 的”。算出 DR 价值和整个损失，反向传播，看 g 的梯度：</p></div>
+    <div class="cell"><textarea>torch.manual_seed(0)
+B, T, K = 2, 5, 3
+TEMP, WCLIP, C_TARGET = 0.05, 20.0, 0.7
+lam, gamma, eps, beta = 1.0, 10.0, 0.005, 0.1
+p = torch.tensor([[[0.9, 0.6, 0.3]] * T, [[0.5, 0.75, 0.2]] * T])   # KT 主干预测的各知识点答对概率
+g = torch.zeros(B, T, K, requires_grad=True)                     # 策略头 g 的输出，初始为 0
+a = torch.tensor([[0, 1, 1, 2, 0], [1, 1, 0, 1, 2]])               # 日志里实际出的知识点
+mu = torch.full((B, T), 1 / 3)                                   # 旧策略选它的概率
+r = torch.tensor([[0.0, 0.4, 0.3, -0.1, 0.0], [0.5, 0.2, -0.2, 0.3, 0.0]])   # NLG 收益
+Q = torch.tensor([0.0, 0.3, 0.1])                                # 每个知识点的平均收益
+bce, bce_base = torch.tensor(0.56), torch.tensor(0.55)
+
+score = -(p - C_TARGET) ** 2 / TEMP + g
+pi = torch.softmax(score, -1)
+dm = (pi * Q.view(1, 1, -1)).sum(-1)
+pia = pi.gather(-1, a.unsqueeze(-1)).squeeze(-1)
+w = (pia / mu).clamp(max=WCLIP)
+qa = Q[a]
+V = dm + w * (r - qa)
+loss = bce - lam * V.mean() + beta * V.var() + gamma * F.relu(bce - (1 + eps) * bce_base)
+loss.backward()
+print('π（第 1 个学生）：', pi[0, 0])
+print('V_DR =', round(V.mean().item(), 4), '  loss =', round(loss.item(), 4))
+print('g 的梯度（第 1 个学生、第 2 步）：', g.grad[0, 1])</textarea></div>
+    <div class="prose"><p>第 1 个学生的预测是 [0.9, 0.6, 0.3]，知识点 1（0.6）离 0.7 最近，所以 π 给它 0.63。g 的梯度对知识点 1 是负的：梯度下降会让 g 在知识点 1 上变大，也就是让策略更倾向知识点 1。原因是日志里这一步出的正是知识点 1，收益 0.4 比 Q 表的平均值 0.3 高，DR 认为“多选它更好”。这就是“决策导向”的意思：用出题的价值，而不只是预测准确率，去训练模型。</p></div>
+  </div>
+</section>
+
+<section class="part" id="crecap">
+  <div class="part-h"><div class="eyebrow">第三部分</div><h2>20 天回顾</h2></div>
+  <div class="blk">
+    <div class="tblwrap"><table class="t">
+      <thead><tr><th>天</th><th>学了什么</th><th>在论文代码里</th></tr></thead>
+      <tbody>
+        <tr><td>1–3</td><td>张量、数据预处理、线性代数、自动求导</td><td>到处都是</td></tr>
+        <tr><td>4</td><td>概率、贝叶斯、BKT</td><td>模拟器 <code>fit_bkt</code></td></tr>
+        <tr><td>5–7</td><td>线性回归、softmax、交叉熵、校准</td><td>LR、PFA、ECE、<code>fit_platt</code></td></tr>
+        <tr><td>8–10</td><td>多层感知机、过拟合、正则、初始化、分布偏移</td><td>Dropout、验证集、策略头 L2、重要性权重</td></tr>
+        <tr><td>11</td><td>nn.Module、参数、保存加载</td><td><code>class DKT(KTBase)</code>、<code>best_state</code></td></tr>
+        <tr><td>12–14</td><td>序列、RNN、梯度裁剪、LSTM</td><td>DKT、100 步窗口、<code>clip_grad_norm_</code></td></tr>
+        <tr><td>15–17</td><td>注意力、多头、位置编码、Transformer</td><td>DKVMN、SAKT、AKT、simpleKT</td></tr>
+        <tr><td>18</td><td>SGD、动量、Adam</td><td><code>torch.optim.Adam</code>，lr 2e-3</td></tr>
+        <tr><td>19</td><td>离线策略评估</td><td><code>ope_eval</code>、决策损失里的 DR</td></tr>
+        <tr><td>20</td><td>通读代码</td><td><code>experiment.py</code> 全文</td></tr>
+      </tbody></table></div>
+    <div class="prose"><p>论文路线到这里就完成了。课程表里还列着“选学”的章节（卷积、计算机视觉、自然语言处理的应用等），和你的论文关系不大，有兴趣再看。建议接下来做两件事：一是打开你自己的 <code>experiment.py</code>，挑一个函数（比如 <code>batch_loss</code>）在上面这张地图的帮助下从头读到尾；二是回到第 14、17 天的代码格，改改数据或模型（比如把 d 改大、把知识点改多），看结果怎么变。</p></div>
+  </div>
+</section>
+
+<section class="part quiz-sec">
+  <div class="part-h"><div class="eyebrow">课后题</div><h2>做几道题检查一下</h2><span class="src">选择题点选项马上出结果；写形状和写代码的题，网页会现场运行代码判断对错。答题记录只存在你这台设备的浏览器里。</span></div>
+  <div class="quiz dayquiz" data-day="20"></div>
+  <div class="row small muted quizscore" data-day="20"></div>
+</section>
+
+<section class="part">
+  <div class="part-h"><div class="eyebrow">今日小结</div><h2>今天学会了吗？</h2></div>
+  <div class="two">
+    <div class="panel stack">
+      <ul class="check-list" data-day="20">
+        <li><label><input type="checkbox" data-k="c1">实验分两条线：真实日志（预测、OPE）和模拟器（真实学习收益）</label></li>
+        <li><label><input type="checkbox" data-k="c2">决策导向方法：先训练 DKT，再加策略头用决策损失微调</label></li>
+        <li><label><input type="checkbox" data-k="c3">决策损失 = BCE − λ·V_DR + β·Var + 安全屏障 + 反刷分 + L2</label></li>
+        <li><label><input type="checkbox" data-k="c4">NLG 收益：做题前后同一知识点正确率的归一化增益</label></li>
+        <li><label><input type="checkbox" data-k="c5">我能在 experiment.py 里找到任何一个结果是在哪里算的</label></li>
+      </ul>
+      <span class="small check-msg"></span>
+    </div>
+    <div class="panel stack">
+      <h3>课程完成</h3>
+      <p>20 天的论文路线全部上线了。之后可以随时回到任何一天重新运行、改代码；调试台页面里还有论文 8 个章节的交互讲解。</p>
+    </div>
+  </div>
+</section>
+</main>
+
 <div class="wrap"><section class="part road-sec" id="road">
   <div class="part-h"><div class="eyebrow">课程表</div><h2>按你的论文排的学习路线</h2><span class="src">第 1 到 7 天是基础，按原书顺序。从第 8 天起只挑你论文用到的章节：多层感知机、正则化、自定义模型、循环网络和 LSTM（DKT）、注意力和 Transformer（SAKT、AKT、simpleKT）、Adam，最后是两个书里没有的论文专题。卷积、计算机视觉、NLP 应用等和论文关系不大的章节放到最后选学。</span></div>
   <div class="road" id="roadList"></div>
@@ -10825,7 +11047,8 @@ function pairedGather(T,items){const advs=items.filter(it=>it.tensor);const L=ad
   const rest=T.shape.slice(items.length),rn=prod(rest),vals=[];for(const o of offs)for(let r=0;r<rn;r++)vals.push(T.data[o+r]);const R=mkT([L,...rest],vals,T.dtype,T.np);
   if(T.shape.length<=3&&T.data.length<=300){const mask=new Uint8Array(T.data.length);offs.forEach(o=>{for(let r=0;r<rn;r++)mask[o+r]=1});R.meta={kind:'index',src:snapshot(T),mask}}
   return track(R,[T],'IndexBackward0',g=>{const r=new Float64Array(T.data.length);offs.forEach((o,k)=>{for(let q=0;q<rn;q++)r[o+q]+=g[k*rn+q]});return[r]})}
-function getItem(T,items){if(items.filter(it=>it.tensor).length>=2)return pairedGather(T,items);if(items.length===1&&items[0].bool){const M=items[0].bool;const vals=[];T.data.forEach((v,i)=>{if(M.data[i])vals.push(v)});return mkT([vals.length],vals,T.dtype,T.np)}
+function getItem(T,items){if(items.filter(it=>it.tensor).length>=2)return pairedGather(T,items);
+  if(items.length===1&&items[0].tensor&&items[0].tensor.shape.length>1){const I=items[0].tensor,flat=getItem(T,[{tensor:reshapeT(I,[-1])}]);return reshapeT(flat,[...I.shape,...T.shape.slice(1)])}if(items.length===1&&items[0].bool){const M=items[0].bool;const vals=[];T.data.forEach((v,i)=>{if(M.data[i])vals.push(v)});return mkT([vals.length],vals,T.dtype,T.np)}
   const sel=selection(T,items),shape=selShape(sel),vals=[],offs=[],mask=new Uint8Array(T.data.length);
   forEachSel(T,sel,off=>{vals.push(T.data[off]);offs.push(off);mask[off]=1});const R=mkT(shape,vals,T.dtype,T.np);
   if(T.shape.length>=1&&T.shape.length<=3&&T.data.length<=300)R.meta={kind:'index',src:snapshot(T),mask};
@@ -11022,6 +11245,7 @@ function npGenfromtxt(a,kw){const f=openFile(str(a[0]),'r'),txt=FS.get(f.p),dl=k
   const C=Math.max(...rows.map(r=>r.length)),dt=kw.dtype?dtypeKw({dtype:kw.dtype},'float64'):'float64';return mkT([rows.length,C],rows.flatMap(r=>Array.from({length:C},(_,j)=>j<r.length?r[j]:NaN)),dt,true)}
 const numpy=mod('numpy',{genfromtxt:fn('genfromtxt',(a,kw)=>npGenfromtxt(a,kw)),
   arange:fn('arange',(a,kw)=>{const nums=a.map(numOf);let s=0,e,st=1;if(nums.length===1)e=nums[0];else[s,e,st=1]=nums;const fl=a.some(v=>v.t==='float');const d=[];for(let k=0;;k++){const v=s+k*st;if(st>0?v>=e-1e-12:v<=e+1e-12)break;d.push(v)}return mkT([d.length],d,fl?'float64':'int64',true)}),
+  asarray:fn('asarray',(a,kw)=>{if(isT(a[0])&&a[0].np&&!kw.dtype)return a[0];const n=nested(a[0]);const dt=kw.dtype?dtypeKw(kw,'float64'):(n.dt==='float32'?'float64':n.dt);return mkT(n.shape,n.flat,dt,true)}),
   array:fn('array',a=>{const n=nested(a[0]);return mkT(n.shape,n.flat,n.dt==='float32'?'float64':n.dt,true)}),
   linspace:fn('linspace',a=>{const s=numOf(a[0]),e=numOf(a[1]),n=a[2]?intOf(a[2]):50;return mkT([n],Array.from({length:n},(_,i)=>n===1?s:s+(e-s)*i/(n-1)),'float64',true)}),
   ...Object.fromEntries(['exp','log','sqrt','sin','cos','abs','tanh'].map(n=>[n,fn(n,a=>{const v=a[0];if(!isT(v)&&pyNum(v)!=null){const r=F(UN[n][0](pyNum(v)));r.np=true;return r}return unary(isT(v)?v:asTensor(v),n)})])),
@@ -11074,8 +11298,9 @@ function pltMod(ctx){return{t:'mod',name:'matplotlib.pyplot',attrs:new Proxy({},
     gca_old_unused:()=>({t:'mod',name:'Axes',attrs:{set_xlabel:fn('set_xlabel',a=>{plotFig(ctx).xlabel=str(a[0]);return NONE}),set_ylabel:fn('set_ylabel',a=>{plotFig(ctx).ylabel=str(a[0]);return NONE}),set_title:fn('set_title',()=>NONE)}}),
     subplots:(a,kw)=>subplots(a,kw),show:()=>NONE,title:()=>NONE,figure:()=>NONE,grid:()=>NONE,rcParams:DUMMY};
   return P[name]?fn(name,P[name]):DUMMY}})}}
+// 计时：浏览器（特别是 Safari）的计时精度可能只有 1 毫秒，很快的操作会测出 0，书上的 2 / t 就会除以零，所以每次至少记 0.1 毫秒
 function makeTimer(){const o={times:[],tik:0};const now=()=>(typeof performance!=='undefined'?performance.now():Date.now())/1000;o.tik=now();
-  return{t:'mod',name:'Timer',attrs:{times:{get t(){return'list'},get items(){return o.times.map(F)}},start:fn('start',()=>{o.tik=now();return NONE}),stop:fn('stop',()=>{o.times.push(now()-o.tik);return F(o.times[o.times.length-1])}),
+  return{t:'mod',name:'Timer',attrs:{times:{get t(){return'list'},get items(){return o.times.map(F)}},start:fn('start',()=>{o.tik=now();return NONE}),stop:fn('stop',()=>{o.times.push(Math.max(now()-o.tik,1e-4));return F(o.times[o.times.length-1])}),
     avg:fn('avg',()=>F(o.times.reduce((a,b)=>a+b,0)/o.times.length)),sum:fn('sum',()=>F(o.times.reduce((a,b)=>a+b,0))),cumsum:fn('cumsum',()=>{let s=0;return list(o.times.map(v=>F(s+=v)))})}}}
 const D2L_ALIAS={meshgrid:'meshgrid',cosh:'cosh',sinh:'sinh',eye:'eye',bmm:'bmm',ones:'ones',zeros:'zeros',tensor:'tensor',normal:'normal',matmul:'matmul',arange:'arange',exp:'exp',sin:'sin',cos:'cos',tanh:'tanh',abs:'abs',float32:'float32',int64:'int64',concat:'cat',stack:'stack',randn:'randn',rand:'rand',zeros_like:'zeros_like',ones_like:'ones_like',sigmoid:'sigmoid',log:'log',sqrt:'sqrt'};
 function d2lMod(ctx){return mod('d2l',{
@@ -12488,7 +12713,7 @@ function colors(){const cs=getComputedStyle(document.documentElement),g=n=>cs.ge
 function fitCanvas(cv,W,H){const r=window.devicePixelRatio||1;cv.width=Math.round(W*r);cv.height=Math.round(H*r);cv.style.width=W+'px';cv.style.height=H+'px';const c=cv.getContext('2d');c.setTransform(r,0,0,r,0,0);return c}
 const MONO='11px "JetBrains Mono",ui-monospace,monospace';
 const bodyFont=px=>`${px}px ${getComputedStyle(document.body).fontFamily}`;
-const DAYS=['1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16','17','18','19'];
+const DAYS=['1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16','17','18','19','20'];
 
 // ---------- 张量图示 ----------
 function cellText(v,dtype){if(dtype==='bool')return v?'T':'F';if(dtype==='int64')return String(v);if(!Number.isFinite(v))return String(v);return Number.isInteger(v)?String(v):(Math.abs(v)>=100?v.toFixed(0):v.toFixed(2))}
@@ -12614,7 +12839,7 @@ function setupCells(){$$('.cell').forEach((cell,i)=>{const ta=cell.querySelector
     else if(e.key==='Tab'&&!e.shiftKey){e.preventDefault();const s=ta.selectionStart;ta.setRangeText('    ',s,ta.selectionEnd,'end');autoSize(ta)}})})}
 function runAll(day){ENVS[day]=MT.newEnv();EXEC[day]=0;MT.resetFS();let errs=0;const main=$('#day'+day);
   $$('.cell',main).forEach(c=>{if(c.dataset.manual){const out=c.querySelector('.out');out.className='out';out.textContent='';const t=document.createElement('span');t.className='tip';t.textContent=`这一格要手动运行：${c.dataset.manual}。准备好了点这一格右上角的“运行”。`;out.appendChild(t);out.hidden=false;return}if(!runCellEl(c))errs++});RAN[day]=true;
-  const expected={'1':0,'2':5,'3':3,'4':0,'5':0,'6':0,'7':0,'8':0,'9':0,'10':0,'11':2,'12':0,'13':0,'14':0,'15':0,'16':0,'17':0,'18':0,'19':0}[day]||0;
+  const expected={'1':0,'2':5,'3':3,'4':0,'5':0,'6':0,'7':0,'8':0,'9':0,'10':0,'11':2,'12':0,'13':0,'14':0,'15':0,'16':0,'17':0,'18':0,'19':0,'20':0}[day]||0;
   $$('.runAllMsg',main).forEach(m=>m.textContent=errs>expected?`运行完了，有 ${errs} 个格子报错，往下找红字。`:expected?`全部运行完了。其中 ${expected} 个格子是故意报错的，用来练习读报错。`:'全部运行完了，没有报错。')}
 document.addEventListener('click',e=>{const b=e.target.closest('.runAll');if(b)runAll(b.dataset.day)});
 
@@ -13132,7 +13357,7 @@ const ROAD=[['1','第 1 章 引言 + 2.1 数据操作'],['2','2.2 数据预处�
   ['18','11.4 至 11.6 + 11.10 小批量随机梯度下降、动量、Adam（论文用的优化器）','paper'],['19','论文专题：离线策略评估 IPS、SNIPS、DR（书里没有）','paper'],['20','论文专题：逐行读你的 experiment.py','paper'],
   ['选学','4.7 前向传播、反向传播和计算图；4.10 Kaggle 房价预测'],['选学','第 6 至 7 章 卷积神经网络（LeNet、ResNet 等）'],['选学','9.3 至 9.8 深度和双向循环网络、机器翻译、seq2seq'],['选学','第 11 章其余优化算法、第 12 章计算性能'],['选学','第 13 至 15 章 计算机视觉、自然语言处理']];
 function roadRender(){$('#roadList').innerHTML=ROAD.map(([d,t,f])=>{const live=DAYS.includes(d);return`<div><span class="d">${/^\d+$/.test(d)?`第 ${d} 天`:d}</span><span>${live?`<a href="#day${d}">${esc(t)}</a>`:esc(t)}${f==='paper'?' <span class="mark">论文</span>':''}</span><span class="st${live?' now':''}">${live?'已上线':'未上线'}</span></div>`}).join('')}
-const REDRAW={'1':()=>{kRender();imRender();ofRender()},'2':()=>{dotRender();normRender()},'3':()=>{secRender();gradRender()},'4':()=>{diceRender();bayesRender();bktRender()},'5':()=>{houseRender();if(!sgd.X)sgdData();sgdRender()},'6':()=>{smRender();calRender()},'7':()=>{pixRender()},'8':()=>{uaRender();actRender()},'9':()=>{spRender();rdRender();dpRender()},'10':()=>{sgRender();shRender()},'11':()=>{pcRender()},'12':()=>{tkRender();ptRender();rnRender()},'13':()=>{clRender();btRender()},'14':()=>{gtRender()},'15':()=>{nwRender();sdRender()},'16':()=>{peRender();skRender()},'17':()=>{lnRender();dcRender()},'18':()=>{opRender()},'19':()=>{oeRender()}};
+const REDRAW={'1':()=>{kRender();imRender();ofRender()},'2':()=>{dotRender();normRender()},'3':()=>{secRender();gradRender()},'4':()=>{diceRender();bayesRender();bktRender()},'5':()=>{houseRender();if(!sgd.X)sgdData();sgdRender()},'6':()=>{smRender();calRender()},'7':()=>{pixRender()},'8':()=>{uaRender();actRender()},'9':()=>{spRender();rdRender();dpRender()},'10':()=>{sgRender();shRender()},'11':()=>{pcRender()},'12':()=>{tkRender();ptRender();rnRender()},'13':()=>{clRender();btRender()},'14':()=>{gtRender()},'15':()=>{nwRender();sdRender()},'16':()=>{peRender();skRender()},'17':()=>{lnRender();dcRender()},'18':()=>{opRender()},'19':()=>{oeRender()},'20':()=>{}};
 function showDay(day,scroll){if(!DAYS.includes(day))day='1';$$('main.day').forEach(m=>m.hidden=m.dataset.day!==day);$$('[data-nav]').forEach(a=>a.classList.toggle('on',a.dataset.nav===day));store.set('lastDay',day);
   if(!RAN[day]){if(day==='7'&&!FM_U8){fmReady.then(ok=>{if(ok&&!RAN['7']){runAll('7');REDRAW['7']()}});}else runAll(day)}$$('#day'+day+' textarea').forEach(autoSize);REDRAW[day]();if(scroll)window.scrollTo(0,0)}
 function route(){const h=location.hash.replace('#','');const m=h.match(/^day(\d+)$/);if(m){showDay(m[1],true);return}
@@ -13347,6 +13572,17 @@ const QUIZ={
  {t:'c',q:'归一化的有效样本量 ESS = (Σw)² / Σw² / n 接近 0 说明什么？',o:['估计很准','权重集中在极少数记录上，估计实际上只靠几条数据，很不稳定','样本太多','μ 和 π 一样'],a:1,why:'所有权重相等时 ESS = 1。新旧策略差得越远，ESS 越小。'},
  {t:'c',q:'你论文里 μ（旧策略）是怎么得到的？',o:['日志里直接记录了','按“上一题的知识点 → 这一题的知识点”的转移次数加平滑估计，并做交叉拟合','用神经网络学的','假设是均匀分布'],a:1,why:'prep_world 第 668 到 673 行。交叉拟合：一折学生用的 μ 在另一折上估计。'},
  {t:'code',q:'写代码：三条日志，w = torch.tensor([0.5, 2.0, 4.0])（已经算好的权重），r = torch.tensor([1.0, 0.0, 0.5])，结果模型对日志动作的预测 qa = torch.tensor([0.6, 0.2, 0.4])，对新策略的期望 dm = torch.tensor([0.5, 0.3, 0.45])。算出 ips、snips、dr（都是 0 维张量或数字）。',start:'w = torch.tensor([0.5, 2.0, 4.0])\nr = torch.tensor([1.0, 0.0, 0.5])\nqa = torch.tensor([0.6, 0.2, 0.4])\ndm = torch.tensor([0.5, 0.3, 0.45])\nips = \nsnips = \ndr = \nips, snips, dr',check:env=>{const v=n=>{const x=env.vars[n];return x==null?null:MT.isT(x)?x.data[0]:x.v};const want={ips:(0.5+0+2)/3,snips:2.5/6.5,dr:((0.5+0.5*0.4)+(0.3+2*(-0.2))+(0.45+4*0.1))/3};for(const k of['ips','snips','dr']){const g=v(k);if(g==null||Math.abs(g-want[k])>1e-4)return`${k} 应该约等于 ${want[k].toFixed(4)}`}return true},why:'ips = (w * r).mean() = 0.8333；snips = (w * r).sum() / w.sum() = 0.3846；dr = (dm + w * (r - qa)).mean() = 0.4833。'},
+],
+'20':[
+ {t:'c',q:'你论文的实验分两条线，模拟器那条线最主要的作用是？',o:['让训练更快','能算出“真实的学习收益”（NLG 等）和 OPE 估计的真实值，这在真实日志里做不到','代替真实数据集','生成更多训练数据'],a:1,why:'真实日志里无法让同一个学生按新策略再学一遍；模拟器可以，所以能给出真值。'},
+ {t:'c',q:'Safe-DFKT 是怎么训练出来的？',o:['从零开始用决策损失训练','先训练普通 DKT，再加策略头 g，用决策损失以 lr = 1e-3 微调','只训练策略头','用 SAKT 初始化'],a:1,why:'build_and_train：ensure_base 拿到训练好的 DKT，load_state_dict(..., strict=False)，再 train_kt(m, W, E_FT, 1e-3, cfg, ...)。'},
+ {t:'c',q:'决策损失里的 −λ · V_DR 这一项，为什么是负号？',o:['写错了','最小化损失等价于最大化 DR 估计的出题价值','为了正则化','让 BCE 变小'],a:1,why:'优化器只会“最小化”。check_dr_identity 专门在运行时检查这个正负号。'},
+ {t:'c',q:'安全屏障 γ · ReLU(BCE − (1 + ε) · BCE_base) 什么时候不起作用？',o:['总是起作用','BCE 不比原始 DKT 的 BCE 差超过 ε（0.5%）时，这一项等于 0','γ = 10 时','训练开始时'],a:1,why:'ReLU 让它只在预测明显变差时才惩罚，保证决策导向不以牺牲预测为代价。'},
+ {t:'c',q:'NLG 步收益里，pre 是什么？',o:['做这道题之后的正确率','做这道题之前，这个知识点的平滑正确率','这道题的对错','全体学生的平均正确率'],a:1,why:'pre = (之前在这个知识点上答对的次数 + α × 总体正确率) / (之前做过的次数 + α)。post 是之后最多两次同知识点的平均正确率。'},
+ {t:'c',q:'main() 为什么按“种子 0 跑完所有方法，再种子 1……”的顺序？',o:['更快','万一超时，每个方法至少都有一部分种子的结果，不会只跑完前几个方法','为了随机性','没有原因'],a:1,why:'代码注释写的是 breadth first（广度优先）。'},
+ {t:'c',q:'load_state_dict(base_state, strict=False) 里为什么要 strict=False？',o:['为了更快','基础 DKT 没有策略头 g 的参数，严格模式会报 Missing key；放宽后 g 保持初始的 0','为了随机初始化','strict=False 会自动训练 g'],a:1,why:'第 11 天见过 Missing key(s) in state_dict 的报错。'},
+ {t:'c',q:'paired_test 里的“配对”是指？',o:['两两比较所有模型','同一个种子、同一个数据集上，两个方法的结果配成一对，看差值','两个数据集配对','训练集和测试集配对'],a:1,why:'这样种子带来的随机波动在差值里抵消掉了，检验更灵敏。Holm 校正再处理多次检验的问题。'},
+ {t:'code',q:'写代码：照论文的 step_rewards 公式，算一步的 NLG 收益。pre = 0.6，post = 0.9，结果存成 v（post ≥ pre 时 (post − pre)/(1 − pre)，否则 (post − pre)/pre，最后截到 [−1, 1]）。再算 pre = 0.6、post = 0.3 时的 v2。',start:'def nlg(pre, post):\n    # 在这里写公式\n    \n\nv = nlg(0.6, 0.9)\nv2 = nlg(0.6, 0.3)\nv, v2',check:env=>{const g=n=>{const x=env.vars[n];return x==null?null:MT.isT(x)?x.data[0]:x.v};const v=g('v'),v2=g('v2');if(v==null||Math.abs(v-0.75)>1e-6)return'v 应该是 (0.9 − 0.6)/(1 − 0.6) = 0.75';if(v2==null||Math.abs(v2+0.5)>1e-6)return'v2 应该是 (0.3 − 0.6)/0.6 = −0.5';return true},why:'v = (post - pre) / max(1 - pre, 1e-3) if post >= pre else (post - pre) / max(pre, 1e-3)，再 max(-1.0, min(1.0, v))。提高到 0.9 用掉了 75% 的“提升空间”，降到 0.3 掉了一半。'},
 ],
 };
 function quizState(day){return store.get('quiz'+day,{})}
