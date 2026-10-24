@@ -217,6 +217,7 @@ function exec(s,env,ctx){ctx.line=s.line;if(++ctx.steps>3e6)err('TimeoutError','
   switch(s.k){case'expr':{const v=evalE(s.e,env,ctx);ctx.last=v;return}
     case'assign':{const v=evalE(s.value,env,ctx);for(const t of s.targets)assignTo(t,v,env,ctx);ctx.last=undefined;return}
     case'aug':{const t=s.target,cur=evalE(t,env,ctx),v=evalE(s.value,env,ctx);ctx.last=undefined;
+      if(t.k==='sub'&&isT(cur)){const o=evalE(t.obj,env,ctx);if(isT(o)){checkInplace(o);setItem(o,subItems(t.items,env,ctx),binop(s.op,cur,v));ctx.touched.push(o);return}}
       if(isT(cur)){checkInplace(cur);const r=s.op==='@'?matmul(cur,asTensor(v)):binop(s.op,cur,v);if(r.shape.join()!==cur.shape.join())err('RuntimeError',`output with shape [${cur.shape.join(', ')}] doesn't match the broadcast shape [${r.shape.join(', ')}]`);
         if(RANK[r.dtype]>RANK[cur.dtype])err('RuntimeError',`result type ${r.dtype==='float32'?'Float':r.dtype==='float64'?'Double':'Long'} can't be cast to the desired output type ${cur.dtype==='int64'?'Long':cur.dtype==='float32'?'Float':'Bool'}`);
         for(let i=0;i<r.data.length;i++)cur.data[i]=castVal(r.data[i],cur.dtype);if(r.grad_fn&&!cur.grad_fn){/* 非叶子原地更新：保持简单 */}cur.meta={kind:'assign',mask:new Uint8Array(cur.data.length).fill(1)};ctx.touched.push(cur);return}

@@ -1,7 +1,7 @@
 
 // ---------- 张量的属性和方法 ----------
 function tensorAttr(T,name){
-  switch(name){case'shape':return{t:'size',dims:T.shape.slice()};case'dtype':return DT(T.dtype);case'T':return transpose2(T);case'ndim':return I(T.shape.length);
+  switch(name){case'shape':return T.np?tup(T.shape.map(I)):{t:'size',dims:T.shape.slice()};case'dtype':return DT(T.dtype);case'T':return transpose2(T);case'ndim':return I(T.shape.length);
     case'requires_grad':return B(T.requires_grad);case'grad':return T.grad||NONE;case'grad_fn':return T.grad_fn?{t:'gradfn',g:T.grad_fn}:NONE;case'is_leaf':return B(!T.grad_fn);case'data':{const d=mkT(T.shape.slice(),[],T.dtype);d.data=T.data;return d}}
   const m=tensorMethod(T,name);if(m)return fn(name,m);err('AttributeError',`'${T.np?'numpy.ndarray':'Tensor'}' object has no attribute '${name}'`)}
 function tensorMethod(T,name){
@@ -26,7 +26,7 @@ function tensorMethod(T,name){
     sub_:a=>{checkInplace(T);const r=binop('-',T,a[0]);T.data.set(r.data);return T},add_:a=>{checkInplace(T);const r=binop('+',T,a[0]);T.data.set(r.data);return T},
     argmax:(a,kw)=>argmaxT(T,dimArg(a,kw),keepArg(kw),1),argmin:(a,kw)=>argmaxT(T,dimArg(a,kw),keepArg(kw),-1),
     unsqueeze:a=>{const s=T.shape.slice();let d=intOf(a[0]);if(d<0)d+=s.length+1;s.splice(d,0,1);return reshapeT(T,s)},squeeze:()=>reshapeT(T,T.shape.filter(d=>d!==1)),
-    flatten:()=>reshapeT(T,[-1]),softmax:(a,kw)=>softmaxT(T,intOf(kwOr(kw,a,'dim',0))),log_softmax:(a,kw)=>softmaxT(T,intOf(kwOr(kw,a,'dim',0)),true),all:()=>mkT([],[T.data.every(Boolean)?1:0],'bool',T.np),any:()=>mkT([],[T.data.some(Boolean)?1:0],'bool',T.np),round:()=>mkT(T.shape.slice(),Array.from(T.data,v=>Math.round(v)),T.dtype,T.np),__len__:()=>I(T.shape[0])};
+    flatten:()=>reshapeT(T,[-1]),pow:a=>binop('**',T,a[0]),softmax:(a,kw)=>softmaxT(T,intOf(kwOr(kw,a,'dim',0))),log_softmax:(a,kw)=>softmaxT(T,intOf(kwOr(kw,a,'dim',0)),true),all:()=>mkT([],[T.data.every(Boolean)?1:0],'bool',T.np),any:()=>mkT([],[T.data.some(Boolean)?1:0],'bool',T.np),round:()=>mkT(T.shape.slice(),Array.from(T.data,v=>Math.round(v)),T.dtype,T.np),__len__:()=>I(T.shape[0])};
   return M[name]}
 
 // ---------- 内置函数 ----------

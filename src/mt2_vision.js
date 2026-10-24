@@ -185,6 +185,16 @@ def train_ch3(net, train_iter, test_iter, loss, num_epochs, updater):
     assert train_acc <= 1 and train_acc > 0.7, train_acc
     assert test_acc <= 1 and test_acc > 0.7, test_acc
 
+def evaluate_loss(net, data_iter, loss):
+    """评估给定数据集上模型的损失"""
+    metric = d2l.Accumulator(2)
+    for X, y in data_iter:
+        out = net(X)
+        y = d2l.reshape(y, out.shape)
+        l = loss(out, y)
+        metric.add(d2l.reduce_sum(l), d2l.size(l))
+    return metric[0] / metric[1]
+
 def predict_ch3(net, test_iter, n=6):
     """预测标签（定义见第3章）"""
     for X, y in test_iter:

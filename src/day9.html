@@ -1,0 +1,324 @@
+<main class="wrap day" id="day9" data-day="9" hidden>
+<section class="hero">
+  <div class="eyebrow">第 9 天 · 原书第 4.4 节 + 第 4.5 节 + 第 4.6 节 · 论文路线第 2 课</div>
+  <h1>过拟合，以及对付它的三件工具</h1>
+  <p class="lead">模型在训练数据上表现好不难，难的是在没见过的数据上也好。今天学怎么判断模型是欠拟合还是过拟合、怎么用验证集选模型，以及两种最常用的正则化方法：权重衰减和暂退法（Dropout）。这三样你论文里都用了：按验证集 BCE 选检查点、对策略头加 ρ‖θ_g‖²、所有神经网络里的 <code>nn.Dropout(0.2)</code>。</p>
+  <div class="plan">
+    <div><b class="k">今天的时间</b>大约 70 分钟。训练格要手动运行，每个几秒到几十秒。</div>
+    <div><b class="k">学完你能</b><ul><li>区分训练误差、验证误差、测试误差</li><li>判断欠拟合和过拟合</li><li>写出 L2 惩罚，知道它为什么叫“权重衰减”</li><li>实现 Dropout，知道训练和评估时的区别</li></ul></div>
+    <div><b class="k">和你的论文</b><ul><li>80/20 划分学生，再留 10% 做验证集</li><li><code>model.train()</code> 和 <code>model.eval()</code></li></ul></div>
+  </div>
+</section>
+
+<section class="part" id="overfit2">
+  <div class="part-h"><div class="eyebrow">第一部分</div><h2>4.4 模型选择、欠拟合和过拟合</h2><span class="src">对应原书第 4.4 节</span></div>
+  <div class="prose"><div class="row"><button class="btn primary runAll" data-day="9">从头全部运行</button><span class="small muted runAllMsg"></span></div></div>
+
+  <div class="blk"><div class="blk-h"><span class="n">4.4.1</span><h3>训练误差和泛化误差</h3></div>
+    <div class="prose">
+      <p><b>训练误差</b>是模型在训练集上的误差；<b>泛化误差</b>是模型在无穷多同分布新数据上的期望误差，只能用一个独立的测试集去估计。原书举了个例子：一个学生把往年考题的答案全背下来，往年题全对，但遇到新题就不会了。这就是只降低了训练误差，泛化误差没降。</p>
+      <p>这一切有个前提：训练数据和测试数据是从同一个分布里独立抽出来的（<b>独立同分布</b>，i.i.d.）。这个假设不成立时会发生什么，是第 10 天“分布偏移”的内容，也是你论文“模拟器和真实日志不一样”这个问题的根源。</p>
+      <p>影响模型能不能泛化的因素有：可调参数的数量（自由度）、参数能取的值的范围、训练样本的数量。参数越多、取值越自由、样本越少，越容易过拟合。</p>
+    </div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">4.4.2</span><h3>模型选择和验证集</h3></div>
+    <div class="prose">
+      <p>选模型（比如隐藏层要几层、学习率多大）时，<b>绝对不能看测试集</b>，否则测试集就被用来“训练”了，它的结果不再是公正的估计。正确做法是从训练数据里再分出一块<b>验证集</b>，用它来比较和挑选。训练数据很少时，可以用 <b>K 折交叉验证</b>：把训练数据分成 K 份，轮流用 1 份验证、K − 1 份训练，最后取平均。</p>
+    </div>
+    <div class="panel stack" id="splitLab">
+      <h4>你论文的数据划分</h4>
+      <p class="small muted">你论文按学生划分（不是按做题记录划分，这样同一个学生的记录不会同时出现在训练集和测试集）。选一个数据集看看各部分有多少学生。数字来自论文结果文件里的数据摘要（results.json）。</p>
+      <div class="row"><label class="ctrl" for="spDs">数据集 <select id="spDs"><option value="0">ASSISTments 2009（3841 个学生）</option><option value="1">EdNet（5000 个学生）</option><option value="2">Algebra 2005（574 个学生）</option><option value="3">Junyi（5000 个学生）</option></select></label></div>
+      <div class="splitbar" id="spBar" aria-label="训练、验证、测试的划分比例"></div>
+      <div class="calc" id="spCalc"></div>
+    </div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">4.4.3</span><h3>多项式回归实验</h3></div>
+    <div class="prose"><p>原书用一个实验同时演示正常拟合、欠拟合和过拟合。数据按一个 3 阶多项式生成：y = 5 + 1.2x − 3.4x²/2! + 5.6x³/3! + 噪声。然后分别用 3 阶（刚好）、1 阶（太简单）、19 阶（太复杂）的多项式去拟合，训练集只有 100 个样本。除以阶乘是为了不让高次项的数值太大。</p></div>
+    <div class="cell"><textarea>from d2l import torch as d2l
+import torch
+from torch import nn
+import numpy as np
+import math</textarea></div>
+    <div class="cell"><textarea>max_degree = 20  # 多项式的最大阶数
+n_train, n_test = 100, 100  # 训练和测试数据集大小
+true_w = np.zeros(max_degree)  # 分配大量的空间
+true_w[0:4] = np.array([5, 1.2, -3.4, 5.6])
+
+features = np.random.normal(size=(n_train + n_test, 1))
+np.random.shuffle(features)
+poly_features = np.power(features, np.arange(max_degree).reshape(1, -1))
+for i in range(max_degree):
+    poly_features[:, i] /= math.gamma(i + 1)  # gamma(n)=(n-1)!
+# labels的维度:(n_train+n_test,)
+labels = np.dot(poly_features, true_w)
+labels += np.random.normal(scale=0.1, size=labels.shape)</textarea></div>
+    <div class="cell"><textarea># NumPy ndarray转换为tensor
+true_w, features, poly_features, labels = [d2l.tensor(x, dtype=
+    d2l.float32) for x in [true_w, features, poly_features, labels]]</textarea></div>
+    <div class="cell"><textarea>features[:2], poly_features[:2, :], labels[:2]</textarea></div>
+    <div class="prose"><p>评估函数：在整个数据集上算平均损失。</p></div>
+    <div class="cell"><textarea>def evaluate_loss(net, data_iter, loss):  #@save
+    """评估给定数据集上模型的损失"""
+    metric = d2l.Accumulator(2)  # 损失的总和,样本数量
+    for X, y in data_iter:
+        out = net(X)
+        y = d2l.reshape(y, out.shape)
+        l = loss(out, y)
+        metric.add(d2l.reduce_sum(l), d2l.size(l))
+    return metric[0] / metric[1]</textarea></div>
+    <div class="cell"><textarea>def train(train_features, test_features, train_labels, test_labels,
+          num_epochs=400):
+    loss = nn.MSELoss(reduction='none')
+    input_shape = train_features.shape[-1]
+    # 不设置偏置，因为我们已经在多项式中实现了它
+    net = nn.Sequential(nn.Linear(input_shape, 1, bias=False))
+    batch_size = min(10, train_labels.shape[0])
+    train_iter = d2l.load_array((train_features, train_labels.reshape(-1,1)),
+                                batch_size)
+    test_iter = d2l.load_array((test_features, test_labels.reshape(-1,1)),
+                               batch_size, is_train=False)
+    trainer = torch.optim.SGD(net.parameters(), lr=0.01)
+    animator = d2l.Animator(xlabel='epoch', ylabel='loss', yscale='log',
+                            xlim=[1, num_epochs], ylim=[1e-3, 1e2],
+                            legend=['train', 'test'])
+    for epoch in range(num_epochs):
+        d2l.train_epoch_ch3(net, train_iter, loss, trainer)
+        if epoch == 0 or (epoch + 1) % 20 == 0:
+            animator.add(epoch + 1, (evaluate_loss(net, train_iter, loss),
+                                     evaluate_loss(net, test_iter, loss)))
+    print('weight:', net[0].weight.data.numpy())</textarea></div>
+    <div class="prose"><p><b>正常拟合</b>：用 3 阶多项式（前 4 个特征：1、x、x²/2!、x³/3!）。学到的权重应该接近真实的 [5, 1.2, −3.4, 5.6]，训练损失和测试损失都很低，而且差不多大。</p></div>
+    <div class="cell" data-manual="训练 400 个 epoch，大约需要几秒"><textarea># 从多项式特征中选择前4个维度，即1,x,x^2/2!,x^3/3!
+train(poly_features[:n_train, :4], poly_features[n_train:, :4],
+      labels[:n_train], labels[n_train:])</textarea></div>
+    <div class="prose"><p><b>欠拟合</b>：只用 1 阶（一条直线）。模型太简单，训练损失也降不下去，两条曲线都停在高处。</p></div>
+    <div class="cell" data-manual="训练 400 个 epoch，大约需要几秒"><textarea># 从多项式特征中选择前2个维度，即1和x
+train(poly_features[:n_train, :2], poly_features[n_train:, :2],
+      labels[:n_train], labels[n_train:])</textarea></div>
+    <div class="prose"><p><b>过拟合</b>：用全部 20 个特征（19 阶）。模型太复杂，会去拟合训练数据里的噪声。训练损失一直下降，测试损失却降不下去，两条线拉开了距离。学到的高次项权重也不再是 0。</p></div>
+    <div class="cell" data-manual="训练 1500 个 epoch，大约需要几秒"><textarea># 从多项式特征中选取所有维度
+train(poly_features[:n_train, :], poly_features[n_train:, :],
+      labels[:n_train], labels[n_train:], num_epochs=1500)</textarea></div>
+    <div class="callout"><h4>对照你的论文：按验证集选检查点</h4><p>你论文 <code>experiment.py</code> 第 1366 到 1369 行，每个 epoch 结束后在验证集上算一次 BCE，比之前最好的还低，就把这时的参数存下来；第 1394 行训练完以后，把模型恢复成验证集最好的那一刻：</p>
+<pre class="code">vb = eval_bce(model, W, W["val_idx"])              <span class="c"># 在验证集上评估</span>
+if vb &lt; best:                                       <span class="c"># 比之前最好的还好</span>
+    best = vb; best_ep = ep
+    best_state = {k: v.detach().clone() for k, v in model.state_dict().items()}   <span class="c"># 存一份参数</span>
+...
+model.load_state_dict(best_state)                   <span class="c"># 训练完，回到最好的那一刻</span></pre>
+      <p>这是用验证集做模型选择，也叫<b>提前停止</b>的一种写法：即使后面的 epoch 开始过拟合，最终用的也是泛化最好的那个检查点。论文还额外报告了按“决策价值”选的检查点，并发现两者选出来的 epoch 很不一样（第 8 章 8.6 节）。<code>state_dict</code> 是第 11 天的内容。</p></div>
+  </div>
+</section>
+
+<section class="part" id="wd">
+  <div class="part-h"><div class="eyebrow">第二部分</div><h2>4.5 权重衰减</h2><span class="src">对应原书第 4.5 节，代码来自原书 PyTorch 版</span></div>
+  <div class="blk">
+    <div class="prose"><p>多收集数据最能缓解过拟合，但数据往往有限。另一个办法是限制模型的“自由度”。<b>权重衰减</b>（也叫 L2 正则化）在损失里加一项 (λ/2)‖w‖²，权重越大惩罚越大，逼着模型用尽量小的权重去拟合数据。λ 越大，约束越强。</p>
+    <p>为什么叫“衰减”？对 L + (λ/2)‖w‖² 求梯度，多出来的一项是 λw。代进梯度下降：w ← w − η(∂L/∂w + λw) = <b>(1 − ηλ)w</b> − η∂L/∂w。每一步先把权重乘一个略小于 1 的数，相当于让它“衰减”一点，再按原来的梯度走。为什么用 L2 而不是 L1？L2 对大权重惩罚更重，倾向于把权重均匀地分散到很多特征上；L1 会把很多权重压成正好 0，相当于做特征选择。</p></div>
+    <div class="panel stack" id="ridgeLab">
+      <h4>λ 怎么把最优解拉向原点</h4>
+      <p class="small muted">椭圆是不加惩罚时损失的等高线，叉号是不加惩罚的最优解。橙点是加了 (λ/2)‖w‖² 以后的最优解，灰色曲线是 λ 从 0 增大时橙点走过的路。λ 越大，橙点越靠近原点，权重越小。</p>
+      <div class="row"><label class="ctrl" for="rdL">λ <output id="rdLv">1.0</output><input type="range" id="rdL" min="-2" max="2" step="0.05" value="0"></label></div>
+      <div class="two"><div class="cv" id="rdHost"><canvas id="rdCv" aria-label="损失等高线和不同 λ 下的最优权重"></canvas></div><div class="calc" id="rdCalc"></div></div>
+    </div>
+    <div class="prose"><p>原书的实验故意让过拟合很严重：200 个特征，但只有 20 个训练样本。真实的 w 每个都是 0.01，b = 0.05。</p></div>
+    <div class="cell"><textarea>%matplotlib inline
+from d2l import torch as d2l
+import torch
+from torch import nn
+
+n_train, n_test, num_inputs, batch_size = 20, 100, 200, 5
+true_w, true_b = d2l.ones((num_inputs, 1)) * 0.01, 0.05
+train_data = d2l.synthetic_data(true_w, true_b, n_train)
+train_iter = d2l.load_array(train_data, batch_size)
+test_data = d2l.synthetic_data(true_w, true_b, n_test)
+test_iter = d2l.load_array(test_data, batch_size, is_train=False)</textarea></div>
+    <div class="cell"><textarea>def init_params():
+    w = torch.normal(0, 1, size=(num_inputs, 1), requires_grad=True)
+    b = torch.zeros(1, requires_grad=True)
+    return [w, b]
+
+def l2_penalty(w):
+    return torch.sum(w.pow(2)) / 2</textarea></div>
+    <div class="cell"><textarea>def train(lambd):
+    w, b = init_params()
+    net, loss = lambda X: d2l.linreg(X, w, b), d2l.squared_loss
+    num_epochs, lr = 100, 0.003
+    animator = d2l.Animator(xlabel='epochs', ylabel='loss', yscale='log',
+                            xlim=[5, num_epochs], legend=['train', 'test'])
+    for epoch in range(num_epochs):
+        for X, y in train_iter:
+            # 增加了L2范数惩罚项，
+            # 广播机制使l2_penalty(w)成为一个长度为batch_size的向量
+            l = loss(net(X), y) + lambd * l2_penalty(w)
+            l.sum().backward()
+            d2l.sgd([w, b], lr, batch_size)
+        if (epoch + 1) % 5 == 0:
+            animator.add(epoch + 1, (d2l.evaluate_loss(net, train_iter, loss),
+                                     d2l.evaluate_loss(net, test_iter, loss)))
+    print('w的L2范数是：', torch.norm(w).item())</textarea></div>
+    <div class="prose"><p>不加惩罚（λ = 0）：训练损失一路降，测试损失居高不下，严重过拟合。</p></div>
+    <div class="cell" data-manual="训练 100 个 epoch，不到一秒"><textarea>train(lambd=0)</textarea></div>
+    <div class="prose"><p>加上惩罚（λ = 3）：训练损失高了一点，但测试损失明显下降，w 的范数也小得多。</p></div>
+    <div class="cell" data-manual="训练 100 个 epoch，不到一秒"><textarea>train(lambd=3)</textarea></div>
+    <div class="prose"><p><b>简洁实现</b>：PyTorch 的优化器自带 <code>weight_decay</code> 参数。这里用了“参数组”的写法：只对权重衰减，偏置不衰减。</p></div>
+    <div class="cell"><textarea>def train_concise(wd):
+    net = nn.Sequential(nn.Linear(num_inputs, 1))
+    for param in net.parameters():
+        param.data.normal_()
+    loss = nn.MSELoss(reduction='none')
+    num_epochs, lr = 100, 0.003
+    # 偏置参数没有衰减
+    trainer = torch.optim.SGD([
+        {"params":net[0].weight,'weight_decay': wd},
+        {"params":net[0].bias}], lr=lr)
+    animator = d2l.Animator(xlabel='epochs', ylabel='loss', yscale='log',
+                            xlim=[5, num_epochs], legend=['train', 'test'])
+    for epoch in range(num_epochs):
+        for X, y in train_iter:
+            trainer.zero_grad()
+            l = loss(net(X), y)
+            l.mean().backward()
+            trainer.step()
+        if (epoch + 1) % 5 == 0:
+            animator.add(epoch + 1,
+                         (d2l.evaluate_loss(net, train_iter, loss),
+                          d2l.evaluate_loss(net, test_iter, loss)))
+    print('w的L2范数：', net[0].weight.norm().item())</textarea></div>
+    <div class="cell" data-manual="训练 100 个 epoch，不到一秒"><textarea>train_concise(0)</textarea></div>
+    <div class="cell" data-manual="训练 100 个 epoch，不到一秒"><textarea>train_concise(3)</textarea></div>
+    <div class="callout"><h4>对照你的论文：只给策略头加 L2</h4><p>Safe-DFKT-AG 的损失里有一项 ρ‖θ_g‖²（ρ = 10⁻³），只惩罚策略头 g 的参数，限制它推翻“最接近 0.7”规则的力度。代码在 <code>experiment.py</code> 第 1272 到 1273 行，和上面的 <code>l2_penalty</code> 是同一个东西，只是没有除以 2，而且只对 <code>model.g</code> 的参数求和：</p>
+<pre class="code">if cfg.get("head_l2", 0) &gt; 0 and getattr(model, "is_df", False):
+    loss = loss + cfg["head_l2"] * sum((q ** 2).sum() for q in model.g.parameters())</pre>
+      <p>“只对一部分参数加正则”的思路，和上面“偏置不衰减”的参数组写法一样。</p></div>
+  </div>
+</section>
+
+<section class="part" id="dropout">
+  <div class="part-h"><div class="eyebrow">第三部分</div><h2>4.6 暂退法（Dropout）</h2><span class="src">对应原书第 4.6 节，代码来自原书 PyTorch 版</span></div>
+  <div class="blk">
+    <div class="prose"><p>好的模型应该对输入的小扰动不敏感。暂退法的做法是：<b>训练时</b>每次前向传播，随机把一部分隐藏单元的输出置成 0（概率为 p），剩下的除以 (1 − p) 放大。这样每个单元的期望值不变：E[h′] = (1 − p)·h/(1 − p) = h。网络没法依赖某几个特定的单元，只能学出更“分散”、更稳健的表示。<b>测试时</b>不丢弃，所有单元都用上。</p></div>
+    <div class="panel stack" id="dropLab">
+      <h4>看一次 Dropout 丢掉了谁</h4>
+      <p class="small muted">每个格子是一个隐藏单元的输出（数值写在格子里）。灰色的被丢掉了，剩下的被放大了 1/(1 − p) 倍。多采样几次，看平均值是不是还接近原来的值。</p>
+      <div class="row"><label class="ctrl" for="dpP">丢弃概率 p <output id="dpPv">0.50</output><input type="range" id="dpP" min="0" max="0.9" step="0.05" value="0.5"></label><button class="btn primary" id="dpGo">重新采样</button><button class="btn" id="dp100">采样 1000 次取平均</button></div>
+      <div class="dpgrid" id="dpGrid"></div>
+      <div class="calc" id="dpCalc"></div>
+    </div>
+    <div class="cell"><textarea>from d2l import torch as d2l
+import torch
+from torch import nn
+
+def dropout_layer(X, dropout):
+    assert 0 <= dropout <= 1
+    # 在本情况中，所有元素都被丢弃
+    if dropout == 1:
+        return torch.zeros_like(X)
+    # 在本情况中，所有元素都被保留
+    if dropout == 0:
+        return X
+    mask = (torch.rand(X.shape) > dropout).float()
+    return mask * X / (1.0 - dropout)</textarea></div>
+    <div class="cell"><textarea>X= torch.arange(16, dtype = torch.float32).reshape((2, 8))
+print(X)
+print(dropout_layer(X, 0.))
+print(dropout_layer(X, 0.5))
+print(dropout_layer(X, 1.))</textarea></div>
+    <div class="prose"><p>两个隐藏层的网络，每层 256 个单元。原书建议靠近输入层的丢弃概率小一些（第一层 0.2），后面大一些（第二层 0.5）。<code>self.training</code> 标记现在是训练还是评估。</p></div>
+    <div class="cell"><textarea>num_inputs, num_outputs, num_hiddens1, num_hiddens2 = 784, 10, 256, 256
+
+dropout1, dropout2 = 0.2, 0.5
+
+class Net(nn.Module):
+    def __init__(self, num_inputs, num_outputs, num_hiddens1, num_hiddens2,
+                 is_training = True):
+        super(Net, self).__init__()
+        self.num_inputs = num_inputs
+        self.training = is_training
+        self.lin1 = nn.Linear(num_inputs, num_hiddens1)
+        self.lin2 = nn.Linear(num_hiddens1, num_hiddens2)
+        self.lin3 = nn.Linear(num_hiddens2, num_outputs)
+        self.relu = nn.ReLU()
+
+    def forward(self, X):
+        H1 = self.relu(self.lin1(X.reshape((-1, self.num_inputs))))
+        # 只有在训练模型时才使用dropout
+        if self.training == True:
+            # 在第一个全连接层之后添加一个dropout层
+            H1 = dropout_layer(H1, dropout1)
+        H2 = self.relu(self.lin2(H1))
+        if self.training == True:
+            # 在第二个全连接层之后添加一个dropout层
+            H2 = dropout_layer(H2, dropout2)
+        out = self.lin3(H2)
+        return out
+
+
+net = Net(num_inputs, num_outputs, num_hiddens1, num_hiddens2)</textarea></div>
+    <div class="prose"><p>训练。<b>和原书的不同</b>：原书批量 256；本页只有 6000 张训练图，批量 256 时训练损失卡在 0.65 附近，时过时不过 <code>train_ch3</code> 的检查（我在真 PyTorch 上试过），所以改成 64。</p></div>
+    <div class="cell" data-manual="训练 10 个 epoch，网络比第 8 天大一些，大约需要 20 到 60 秒，期间页面会暂时卡住"><textarea>num_epochs, lr, batch_size = 10, 0.5, 64   # 原书 batch_size 是 256
+loss = nn.CrossEntropyLoss(reduction='none')
+train_iter, test_iter = d2l.load_data_fashion_mnist(batch_size)
+trainer = torch.optim.SGD(net.parameters(), lr=lr)
+d2l.train_ch3(net, train_iter, test_iter, loss, num_epochs, trainer)</textarea></div>
+    <div class="prose"><p><b>简洁实现</b>：在全连接层后面加 <code>nn.Dropout(p)</code>。调用 <code>net.train()</code> 时 Dropout 生效，调用 <code>net.eval()</code> 时 Dropout 什么也不做。<code>d2l.train_ch3</code> 里训练前会调 <code>net.train()</code>，评估前会调 <code>net.eval()</code>。</p></div>
+    <div class="cell"><textarea>net = nn.Sequential(nn.Flatten(),
+        nn.Linear(784, 256),
+        nn.ReLU(),
+        # 在第一个全连接层之后添加一个dropout层
+        nn.Dropout(dropout1),
+        nn.Linear(256, 256),
+        nn.ReLU(),
+        # 在第二个全连接层之后添加一个dropout层
+        nn.Dropout(dropout2),
+        nn.Linear(256, 10))
+
+def init_weights(m):
+    if type(m) == nn.Linear:
+        nn.init.normal_(m.weight, std=0.01)
+
+net.apply(init_weights);</textarea></div>
+    <div class="cell" data-manual="训练 10 个 epoch，大约需要 20 到 60 秒"><textarea>trainer = torch.optim.SGD(net.parameters(), lr=lr)
+d2l.train_ch3(net, train_iter, test_iter, loss, num_epochs, trainer)</textarea></div>
+    <div class="prose"><p>验证一下：评估模式下同一个输入跑两次结果完全一样；训练模式下每次都不一样。</p></div>
+    <div class="cell"><textarea>x = torch.ones(2, 1, 28, 28)
+net.eval()
+print(bool((net(x) == net(x)).all()))
+net.train()
+print(bool((net(x) == net(x)).all()))</textarea></div>
+    <div class="callout"><h4>对照你的论文</h4><p>你论文的 DKT、DKVMN、SAKT、AKT、simpleKT 都用了 <code>nn.Dropout(0.2)</code>，比如 DKT 是 <code>self.drop = nn.Dropout(0.2)</code>，加在 LSTM 输出之后。训练函数 <code>train_kt</code> 每个 epoch 开头调 <code>model.train()</code>，训练结束、恢复最佳检查点后调 <code>model.eval()</code>，评估时 Dropout 就关掉了。这和上面 <code>d2l.train_ch3</code> 的做法一样。</p></div>
+    <div class="qa">
+      <details><summary><b>练习（原书）</b>：把两层的丢弃概率交换（第一层 0.5、第二层 0.2），或者 epoch 加多，会怎样？</summary><p>改上面的 <code>dropout1, dropout2</code> 再重新定义网络和训练。通常靠近输入的层丢太多会损失太多信息，效果变差。原书还问：Dropout 和权重衰减能一起用吗？可以，但两者的收益不一定能叠加，常常需要重新调参。</p></details>
+    </div>
+  </div>
+</section>
+
+<section class="part quiz-sec">
+  <div class="part-h"><div class="eyebrow">课后题</div><h2>做几道题检查一下</h2><span class="src">选择题点选项马上出结果；写形状和写代码的题，网页会现场运行代码判断对错。答题记录只存在你这台设备的浏览器里。</span></div>
+  <div class="quiz dayquiz" data-day="9"></div>
+  <div class="row small muted quizscore" data-day="9"></div>
+</section>
+
+<section class="part">
+  <div class="part-h"><div class="eyebrow">今日小结</div><h2>今天学会了吗？</h2></div>
+  <div class="two">
+    <div class="panel stack">
+      <ul class="check-list" data-day="9">
+        <li><label><input type="checkbox" data-k="c1">训练误差、验证误差、测试误差分别是什么，选模型只能看验证集</label></li>
+        <li><label><input type="checkbox" data-k="c2">两种误差都高是欠拟合，训练低、测试高是过拟合</label></li>
+        <li><label><input type="checkbox" data-k="c3">权重衰减 = 损失加 (λ/2)‖w‖²，每步把 w 乘 (1 − ηλ)</label></li>
+        <li><label><input type="checkbox" data-k="c4">Dropout 训练时随机置零并放大 1/(1 − p)，评估时关掉</label></li>
+        <li><label><input type="checkbox" data-k="c5">我看得懂论文里按验证集 BCE 选检查点的代码</label></li>
+      </ul>
+      <span class="small check-msg"></span>
+    </div>
+    <div class="panel stack">
+      <h3>明天（第 10 天）学什么</h3>
+      <p>原书 4.8 数值稳定性和模型初始化（为什么深层网络会梯度消失、梯度爆炸，Xavier 初始化），4.9 环境和分布偏移（训练数据和实际使用的数据不一样时会怎样）。后者正好是你论文“用模拟器评估、用真实日志训练”要面对的问题。</p>
+    </div>
+  </div>
+</section>
+</main>

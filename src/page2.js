@@ -6,7 +6,7 @@ function colors(){const cs=getComputedStyle(document.documentElement),g=n=>cs.ge
 function fitCanvas(cv,W,H){const r=window.devicePixelRatio||1;cv.width=Math.round(W*r);cv.height=Math.round(H*r);cv.style.width=W+'px';cv.style.height=H+'px';const c=cv.getContext('2d');c.setTransform(r,0,0,r,0,0);return c}
 const MONO='11px "JetBrains Mono",ui-monospace,monospace';
 const bodyFont=px=>`${px}px ${getComputedStyle(document.body).fontFamily}`;
-const DAYS=['1','2','3','4','5','6','7','8'];
+const DAYS=['1','2','3','4','5','6','7','8','9'];
 
 // ---------- 张量图示 ----------
 function cellText(v,dtype){if(dtype==='bool')return v?'T':'F';if(dtype==='int64')return String(v);if(!Number.isFinite(v))return String(v);return Number.isInteger(v)?String(v):(Math.abs(v)>=100?v.toFixed(0):v.toFixed(2))}
@@ -67,12 +67,12 @@ function vizValue(v,env){if(!v)return'';if(MT.isT(v))return`<div class="vz">${vi
 // ---------- 画图（d2l.plot / plt.plot） ----------
 const SERIESC=['--accent','--pos','--neg','--muted'];
 function drawPlot(cv,fig){const C=colors(),cs=getComputedStyle(document.documentElement);const W=Math.max(260,Math.min(560,cv.parentElement.clientWidth||520)),H=Math.round(W*0.62),ctx=fitCanvas(cv,W,H);
-  const pl=50,pr=12,pt=fig.legend?30:12,pb=36;const xs=fig.series.flatMap(s=>s.x).filter(Number.isFinite),ys=[...fig.series.flatMap(s=>s.y),...fig.hlines].filter(Number.isFinite);if(!xs.length)return;
-  let x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys);if(x1===x0)x1=x0+1;if(y1===y0){y1+=1;y0-=1}const py=(y1-y0)*.06;y0-=py;y1+=py;if(fig.xlim){[x0,x1]=fig.xlim}if(fig.ylim){[y0,y1]=fig.ylim}
+  const pl=50,pr=12,pt=fig.legend?30:12,pb=36,lg=fig.yscale==='log',T=v=>lg?(v>0?Math.log10(v):NaN):v;const xs=fig.series.flatMap(s=>s.x).filter(Number.isFinite),ys=[...fig.series.flatMap(s=>s.y),...fig.hlines].map(T).filter(Number.isFinite);if(!xs.length)return;
+  let x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys);if(x1===x0)x1=x0+1;if(y1===y0){y1+=1;y0-=1}const py=(y1-y0)*.06;y0-=py;y1+=py;if(fig.xlim){[x0,x1]=fig.xlim}if(fig.ylim){[y0,y1]=fig.ylim.map(T)}
   const nice=(lo,hi,n)=>{const sp=hi-lo,st0=sp/n,mg=10**Math.floor(Math.log10(st0)),e=st0/mg,st=(e>=7.5?10:e>=3.5?5:e>=1.5?2:1)*mg;const t=[];for(let v=Math.ceil(lo/st)*st;v<=hi+st*1e-9;v+=st)t.push(+v.toFixed(10));return t};
-  const sx=x=>pl+(x-x0)/(x1-x0)*(W-pl-pr),sy=y=>pt+(y1-y)/(y1-y0)*(H-pt-pb);
+  const sx=x=>pl+(x-x0)/(x1-x0)*(W-pl-pr),sy0=y=>pt+(y1-y)/(y1-y0)*(H-pt-pb),sy=y=>sy0(T(y));const SUP={'-':'⁻',0:'⁰',1:'¹',2:'²',3:'³',4:'⁴',5:'⁵',6:'⁶',7:'⁷',8:'⁸',9:'⁹'};
   ctx.font=MONO;ctx.fillStyle=C.muted;ctx.strokeStyle=C.line;ctx.lineWidth=1;ctx.textAlign='right';ctx.textBaseline='middle';
-  for(const t of nice(y0,y1,4)){const y=Math.round(sy(t))+.5;ctx.beginPath();ctx.moveTo(pl,y);ctx.lineTo(W-pr,y);ctx.stroke();ctx.fillText(String(+t.toPrecision(6)),pl-6,y)}
+  let yt=lg?nice(y0,y1,5).filter(Number.isInteger):nice(y0,y1,4);const pow=lg&&yt.length>=2;if(lg&&!pow)yt=nice(y0,y1,4);for(const t of yt){const y=Math.round(sy0(t))+.5;ctx.beginPath();ctx.moveTo(pl,y);ctx.lineTo(W-pr,y);ctx.stroke();ctx.fillText(pow?'10'+String(t).replace(/./g,c=>SUP[c]):lg?String(+(10**t).toPrecision(3)):String(+t.toPrecision(6)),pl-6,y)}
   ctx.textAlign='center';ctx.textBaseline='top';for(const t of nice(x0,x1,5)){const x=Math.round(sx(t))+.5;ctx.fillText(String(+t.toPrecision(6)),x,H-pb+6)}
   ctx.font=bodyFont(12);ctx.fillStyle=C.ink;if(fig.xlabel)ctx.fillText(fig.xlabel,(pl+W-pr)/2,H-16);if(fig.ylabel){ctx.save();ctx.translate(13,(pt+H-pb)/2);ctx.rotate(-Math.PI/2);ctx.textBaseline='middle';ctx.fillText(fig.ylabel,0,0);ctx.restore()}
   for(const h of fig.hlines){ctx.strokeStyle=C.ink;ctx.setLineDash([5,4]);ctx.beginPath();ctx.moveTo(pl,sy(h));ctx.lineTo(W-pr,sy(h));ctx.stroke();ctx.setLineDash([])}
@@ -116,7 +116,7 @@ function setupCells(){$$('.cell').forEach((cell,i)=>{const ta=cell.querySelector
     else if(e.key==='Tab'&&!e.shiftKey){e.preventDefault();const s=ta.selectionStart;ta.setRangeText('    ',s,ta.selectionEnd,'end');autoSize(ta)}})})}
 function runAll(day){ENVS[day]=MT.newEnv();EXEC[day]=0;MT.resetFS();let errs=0;const main=$('#day'+day);
   $$('.cell',main).forEach(c=>{if(c.dataset.manual){const out=c.querySelector('.out');out.className='out';out.textContent='';const t=document.createElement('span');t.className='tip';t.textContent=`这一格要手动运行：${c.dataset.manual}。准备好了点这一格右上角的“运行”。`;out.appendChild(t);out.hidden=false;return}if(!runCellEl(c))errs++});RAN[day]=true;
-  const expected={'1':0,'2':5,'3':3,'4':0,'5':0,'6':0,'7':0,'8':0}[day]||0;
+  const expected={'1':0,'2':5,'3':3,'4':0,'5':0,'6':0,'7':0,'8':0,'9':0}[day]||0;
   $$('.runAllMsg',main).forEach(m=>m.textContent=errs>expected?`运行完了，有 ${errs} 个格子报错，往下找红字。`:expected?`全部运行完了。其中 ${expected} 个格子是故意报错的，用来练习读报错。`:'全部运行完了，没有报错。')}
 document.addEventListener('click',e=>{const b=e.target.closest('.runAll');if(b)runAll(b.dataset.day)});
 
@@ -332,7 +332,7 @@ function drawImage(cv,img,px){const{H,W}=img;cv.width=W;cv.height=H;cv.style.wid
   for(let k=0;k<W*H;k++){const[r,g,b]=viridis((img.px[k]-lo)/rg);d.data[k*4]=r;d.data[k*4+1]=g;d.data[k*4+2]=b;d.data[k*4+3]=255}c.putImageData(d,0,0)}
 function renderFig(wrap,fig){if(fig.axes.some(a=>a.image)){const grid=document.createElement('div');grid.className='imgrid';grid.style.gridTemplateColumns=`repeat(${fig.cols},minmax(0,1fr))`;
     for(const ax of fig.axes){const cell=document.createElement('figure');if(ax.title){const t=document.createElement('figcaption');t.textContent=ax.title;cell.appendChild(t)}if(ax.image){const cv=document.createElement('canvas');cv.setAttribute('aria-label',ax.title||'图片');cell.appendChild(cv);drawImage(cv,ax.image,72)}grid.appendChild(cell)}wrap.appendChild(grid);return}
-  for(const ax of fig.axes){if(!ax.lines.length)continue;const spec={series:ax.lines.map((l,i)=>({x:l.x,y:l.y,label:ax.legend[i]||'',...fmtStyle(l.fmt,i)})),hlines:[],xlabel:ax.xlabel,ylabel:ax.ylabel,legend:ax.legend.length>0,xlim:ax.xlim,ylim:ax.ylim};const cv=document.createElement('canvas');cv.setAttribute('aria-label','训练曲线');wrap.appendChild(cv);drawPlot(cv,spec)}}
+  for(const ax of fig.axes){if(!ax.lines.length)continue;const spec={series:ax.lines.map((l,i)=>({x:l.x,y:l.y,label:ax.legend[i]||'',...fmtStyle(l.fmt,i)})),hlines:[],xlabel:ax.xlabel,ylabel:ax.ylabel,legend:ax.legend.length>0,xlim:ax.xlim,ylim:ax.ylim,yscale:ax.yscale};const cv=document.createElement('canvas');cv.setAttribute('aria-label','训练曲线');wrap.appendChild(cv);drawPlot(cv,spec)}}
 
 // ---------- 第 7 天：解压内嵌的 Fashion-MNIST，像素查看器 ----------
 let FM_U8=null;
@@ -372,6 +372,36 @@ function actRender(){const x=+$('#actX').value;$('#actXv').textContent=x.toFixed
   $('#actCalc').textContent=`函数        值          导数\nReLU     ${Math.max(0,x).toFixed(4).padStart(8)}     ${(x>0?1:0).toFixed(4).padStart(8)}   ${x>0?'导数是 1，梯度原样通过':'导数是 0，梯度被挡住'}\nsigmoid  ${s.toFixed(4).padStart(8)}     ${(s*(1-s)).toFixed(4).padStart(8)}   ${Math.abs(x)>4?'导数接近 0：饱和区，梯度几乎消失':'最大 0.25，在 x = 0 处'}\ntanh     ${t.toFixed(4).padStart(8)}     ${(1-t*t).toFixed(4).padStart(8)}   ${Math.abs(x)>3?'导数接近 0：饱和区':'最大 1，在 x = 0 处'}\n\n叠 10 层 sigmoid、每层导数都取最大值 0.25：\n0.25^10 = ${(0.25**10).toExponential(2)}，梯度到第一层时几乎没了。`}
 $('#actX').addEventListener('input',actRender);
 
+// ---------- 第 9 天：论文的数据划分 ----------
+const SP_DS=[['ASSISTments 2009',3841,{train:3718,val:411,test:1050}],['EdNet',5000,{train:3600,val:400,test:1000}],['Algebra 2005',574,{train:1604,val:183,test:448}],['Junyi',5000,{train:5159,val:571,test:1414}]];
+function spRender(){const[nm,n,w]=SP_DS[+$('#spDs').value],nt=Math.max(1,Math.round(0.2*n)),rest=n-nt,nv=Math.max(1,Math.round(0.1*rest)),ntr=rest-nv;
+  $('#spBar').innerHTML=[['tr','训练',ntr],['va','验证',nv],['te','测试',nt]].map(([c,l,k])=>`<div class="${c}" style="flex:${k}"><b>${l}</b> ${k}</div>`).join('');
+  $('#spCalc').textContent=`${nm}：一共 ${n} 个学生\n先随机打乱，取 20% = ${nt} 个做测试集\n剩下 ${rest} 个里取 10% = ${nv} 个做验证集\n其余 ${ntr} 个做训练集\n\n每个学生的做题序列再切成 100 步一段（窗口）：\n训练 ${w.train} 段，验证 ${w.val} 段，测试 ${w.test} 段\n\n代码：experiment.py 第 648 到 650 行（prep_world）\n训练集：拿来更新参数\n验证集：每个 epoch 算一次 BCE，挑最好的检查点\n测试集：最后只看一次，报告在论文表格里`}
+$('#spDs').innerHTML=SP_DS.map((d,i)=>`<option value="${i}">${d[0]}（${d[1]} 个学生）</option>`).join('');$('#spDs').onchange=spRender;
+// ---------- 第 9 天：λ 把最优解拉向原点 ----------
+const RD={A:[[3,1.2],[1.2,0.8]],ws:[2,1.4]};
+function rdSolve(l){const[[a,b],[c,d]]=RD.A,p=a+l,s=d+l,det=p*s-b*c,r0=a*RD.ws[0]+b*RD.ws[1],r1=c*RD.ws[0]+d*RD.ws[1];return[(s*r0-b*r1)/det,(p*r1-c*r0)/det]}
+function rdRender(){const host=$('#rdHost');if(!host.offsetParent)return;const C=colors(),l=10**+$('#rdL').value;$('#rdLv').textContent=l<0.1?l.toFixed(3):l.toFixed(2);
+  const W=Math.max(240,host.clientWidth),H=Math.round(Math.min(300,W*.8)),ctx=fitCanvas($('#rdCv'),W,H),sc=Math.min(W,H)/4.2,ox=W*.3,oy=H*.75,sx=x=>ox+x*sc,sy=y=>oy-y*sc;
+  ctx.strokeStyle=C.line;ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(0,oy);ctx.lineTo(W,oy);ctx.moveTo(ox,0);ctx.lineTo(ox,H);ctx.stroke();
+  const[[a,b],[,d]]=RD.A,tr=(a+d)/2,q=Math.sqrt(((a-d)/2)**2+b*b),e1=tr+q,e2=tr-q,th=Math.atan2(e1-a,b);
+  ctx.strokeStyle=C.muted;ctx.globalAlpha=.6;for(const lv of[0.1,0.4,1,2,3.5]){ctx.beginPath();for(let k=0;k<=80;k++){const t=k/80*2*Math.PI,u=Math.sqrt(2*lv/e1)*Math.cos(t),v=Math.sqrt(2*lv/e2)*Math.sin(t),x=RD.ws[0]+u*Math.cos(th)-v*Math.sin(th),y=RD.ws[1]+u*Math.sin(th)+v*Math.cos(th);k?ctx.lineTo(sx(x),sy(y)):ctx.moveTo(sx(x),sy(y))}ctx.stroke()}ctx.globalAlpha=1;
+  ctx.strokeStyle=C.muted;ctx.lineWidth=2;ctx.beginPath();for(let k=0;k<=120;k++){const p=rdSolve(10**(-2+k/120*4.5));k?ctx.lineTo(sx(p[0]),sy(p[1])):ctx.moveTo(sx(p[0]),sy(p[1]))}ctx.stroke();
+  ctx.strokeStyle=C.ink;ctx.lineWidth=2;const X=sx(RD.ws[0]),Y=sy(RD.ws[1]);ctx.beginPath();ctx.moveTo(X-5,Y-5);ctx.lineTo(X+5,Y+5);ctx.moveTo(X+5,Y-5);ctx.lineTo(X-5,Y+5);ctx.stroke();
+  const w=rdSolve(l);ctx.fillStyle=C.accent;ctx.strokeStyle=C.surface;ctx.beginPath();ctx.arc(sx(w[0]),sy(w[1]),6,0,7);ctx.fill();ctx.stroke();
+  ctx.font=bodyFont(12);ctx.fillStyle=C.ink;ctx.fillText('w₁',W-20,oy-6);ctx.fillText('w₂',ox+6,14);ctx.fillText('原点',ox+4,oy+14);
+  const n0=Math.hypot(...RD.ws),n1=Math.hypot(...w),L=x=>{const u=x[0]-RD.ws[0],v=x[1]-RD.ws[1];return(a*u*u+2*b*u*v+d*v*v)/2};
+  $('#rdCalc').textContent=`λ = ${l.toPrecision(3)}\n\n不加惩罚的最优解 w* = (${RD.ws[0].toFixed(2)}, ${RD.ws[1].toFixed(2)})  ‖w*‖ = ${n0.toFixed(3)}\n加惩罚后的最优解 w  = (${w[0].toFixed(3)}, ${w[1].toFixed(3)})  ‖w‖ = ${n1.toFixed(3)}\n\n原来的损失 L(w)      = ${L(w).toFixed(4)}（比最小值 0 高了）\n惩罚项 (λ/2)‖w‖²    = ${(l/2*n1*n1).toFixed(4)}\n两项加起来是最小的。\n\n${l<0.05?'λ 很小：几乎没有约束，w ≈ w*。':l>20?'λ 很大：w 被压得接近 0，模型几乎什么都学不到（欠拟合）。':'λ 适中：用一点训练损失换更小的权重。'}`}
+$('#rdL').addEventListener('input',rdRender);
+// ---------- 第 9 天：Dropout 丢掉了谁 ----------
+const DP={h:[1.2,0.4,2.5,0.9,1.8,0.0,3.1,0.7,1.5,2.2,0.3,1.1,2.8,0.6,1.9,1.0],mask:null};
+function dpSample(){const p=+$('#dpP').value;DP.mask=DP.h.map(()=>Math.random()>p);DP.avg=null;dpRender()}
+function dpAvg(){const p=+$('#dpP').value,s=DP.h.map(()=>0);for(let r=0;r<1000;r++)DP.h.forEach((v,i)=>{if(Math.random()>p)s[i]+=p<1?v/(1-p):0});DP.avg=s.map(v=>v/1000);dpRender()}
+function dpRender(){const p=+$('#dpP').value;$('#dpPv').textContent=p.toFixed(2);if(!DP.mask)DP.mask=DP.h.map((_,i)=>i%2===0);const k=1/(1-p);
+  $('#dpGrid').innerHTML=DP.h.map((v,i)=>{const on=DP.mask[i];return`<div class="${on?'on':'off'}"><span class="small muted">原值 ${v.toFixed(1)}</span><b>${on?(v*k).toFixed(2):'0'}</b>${DP.avg?`<span class="small">平均 ${DP.avg[i].toFixed(2)}</span>`:''}</div>`}).join('');
+  const kept=DP.mask.filter(Boolean).length,sum0=DP.h.reduce((a,b)=>a+b,0),sum1=DP.h.reduce((a,v,i)=>a+(DP.mask[i]?v*k:0),0);
+  $('#dpCalc').textContent=`p = ${p.toFixed(2)}：每个单元以 ${p.toFixed(2)} 的概率被置 0，留下的乘 1/(1 − p) = ${k.toFixed(3)}\n这次留下 ${kept} / 16 个\n\n原来 16 个数的和：${sum0.toFixed(2)}\n丢弃并放大后的和：${sum1.toFixed(2)}（每次都不同，但期望等于原来的和）${DP.avg?`\n1000 次平均后的和：${DP.avg.reduce((a,b)=>a+b,0).toFixed(2)}，每格的平均都接近原值`:''}\n\nmodel.eval() 时 Dropout 什么也不做，输出就是原来的 h。`}
+$('#dpP').addEventListener('input',()=>{DP.avg=null;dpRender()});$('#dpGo').onclick=dpSample;$('#dp100').onclick=dpAvg;
 // ---------- 小结勾选、课程表、切换天数 ----------
 function checksSetup(){$$('.check-list').forEach(ul=>{const day=ul.dataset.day,key='checks'+day,st=store.get(key,{});$$('input',ul).forEach(c=>{c.checked=!!st[c.dataset.k];c.onchange=()=>{const s=store.get(key,{});s[c.dataset.k]=c.checked;store.set(key,s);checkMsg(ul)}});checkMsg(ul)})}
 function checkMsg(ul){const day=ul.dataset.day,all=$$('input',ul),n=all.filter(c=>c.checked).length,msg=ul.parentElement.querySelector('.check-msg');const done=n===all.length;
@@ -384,7 +414,7 @@ const ROAD=[['1','第 1 章 引言 + 2.1 数据操作'],['2','2.2 数据预处�
   ['18','11.4 至 11.6 + 11.10 小批量随机梯度下降、动量、Adam（论文用的优化器）','paper'],['19','论文专题：离线策略评估 IPS、SNIPS、DR（书里没有）','paper'],['20','论文专题：逐行读你的 experiment.py','paper'],
   ['选学','4.7 前向传播、反向传播和计算图；4.10 Kaggle 房价预测'],['选学','第 6 至 7 章 卷积神经网络（LeNet、ResNet 等）'],['选学','9.3 至 9.8 深度和双向循环网络、机器翻译、seq2seq'],['选学','第 11 章其余优化算法、第 12 章计算性能'],['选学','第 13 至 15 章 计算机视觉、自然语言处理']];
 function roadRender(){$('#roadList').innerHTML=ROAD.map(([d,t,f])=>{const live=DAYS.includes(d);return`<div><span class="d">${/^\d+$/.test(d)?`第 ${d} 天`:d}</span><span>${live?`<a href="#day${d}">${esc(t)}</a>`:esc(t)}${f==='paper'?' <span class="mark">论文</span>':''}</span><span class="st${live?' now':''}">${live?'已上线':'未上线'}</span></div>`}).join('')}
-const REDRAW={'1':()=>{kRender();imRender();ofRender()},'2':()=>{dotRender();normRender()},'3':()=>{secRender();gradRender()},'4':()=>{diceRender();bayesRender();bktRender()},'5':()=>{houseRender();if(!sgd.X)sgdData();sgdRender()},'6':()=>{smRender();calRender()},'7':()=>{pixRender()},'8':()=>{uaRender();actRender()}};
+const REDRAW={'1':()=>{kRender();imRender();ofRender()},'2':()=>{dotRender();normRender()},'3':()=>{secRender();gradRender()},'4':()=>{diceRender();bayesRender();bktRender()},'5':()=>{houseRender();if(!sgd.X)sgdData();sgdRender()},'6':()=>{smRender();calRender()},'7':()=>{pixRender()},'8':()=>{uaRender();actRender()},'9':()=>{spRender();rdRender();dpRender()}};
 function showDay(day,scroll){if(!DAYS.includes(day))day='1';$$('main.day').forEach(m=>m.hidden=m.dataset.day!==day);$$('[data-nav]').forEach(a=>a.classList.toggle('on',a.dataset.nav===day));store.set('lastDay',day);
   if(!RAN[day]){if(day==='7'&&!FM_U8){fmReady.then(ok=>{if(ok&&!RAN['7']){runAll('7');REDRAW['7']()}});}else runAll(day)}$$('#day'+day+' textarea').forEach(autoSize);REDRAW[day]();if(scroll)window.scrollTo(0,0)}
 function route(){const h=location.hash.replace('#','');const m=h.match(/^day(\d+)$/);if(m){showDay(m[1],true);return}

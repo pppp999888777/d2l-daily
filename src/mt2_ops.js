@@ -25,16 +25,16 @@ function tensorRepr(T){if(T.np)return npRepr(T);
   // 对齐 torch._tensor_str._add_suffixes：放不下时换行
   let s='tensor('+body,last=s.length-s.lastIndexOf('\n')+1;for(const x of sufs){if(last+x.length+2>80){s+=',\n'+' '.repeat(7)+x;last=7+x.length}else{s+=', '+x;last+=x.length+2}}
   return s+')'}
-function npFloatStrs(vals){ // numpy 风格：0. , 0.1, 2.5
-  const fin=vals.filter(Number.isFinite);let d=0;for(const v of fin){const s=String(+v.toFixed(8));const p=s.indexOf('.');if(p>=0)d=Math.max(d,s.length-p-1)}d=Math.min(d,8);
-  return vals.map(v=>{if(Number.isNaN(v))return'nan';if(!Number.isFinite(v))return v>0?'inf':'-inf';let s=v.toFixed(d);if(d>0){const t=s.replace(/0+$/,'');s=t.padEnd(s.length,' ')}else s+='.';return s})}
-function npRepr(T){const vals=[...T.data];let strs;if(T.dtype==='bool')strs=vals.map(v=>v?' True':'False');else if(T.dtype==='int64')strs=vals.map(String);else strs=npFloatStrs(vals);
-  const w=Math.max(1,...strs.map(s=>s.length)),map=new Map();vals.forEach((v,i)=>map.set(i,strs[i]));
-  if(T.shape.length===0)return strs[0].trim();
-  let i=0;const f=()=>strs[i++];const fake={shape:T.shape,data:T.data};const st=strides(T.shape);const nd=T.shape.length;
-  const rec=(dim,off,indent)=>{const n=T.shape[dim];if(dim===nd-1){const items=[];for(let k=0;k<n;k++)items.push(strs[off+k*st[dim]].padStart(w));const per=Math.max(1,Math.floor((75-indent)/(w+2)));const lines=[];for(let k=0;k<items.length;k+=per)lines.push(items.slice(k,k+per).join(', '));return'['+lines.join(',\n'+' '.repeat(indent+1))+']'}
-    const subs=[];for(let k=0;k<n;k++)subs.push(rec(dim+1,off+k*st[dim],indent+1));return'['+subs.join(','+'\n'.repeat(nd-dim-1)+' '.repeat(indent+1))+']'};
-  return'array('+rec(0,0,6)+(T.dtype==='float32'?', dtype=float32':'')+')'}
+function npShort(v,f32){if(Number.isNaN(v))return'nan';if(!Number.isFinite(v))return v>0?'inf':'-inf';let s;if(f32){for(let p=1;p<=9;p++){s=v.toPrecision(p);if(Math.fround(+s)===v)break}s=String(+s)}else s=String(v);
+  if(/e/.test(s)){const n=+s;s=Math.abs(n)<1?n.toFixed(Math.min(20,Math.ceil(-Math.log10(Math.abs(n)))+8)).replace(/0+$/,''):n.toFixed(0)}
+  const k=s.indexOf('.');if(k>=0&&s.length-k-1>8){s=v.toFixed(8).replace(/0+$/,'');if(s.endsWith('.'))s=s}return s}
+function npElemStrs(T){const vals=[...T.data];if(T.dtype==='bool')return vals.map(v=>v?' True':'False');if(T.dtype==='int64'){const w=Math.max(...vals.map(v=>String(v).length));return vals.map(v=>String(v).padStart(w))}
+  const f32=T.dtype==='float32',parts=vals.map(v=>{const s=npShort(v,f32);if(!/^-?\d/.test(s))return[s,null];const k=s.indexOf('.');return k<0?[s,'']:[s.slice(0,k),s.slice(k+1)]});
+  const L=Math.max(...parts.map(p=>p[0].length)),Fm=Math.max(0,...parts.map(p=>p[1]==null?0:p[1].length));return parts.map(([a,b])=>b==null?a.padStart(L+1+Fm):a.padStart(L)+'.'+b.padEnd(Fm))}
+function npRepr(T,asStr){const strs=npElemStrs(T),st=strides(T.shape),nd=T.shape.length,sep=asStr?' ':', ';if(nd===0)return strs[0].trim();const w=Math.max(...strs.map(s=>s.length));
+  const base=asStr?1:7;const rec=(dim,off,indent)=>{const n=T.shape[dim];if(dim===nd-1){const items=[];for(let k=0;k<n;k++)items.push(strs[off+k*st[dim]]);const per=Math.max(1,Math.floor((75-indent)/(w+sep.length)));const lines=[];for(let k=0;k<items.length;k+=per)lines.push(items.slice(k,k+per).join(sep));return'['+lines.join((asStr?'':',')+'\n'+' '.repeat(indent+1))+']'}
+    const subs=[];for(let k=0;k<n;k++)subs.push(rec(dim+1,off+k*st[dim],indent+1));return'['+subs.join((asStr?'':',')+'\n'.repeat(nd-dim-1)+' '.repeat(indent+1))+']'};
+  const body=rec(0,0,base-1);return asStr?body:'array('+body+(T.dtype==='float32'?', dtype=float32':'')+')'}
 function pyFloatRepr(v){if(Number.isNaN(v))return'nan';if(!Number.isFinite(v))return v>0?'inf':'-inf';if(v===0)return Object.is(v,-0)?'-0.0':'0.0';
   const e=v.toExponential(),m=e.match(/^(-?)(\d)(?:\.(\d+))?e([+-]\d+)$/),sign=m[1],digits=m[2]+(m[3]||''),exp=+m[4];
   if(exp<-4||exp>=16){const mant=digits.length>1?digits[0]+'.'+digits.slice(1):digits;return sign+mant+'e'+(exp<0?'-':'+')+String(Math.abs(exp)).padStart(2,'0')}
@@ -49,7 +49,7 @@ function repr(v){if(isT(v))return(v.isParam?'Parameter containing:\n':'')+tensor
     case'fn':return`<built-in function ${v.name}>`;case'func':return`<function ${v.name} at 0x${(v.id||4400000000).toString(16)}>`;case'gradfn':return`<${v.g.name} object at 0x${v.g.id.toString(16)}>`;
     case'df':return dfRepr(v);case'series':return seriesRepr(v);case'index':return`Index([${v.items.map(x=>strRepr(x)).join(', ')}], dtype='str')`;
     case'iter':return'<generator object>';case'nn':return nnRepr(v);case'fmnist':return fmRepr(v);case'transform':return tfRepr(v);case'fig':return`<Figure size ${v.cols*150}x${v.rows*150} with ${v.axes.length} Axes>`;case'ax':return'<Axes: >';case'axarr':return`array([${v.fig.axes.map(()=>'<Axes: >').join(', ')}], dtype=object)`;case'pil':return`<PIL.Image.Image image mode=L size=${v.W}x${v.H}>`;case'obj':return isModuleObj(v)?modRepr(v):`<__main__.${v.cls.name} object at 0x${(v.id||(v.id=newId())).toString(16)}>`;case'cls':return`<class '__main__.${v.name}'>`;case'optim':return optRepr(v);case'loader':return`<torch.utils.data.dataloader.DataLoader object at 0x${(v.id||(v.id=newId())).toString(16)}>`;case'tdataset':return`<torch.utils.data.dataset.TensorDataset object at 0x${(v.id||(v.id=newId())).toString(16)}>`;case'bound':return`<bound method ${v.f.name} of ${repr(v.self)}>`;case'file':return`<_io.TextIOWrapper name='${v.path}' mode='${v.mode}'>`;case'dummy':return'<object>';case'dist':return`${v.name}()`}return String(v)}
-const str=v=>v.t==='str'?v.v:repr(v);
+const str=v=>v.t==='str'?v.v:(isT(v)&&v.np)?npRepr(v,true):repr(v);
 
 // ---------- 类型与广播 ----------
 function asTensor(v){if(isT(v))return v;if(v.t==='int'){const t=new Tensor([],[v.v],'int64');t.weak=true;return t}if(v.t==='float'){const t=new Tensor([],[v.v],'float64');t.weak=true;t.weakFloat=true;return t}if(v.t==='bool'){const t=new Tensor([],[v.v],'bool');t.weak=true;return t}
@@ -168,3 +168,5 @@ function maxmin(x,y,sign){const A=asTensor(x),Bt=asTensor(y),out=bshape(A.shape,
 // PyTorch 的 arange 用乘加融合（FMA）算 start + i*step，这里精确模拟
 function splitD(a){const t=134217729*a,hi=t-(t-a);return[hi,a-hi]}
 function fmaD(a,b,c){const p=a*b;if(!Number.isFinite(p))return p+c;const[ah,al]=splitD(a),[bh,bl]=splitD(b);const e=((ah*bh-p)+ah*bl+al*bh)+al*bl;const s=p+c,bb=s-p,es=(p-(s-bb))+(c-bb);return s+(es+e)}
+
+function gammaFn(x){if(Number.isInteger(x)&&x>0&&x<171){let r=1;for(let i=2;i<x;i++)r*=i;return r}if(x<0.5)return Math.PI/(Math.sin(Math.PI*x)*gammaFn(1-x));x-=1;const g=7,c=[0.99999999999980993,676.5203681218851,-1259.1392167224028,771.32342877765313,-176.61502916214059,12.507343278686905,-0.13857109526572012,9.9843695780195716e-6,1.5056327351493116e-7];let a=c[0];const t=x+g+0.5;for(let i=1;i<9;i++)a+=c[i]/(x+i);return Math.sqrt(2*Math.PI)*t**(x+0.5)*Math.exp(-t)*a}

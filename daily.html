@@ -55,7 +55,7 @@ header.top .brand{font-weight:700;font-size:14px;white-space:nowrap}
 .days a.soon{opacity:.55;pointer-events:none}
 .days a.done::after{content:" ✓";color:var(--ok)}
 
-.hero{padding-block:40px 18px;display:grid;gap:14px}
+.hero{padding-block:40px 18px;display:grid;grid-template-columns:minmax(0,1fr);gap:14px}
 .eyebrow{font-size:12.5px;letter-spacing:.12em;color:var(--accent);font-weight:700}
 .lead{font-size:1.05rem;color:var(--muted);max-width:62ch}
 .plan{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-top:6px}
@@ -64,16 +64,16 @@ header.top .brand{font-weight:700;font-size:14px;white-space:nowrap}
 .plan ul{margin:6px 0 0;padding-left:1.1em} .plan li{font-size:14px}
 
 section.part{padding-block:30px;border-top:1px solid var(--line)}
-.part-h{display:grid;gap:4px;margin-bottom:16px}
+.part-h{display:grid;grid-template-columns:minmax(0,1fr);gap:4px;margin-bottom:16px}
 .part-h .src{font-size:13px;color:var(--muted)}
-.prose{display:grid;gap:12px;max-width:68ch}
-.blk{display:grid;gap:12px;margin-top:26px}
+.prose{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;max-width:68ch}
+.blk{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;margin-top:26px}
 .blk-h{display:flex;gap:10px;align-items:baseline}
 .blk-h .n{font-family:var(--f-mono);font-size:12.5px;color:var(--accent);font-weight:600;flex:none}
 
 .panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;min-width:0}
 .two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
-.stack{display:grid;gap:10px;align-content:start;min-width:0}
+.stack{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;align-content:start;min-width:0}
 .row{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center}
 .ctrl{display:grid;gap:2px;font-size:13px;color:var(--muted)}
 .ctrl output{font-family:var(--f-mono);color:var(--ink);font-weight:600}
@@ -85,6 +85,12 @@ input[type=text]{font:inherit;font-family:var(--f-mono);font-size:14px;color:var
 .btn.sm{font-size:12.5px;padding:2px 9px}
 :is(.btn,input,textarea,a,summary,canvas):focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .note{font-size:13.5px;color:var(--muted);background:var(--sunk);border-radius:8px;padding:10px 12px}
+.splitbar{display:flex;gap:2px;border-radius:8px;overflow:hidden;font-size:12px}
+.splitbar>div{padding:8px 6px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--ink)}
+.splitbar .tr{background:color-mix(in srgb,var(--accent) 22%,var(--surface))}.splitbar .va{background:color-mix(in srgb,var(--pos) 26%,var(--surface))}.splitbar .te{background:color-mix(in srgb,var(--neg) 22%,var(--surface))}
+.dpgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(76px,1fr));gap:6px}
+.dpgrid>div{display:flex;flex-direction:column;gap:2px;padding:6px 8px;border-radius:8px;border:1px solid var(--line);font-family:var(--f-mono)}
+.dpgrid .on{background:color-mix(in srgb,var(--accent) 14%,var(--surface))}.dpgrid .off{background:var(--sunk);opacity:.6}
 .calc{font-family:var(--f-mono);font-size:13px;background:var(--sunk);border-radius:8px;padding:10px 12px;white-space:pre;overflow-x:auto;line-height:1.7}
 .ok{color:var(--ok);font-weight:600} .bad{color:var(--bad);font-weight:600}
 table.t{border-collapse:collapse;width:100%;font-size:14px}
@@ -100,8 +106,8 @@ table.t td.num{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
 .cv canvas{display:block;max-width:100%;border-radius:8px;background:var(--sunk)}
 
 /* 测验 */
-.quiz{display:grid;gap:10px}
-.q{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:grid;gap:8px}
+.quiz{display:grid;grid-template-columns:minmax(0,1fr);gap:10px}
+.q{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:grid;grid-template-columns:minmax(0,1fr);gap:8px}
 .q .opts{display:flex;flex-wrap:wrap;gap:6px}
 .q .opts .btn.right{background:color-mix(in srgb,var(--ok) 20%,var(--surface));border-color:var(--ok)}
 .q .opts .btn.wrong{background:color-mix(in srgb,var(--bad) 14%,var(--surface));border-color:var(--bad)}
@@ -155,8 +161,8 @@ footer{padding-block:28px 50px;color:var(--muted);font-size:13px;border-top:1px 
 @media (max-width:760px){.two{grid-template-columns:minmax(0,1fr)} header.top .brand{display:none}}
 @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
 
-.callout{background:color-mix(in srgb,var(--pos) 9%,var(--surface));border:1px solid color-mix(in srgb,var(--pos) 35%,var(--line));border-radius:10px;padding:12px 14px;display:grid;gap:6px;max-width:72ch}
-.callout h4{font-size:14.5px}.callout p{font-size:14px}
+.callout{min-width:0;grid-template-columns:minmax(0,1fr);background:color-mix(in srgb,var(--pos) 9%,var(--surface));border:1px solid color-mix(in srgb,var(--pos) 35%,var(--line));border-radius:10px;padding:12px 14px;display:grid;gap:6px;max-width:72ch}
+pre.code{font-family:var(--f-mono);font-size:12.5px;background:var(--sunk);border-radius:8px;padding:10px 12px;overflow-x:auto;margin:0;line-height:1.6;white-space:pre}pre.code .c{color:var(--muted)}.callout h4{font-size:14.5px}.callout p{font-size:14px}
 .flowline{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;font-size:13px}
 .flowline span{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:5px 10px;display:grid;line-height:1.4}
 .flowline span b{font-size:12.5px}.flowline i{font-style:normal;color:var(--muted)}
@@ -199,7 +205,7 @@ code.big{font-size:.8em;background:var(--sunk);padding:0 .25em;border-radius:6px
 </style><header class="top"><div class="wrap">
   <span class="brand">动手学深度学习每日课</span>
   <nav class="days" id="dayNav" aria-label="课程天数">
-    <a href="#day1" data-nav="1">第 1 天</a><a href="#day2" data-nav="2">第 2 天</a><a href="#day3" data-nav="3">第 3 天</a><a href="#day4" data-nav="4">第 4 天</a><a href="#day5" data-nav="5">第 5 天</a><a href="#day6" data-nav="6">第 6 天</a><a href="#day7" data-nav="7">第 7 天</a><a href="#day8" data-nav="8">第 8 天</a>
+    <a href="#day1" data-nav="1">第 1 天</a><a href="#day2" data-nav="2">第 2 天</a><a href="#day3" data-nav="3">第 3 天</a><a href="#day4" data-nav="4">第 4 天</a><a href="#day5" data-nav="5">第 5 天</a><a href="#day6" data-nav="6">第 6 天</a><a href="#day7" data-nav="7">第 7 天</a><a href="#day8" data-nav="8">第 8 天</a><a href="#day9" data-nav="9">第 9 天</a>
     <a href="#road" class="road-link">课程表</a>
     <a class="soon" href="#road">第 9 天</a><a class="soon" href="#road">第 10 天</a>
   </nav>
@@ -2338,6 +2344,331 @@ logit.shape, torch.sigmoid(logit).reshape(-1)</textarea></div>
 </section>
 </main>
 
+<main class="wrap day" id="day9" data-day="9" hidden>
+<section class="hero">
+  <div class="eyebrow">第 9 天 · 原书第 4.4 节 + 第 4.5 节 + 第 4.6 节 · 论文路线第 2 课</div>
+  <h1>过拟合，以及对付它的三件工具</h1>
+  <p class="lead">模型在训练数据上表现好不难，难的是在没见过的数据上也好。今天学怎么判断模型是欠拟合还是过拟合、怎么用验证集选模型，以及两种最常用的正则化方法：权重衰减和暂退法（Dropout）。这三样你论文里都用了：按验证集 BCE 选检查点、对策略头加 ρ‖θ_g‖²、所有神经网络里的 <code>nn.Dropout(0.2)</code>。</p>
+  <div class="plan">
+    <div><b class="k">今天的时间</b>大约 70 分钟。训练格要手动运行，每个几秒到几十秒。</div>
+    <div><b class="k">学完你能</b><ul><li>区分训练误差、验证误差、测试误差</li><li>判断欠拟合和过拟合</li><li>写出 L2 惩罚，知道它为什么叫“权重衰减”</li><li>实现 Dropout，知道训练和评估时的区别</li></ul></div>
+    <div><b class="k">和你的论文</b><ul><li>80/20 划分学生，再留 10% 做验证集</li><li><code>model.train()</code> 和 <code>model.eval()</code></li></ul></div>
+  </div>
+</section>
+
+<section class="part" id="overfit2">
+  <div class="part-h"><div class="eyebrow">第一部分</div><h2>4.4 模型选择、欠拟合和过拟合</h2><span class="src">对应原书第 4.4 节</span></div>
+  <div class="prose"><div class="row"><button class="btn primary runAll" data-day="9">从头全部运行</button><span class="small muted runAllMsg"></span></div></div>
+
+  <div class="blk"><div class="blk-h"><span class="n">4.4.1</span><h3>训练误差和泛化误差</h3></div>
+    <div class="prose">
+      <p><b>训练误差</b>是模型在训练集上的误差；<b>泛化误差</b>是模型在无穷多同分布新数据上的期望误差，只能用一个独立的测试集去估计。原书举了个例子：一个学生把往年考题的答案全背下来，往年题全对，但遇到新题就不会了。这就是只降低了训练误差，泛化误差没降。</p>
+      <p>这一切有个前提：训练数据和测试数据是从同一个分布里独立抽出来的（<b>独立同分布</b>，i.i.d.）。这个假设不成立时会发生什么，是第 10 天“分布偏移”的内容，也是你论文“模拟器和真实日志不一样”这个问题的根源。</p>
+      <p>影响模型能不能泛化的因素有：可调参数的数量（自由度）、参数能取的值的范围、训练样本的数量。参数越多、取值越自由、样本越少，越容易过拟合。</p>
+    </div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">4.4.2</span><h3>模型选择和验证集</h3></div>
+    <div class="prose">
+      <p>选模型（比如隐藏层要几层、学习率多大）时，<b>绝对不能看测试集</b>，否则测试集就被用来“训练”了，它的结果不再是公正的估计。正确做法是从训练数据里再分出一块<b>验证集</b>，用它来比较和挑选。训练数据很少时，可以用 <b>K 折交叉验证</b>：把训练数据分成 K 份，轮流用 1 份验证、K − 1 份训练，最后取平均。</p>
+    </div>
+    <div class="panel stack" id="splitLab">
+      <h4>你论文的数据划分</h4>
+      <p class="small muted">你论文按学生划分（不是按做题记录划分，这样同一个学生的记录不会同时出现在训练集和测试集）。选一个数据集看看各部分有多少学生。数字来自论文结果文件里的数据摘要（results.json）。</p>
+      <div class="row"><label class="ctrl" for="spDs">数据集 <select id="spDs"><option value="0">ASSISTments 2009（3841 个学生）</option><option value="1">EdNet（5000 个学生）</option><option value="2">Algebra 2005（574 个学生）</option><option value="3">Junyi（5000 个学生）</option></select></label></div>
+      <div class="splitbar" id="spBar" aria-label="训练、验证、测试的划分比例"></div>
+      <div class="calc" id="spCalc"></div>
+    </div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">4.4.3</span><h3>多项式回归实验</h3></div>
+    <div class="prose"><p>原书用一个实验同时演示正常拟合、欠拟合和过拟合。数据按一个 3 阶多项式生成：y = 5 + 1.2x − 3.4x²/2! + 5.6x³/3! + 噪声。然后分别用 3 阶（刚好）、1 阶（太简单）、19 阶（太复杂）的多项式去拟合，训练集只有 100 个样本。除以阶乘是为了不让高次项的数值太大。</p></div>
+    <div class="cell"><textarea>from d2l import torch as d2l
+import torch
+from torch import nn
+import numpy as np
+import math</textarea></div>
+    <div class="cell"><textarea>max_degree = 20  # 多项式的最大阶数
+n_train, n_test = 100, 100  # 训练和测试数据集大小
+true_w = np.zeros(max_degree)  # 分配大量的空间
+true_w[0:4] = np.array([5, 1.2, -3.4, 5.6])
+
+features = np.random.normal(size=(n_train + n_test, 1))
+np.random.shuffle(features)
+poly_features = np.power(features, np.arange(max_degree).reshape(1, -1))
+for i in range(max_degree):
+    poly_features[:, i] /= math.gamma(i + 1)  # gamma(n)=(n-1)!
+# labels的维度:(n_train+n_test,)
+labels = np.dot(poly_features, true_w)
+labels += np.random.normal(scale=0.1, size=labels.shape)</textarea></div>
+    <div class="cell"><textarea># NumPy ndarray转换为tensor
+true_w, features, poly_features, labels = [d2l.tensor(x, dtype=
+    d2l.float32) for x in [true_w, features, poly_features, labels]]</textarea></div>
+    <div class="cell"><textarea>features[:2], poly_features[:2, :], labels[:2]</textarea></div>
+    <div class="prose"><p>评估函数：在整个数据集上算平均损失。</p></div>
+    <div class="cell"><textarea>def evaluate_loss(net, data_iter, loss):  #@save
+    """评估给定数据集上模型的损失"""
+    metric = d2l.Accumulator(2)  # 损失的总和,样本数量
+    for X, y in data_iter:
+        out = net(X)
+        y = d2l.reshape(y, out.shape)
+        l = loss(out, y)
+        metric.add(d2l.reduce_sum(l), d2l.size(l))
+    return metric[0] / metric[1]</textarea></div>
+    <div class="cell"><textarea>def train(train_features, test_features, train_labels, test_labels,
+          num_epochs=400):
+    loss = nn.MSELoss(reduction='none')
+    input_shape = train_features.shape[-1]
+    # 不设置偏置，因为我们已经在多项式中实现了它
+    net = nn.Sequential(nn.Linear(input_shape, 1, bias=False))
+    batch_size = min(10, train_labels.shape[0])
+    train_iter = d2l.load_array((train_features, train_labels.reshape(-1,1)),
+                                batch_size)
+    test_iter = d2l.load_array((test_features, test_labels.reshape(-1,1)),
+                               batch_size, is_train=False)
+    trainer = torch.optim.SGD(net.parameters(), lr=0.01)
+    animator = d2l.Animator(xlabel='epoch', ylabel='loss', yscale='log',
+                            xlim=[1, num_epochs], ylim=[1e-3, 1e2],
+                            legend=['train', 'test'])
+    for epoch in range(num_epochs):
+        d2l.train_epoch_ch3(net, train_iter, loss, trainer)
+        if epoch == 0 or (epoch + 1) % 20 == 0:
+            animator.add(epoch + 1, (evaluate_loss(net, train_iter, loss),
+                                     evaluate_loss(net, test_iter, loss)))
+    print('weight:', net[0].weight.data.numpy())</textarea></div>
+    <div class="prose"><p><b>正常拟合</b>：用 3 阶多项式（前 4 个特征：1、x、x²/2!、x³/3!）。学到的权重应该接近真实的 [5, 1.2, −3.4, 5.6]，训练损失和测试损失都很低，而且差不多大。</p></div>
+    <div class="cell" data-manual="训练 400 个 epoch，大约需要几秒"><textarea># 从多项式特征中选择前4个维度，即1,x,x^2/2!,x^3/3!
+train(poly_features[:n_train, :4], poly_features[n_train:, :4],
+      labels[:n_train], labels[n_train:])</textarea></div>
+    <div class="prose"><p><b>欠拟合</b>：只用 1 阶（一条直线）。模型太简单，训练损失也降不下去，两条曲线都停在高处。</p></div>
+    <div class="cell" data-manual="训练 400 个 epoch，大约需要几秒"><textarea># 从多项式特征中选择前2个维度，即1和x
+train(poly_features[:n_train, :2], poly_features[n_train:, :2],
+      labels[:n_train], labels[n_train:])</textarea></div>
+    <div class="prose"><p><b>过拟合</b>：用全部 20 个特征（19 阶）。模型太复杂，会去拟合训练数据里的噪声。训练损失一直下降，测试损失却降不下去，两条线拉开了距离。学到的高次项权重也不再是 0。</p></div>
+    <div class="cell" data-manual="训练 1500 个 epoch，大约需要几秒"><textarea># 从多项式特征中选取所有维度
+train(poly_features[:n_train, :], poly_features[n_train:, :],
+      labels[:n_train], labels[n_train:], num_epochs=1500)</textarea></div>
+    <div class="callout"><h4>对照你的论文：按验证集选检查点</h4><p>你论文 <code>experiment.py</code> 第 1366 到 1369 行，每个 epoch 结束后在验证集上算一次 BCE，比之前最好的还低，就把这时的参数存下来；第 1394 行训练完以后，把模型恢复成验证集最好的那一刻：</p>
+<pre class="code">vb = eval_bce(model, W, W["val_idx"])              <span class="c"># 在验证集上评估</span>
+if vb &lt; best:                                       <span class="c"># 比之前最好的还好</span>
+    best = vb; best_ep = ep
+    best_state = {k: v.detach().clone() for k, v in model.state_dict().items()}   <span class="c"># 存一份参数</span>
+...
+model.load_state_dict(best_state)                   <span class="c"># 训练完，回到最好的那一刻</span></pre>
+      <p>这是用验证集做模型选择，也叫<b>提前停止</b>的一种写法：即使后面的 epoch 开始过拟合，最终用的也是泛化最好的那个检查点。论文还额外报告了按“决策价值”选的检查点，并发现两者选出来的 epoch 很不一样（第 8 章 8.6 节）。<code>state_dict</code> 是第 11 天的内容。</p></div>
+  </div>
+</section>
+
+<section class="part" id="wd">
+  <div class="part-h"><div class="eyebrow">第二部分</div><h2>4.5 权重衰减</h2><span class="src">对应原书第 4.5 节，代码来自原书 PyTorch 版</span></div>
+  <div class="blk">
+    <div class="prose"><p>多收集数据最能缓解过拟合，但数据往往有限。另一个办法是限制模型的“自由度”。<b>权重衰减</b>（也叫 L2 正则化）在损失里加一项 (λ/2)‖w‖²，权重越大惩罚越大，逼着模型用尽量小的权重去拟合数据。λ 越大，约束越强。</p>
+    <p>为什么叫“衰减”？对 L + (λ/2)‖w‖² 求梯度，多出来的一项是 λw。代进梯度下降：w ← w − η(∂L/∂w + λw) = <b>(1 − ηλ)w</b> − η∂L/∂w。每一步先把权重乘一个略小于 1 的数，相当于让它“衰减”一点，再按原来的梯度走。为什么用 L2 而不是 L1？L2 对大权重惩罚更重，倾向于把权重均匀地分散到很多特征上；L1 会把很多权重压成正好 0，相当于做特征选择。</p></div>
+    <div class="panel stack" id="ridgeLab">
+      <h4>λ 怎么把最优解拉向原点</h4>
+      <p class="small muted">椭圆是不加惩罚时损失的等高线，叉号是不加惩罚的最优解。橙点是加了 (λ/2)‖w‖² 以后的最优解，灰色曲线是 λ 从 0 增大时橙点走过的路。λ 越大，橙点越靠近原点，权重越小。</p>
+      <div class="row"><label class="ctrl" for="rdL">λ <output id="rdLv">1.0</output><input type="range" id="rdL" min="-2" max="2" step="0.05" value="0"></label></div>
+      <div class="two"><div class="cv" id="rdHost"><canvas id="rdCv" aria-label="损失等高线和不同 λ 下的最优权重"></canvas></div><div class="calc" id="rdCalc"></div></div>
+    </div>
+    <div class="prose"><p>原书的实验故意让过拟合很严重：200 个特征，但只有 20 个训练样本。真实的 w 每个都是 0.01，b = 0.05。</p></div>
+    <div class="cell"><textarea>%matplotlib inline
+from d2l import torch as d2l
+import torch
+from torch import nn
+
+n_train, n_test, num_inputs, batch_size = 20, 100, 200, 5
+true_w, true_b = d2l.ones((num_inputs, 1)) * 0.01, 0.05
+train_data = d2l.synthetic_data(true_w, true_b, n_train)
+train_iter = d2l.load_array(train_data, batch_size)
+test_data = d2l.synthetic_data(true_w, true_b, n_test)
+test_iter = d2l.load_array(test_data, batch_size, is_train=False)</textarea></div>
+    <div class="cell"><textarea>def init_params():
+    w = torch.normal(0, 1, size=(num_inputs, 1), requires_grad=True)
+    b = torch.zeros(1, requires_grad=True)
+    return [w, b]
+
+def l2_penalty(w):
+    return torch.sum(w.pow(2)) / 2</textarea></div>
+    <div class="cell"><textarea>def train(lambd):
+    w, b = init_params()
+    net, loss = lambda X: d2l.linreg(X, w, b), d2l.squared_loss
+    num_epochs, lr = 100, 0.003
+    animator = d2l.Animator(xlabel='epochs', ylabel='loss', yscale='log',
+                            xlim=[5, num_epochs], legend=['train', 'test'])
+    for epoch in range(num_epochs):
+        for X, y in train_iter:
+            # 增加了L2范数惩罚项，
+            # 广播机制使l2_penalty(w)成为一个长度为batch_size的向量
+            l = loss(net(X), y) + lambd * l2_penalty(w)
+            l.sum().backward()
+            d2l.sgd([w, b], lr, batch_size)
+        if (epoch + 1) % 5 == 0:
+            animator.add(epoch + 1, (d2l.evaluate_loss(net, train_iter, loss),
+                                     d2l.evaluate_loss(net, test_iter, loss)))
+    print('w的L2范数是：', torch.norm(w).item())</textarea></div>
+    <div class="prose"><p>不加惩罚（λ = 0）：训练损失一路降，测试损失居高不下，严重过拟合。</p></div>
+    <div class="cell" data-manual="训练 100 个 epoch，不到一秒"><textarea>train(lambd=0)</textarea></div>
+    <div class="prose"><p>加上惩罚（λ = 3）：训练损失高了一点，但测试损失明显下降，w 的范数也小得多。</p></div>
+    <div class="cell" data-manual="训练 100 个 epoch，不到一秒"><textarea>train(lambd=3)</textarea></div>
+    <div class="prose"><p><b>简洁实现</b>：PyTorch 的优化器自带 <code>weight_decay</code> 参数。这里用了“参数组”的写法：只对权重衰减，偏置不衰减。</p></div>
+    <div class="cell"><textarea>def train_concise(wd):
+    net = nn.Sequential(nn.Linear(num_inputs, 1))
+    for param in net.parameters():
+        param.data.normal_()
+    loss = nn.MSELoss(reduction='none')
+    num_epochs, lr = 100, 0.003
+    # 偏置参数没有衰减
+    trainer = torch.optim.SGD([
+        {"params":net[0].weight,'weight_decay': wd},
+        {"params":net[0].bias}], lr=lr)
+    animator = d2l.Animator(xlabel='epochs', ylabel='loss', yscale='log',
+                            xlim=[5, num_epochs], legend=['train', 'test'])
+    for epoch in range(num_epochs):
+        for X, y in train_iter:
+            trainer.zero_grad()
+            l = loss(net(X), y)
+            l.mean().backward()
+            trainer.step()
+        if (epoch + 1) % 5 == 0:
+            animator.add(epoch + 1,
+                         (d2l.evaluate_loss(net, train_iter, loss),
+                          d2l.evaluate_loss(net, test_iter, loss)))
+    print('w的L2范数：', net[0].weight.norm().item())</textarea></div>
+    <div class="cell" data-manual="训练 100 个 epoch，不到一秒"><textarea>train_concise(0)</textarea></div>
+    <div class="cell" data-manual="训练 100 个 epoch，不到一秒"><textarea>train_concise(3)</textarea></div>
+    <div class="callout"><h4>对照你的论文：只给策略头加 L2</h4><p>Safe-DFKT-AG 的损失里有一项 ρ‖θ_g‖²（ρ = 10⁻³），只惩罚策略头 g 的参数，限制它推翻“最接近 0.7”规则的力度。代码在 <code>experiment.py</code> 第 1272 到 1273 行，和上面的 <code>l2_penalty</code> 是同一个东西，只是没有除以 2，而且只对 <code>model.g</code> 的参数求和：</p>
+<pre class="code">if cfg.get("head_l2", 0) &gt; 0 and getattr(model, "is_df", False):
+    loss = loss + cfg["head_l2"] * sum((q ** 2).sum() for q in model.g.parameters())</pre>
+      <p>“只对一部分参数加正则”的思路，和上面“偏置不衰减”的参数组写法一样。</p></div>
+  </div>
+</section>
+
+<section class="part" id="dropout">
+  <div class="part-h"><div class="eyebrow">第三部分</div><h2>4.6 暂退法（Dropout）</h2><span class="src">对应原书第 4.6 节，代码来自原书 PyTorch 版</span></div>
+  <div class="blk">
+    <div class="prose"><p>好的模型应该对输入的小扰动不敏感。暂退法的做法是：<b>训练时</b>每次前向传播，随机把一部分隐藏单元的输出置成 0（概率为 p），剩下的除以 (1 − p) 放大。这样每个单元的期望值不变：E[h′] = (1 − p)·h/(1 − p) = h。网络没法依赖某几个特定的单元，只能学出更“分散”、更稳健的表示。<b>测试时</b>不丢弃，所有单元都用上。</p></div>
+    <div class="panel stack" id="dropLab">
+      <h4>看一次 Dropout 丢掉了谁</h4>
+      <p class="small muted">每个格子是一个隐藏单元的输出（数值写在格子里）。灰色的被丢掉了，剩下的被放大了 1/(1 − p) 倍。多采样几次，看平均值是不是还接近原来的值。</p>
+      <div class="row"><label class="ctrl" for="dpP">丢弃概率 p <output id="dpPv">0.50</output><input type="range" id="dpP" min="0" max="0.9" step="0.05" value="0.5"></label><button class="btn primary" id="dpGo">重新采样</button><button class="btn" id="dp100">采样 1000 次取平均</button></div>
+      <div class="dpgrid" id="dpGrid"></div>
+      <div class="calc" id="dpCalc"></div>
+    </div>
+    <div class="cell"><textarea>from d2l import torch as d2l
+import torch
+from torch import nn
+
+def dropout_layer(X, dropout):
+    assert 0 <= dropout <= 1
+    # 在本情况中，所有元素都被丢弃
+    if dropout == 1:
+        return torch.zeros_like(X)
+    # 在本情况中，所有元素都被保留
+    if dropout == 0:
+        return X
+    mask = (torch.rand(X.shape) > dropout).float()
+    return mask * X / (1.0 - dropout)</textarea></div>
+    <div class="cell"><textarea>X= torch.arange(16, dtype = torch.float32).reshape((2, 8))
+print(X)
+print(dropout_layer(X, 0.))
+print(dropout_layer(X, 0.5))
+print(dropout_layer(X, 1.))</textarea></div>
+    <div class="prose"><p>两个隐藏层的网络，每层 256 个单元。原书建议靠近输入层的丢弃概率小一些（第一层 0.2），后面大一些（第二层 0.5）。<code>self.training</code> 标记现在是训练还是评估。</p></div>
+    <div class="cell"><textarea>num_inputs, num_outputs, num_hiddens1, num_hiddens2 = 784, 10, 256, 256
+
+dropout1, dropout2 = 0.2, 0.5
+
+class Net(nn.Module):
+    def __init__(self, num_inputs, num_outputs, num_hiddens1, num_hiddens2,
+                 is_training = True):
+        super(Net, self).__init__()
+        self.num_inputs = num_inputs
+        self.training = is_training
+        self.lin1 = nn.Linear(num_inputs, num_hiddens1)
+        self.lin2 = nn.Linear(num_hiddens1, num_hiddens2)
+        self.lin3 = nn.Linear(num_hiddens2, num_outputs)
+        self.relu = nn.ReLU()
+
+    def forward(self, X):
+        H1 = self.relu(self.lin1(X.reshape((-1, self.num_inputs))))
+        # 只有在训练模型时才使用dropout
+        if self.training == True:
+            # 在第一个全连接层之后添加一个dropout层
+            H1 = dropout_layer(H1, dropout1)
+        H2 = self.relu(self.lin2(H1))
+        if self.training == True:
+            # 在第二个全连接层之后添加一个dropout层
+            H2 = dropout_layer(H2, dropout2)
+        out = self.lin3(H2)
+        return out
+
+
+net = Net(num_inputs, num_outputs, num_hiddens1, num_hiddens2)</textarea></div>
+    <div class="prose"><p>训练。<b>和原书的不同</b>：原书批量 256；本页只有 6000 张训练图，批量 256 时训练损失卡在 0.65 附近，时过时不过 <code>train_ch3</code> 的检查（我在真 PyTorch 上试过），所以改成 64。</p></div>
+    <div class="cell" data-manual="训练 10 个 epoch，网络比第 8 天大一些，大约需要 20 到 60 秒，期间页面会暂时卡住"><textarea>num_epochs, lr, batch_size = 10, 0.5, 64   # 原书 batch_size 是 256
+loss = nn.CrossEntropyLoss(reduction='none')
+train_iter, test_iter = d2l.load_data_fashion_mnist(batch_size)
+trainer = torch.optim.SGD(net.parameters(), lr=lr)
+d2l.train_ch3(net, train_iter, test_iter, loss, num_epochs, trainer)</textarea></div>
+    <div class="prose"><p><b>简洁实现</b>：在全连接层后面加 <code>nn.Dropout(p)</code>。调用 <code>net.train()</code> 时 Dropout 生效，调用 <code>net.eval()</code> 时 Dropout 什么也不做。<code>d2l.train_ch3</code> 里训练前会调 <code>net.train()</code>，评估前会调 <code>net.eval()</code>。</p></div>
+    <div class="cell"><textarea>net = nn.Sequential(nn.Flatten(),
+        nn.Linear(784, 256),
+        nn.ReLU(),
+        # 在第一个全连接层之后添加一个dropout层
+        nn.Dropout(dropout1),
+        nn.Linear(256, 256),
+        nn.ReLU(),
+        # 在第二个全连接层之后添加一个dropout层
+        nn.Dropout(dropout2),
+        nn.Linear(256, 10))
+
+def init_weights(m):
+    if type(m) == nn.Linear:
+        nn.init.normal_(m.weight, std=0.01)
+
+net.apply(init_weights);</textarea></div>
+    <div class="cell" data-manual="训练 10 个 epoch，大约需要 20 到 60 秒"><textarea>trainer = torch.optim.SGD(net.parameters(), lr=lr)
+d2l.train_ch3(net, train_iter, test_iter, loss, num_epochs, trainer)</textarea></div>
+    <div class="prose"><p>验证一下：评估模式下同一个输入跑两次结果完全一样；训练模式下每次都不一样。</p></div>
+    <div class="cell"><textarea>x = torch.ones(2, 1, 28, 28)
+net.eval()
+print(bool((net(x) == net(x)).all()))
+net.train()
+print(bool((net(x) == net(x)).all()))</textarea></div>
+    <div class="callout"><h4>对照你的论文</h4><p>你论文的 DKT、DKVMN、SAKT、AKT、simpleKT 都用了 <code>nn.Dropout(0.2)</code>，比如 DKT 是 <code>self.drop = nn.Dropout(0.2)</code>，加在 LSTM 输出之后。训练函数 <code>train_kt</code> 每个 epoch 开头调 <code>model.train()</code>，训练结束、恢复最佳检查点后调 <code>model.eval()</code>，评估时 Dropout 就关掉了。这和上面 <code>d2l.train_ch3</code> 的做法一样。</p></div>
+    <div class="qa">
+      <details><summary><b>练习（原书）</b>：把两层的丢弃概率交换（第一层 0.5、第二层 0.2），或者 epoch 加多，会怎样？</summary><p>改上面的 <code>dropout1, dropout2</code> 再重新定义网络和训练。通常靠近输入的层丢太多会损失太多信息，效果变差。原书还问：Dropout 和权重衰减能一起用吗？可以，但两者的收益不一定能叠加，常常需要重新调参。</p></details>
+    </div>
+  </div>
+</section>
+
+<section class="part quiz-sec">
+  <div class="part-h"><div class="eyebrow">课后题</div><h2>做几道题检查一下</h2><span class="src">选择题点选项马上出结果；写形状和写代码的题，网页会现场运行代码判断对错。答题记录只存在你这台设备的浏览器里。</span></div>
+  <div class="quiz dayquiz" data-day="9"></div>
+  <div class="row small muted quizscore" data-day="9"></div>
+</section>
+
+<section class="part">
+  <div class="part-h"><div class="eyebrow">今日小结</div><h2>今天学会了吗？</h2></div>
+  <div class="two">
+    <div class="panel stack">
+      <ul class="check-list" data-day="9">
+        <li><label><input type="checkbox" data-k="c1">训练误差、验证误差、测试误差分别是什么，选模型只能看验证集</label></li>
+        <li><label><input type="checkbox" data-k="c2">两种误差都高是欠拟合，训练低、测试高是过拟合</label></li>
+        <li><label><input type="checkbox" data-k="c3">权重衰减 = 损失加 (λ/2)‖w‖²，每步把 w 乘 (1 − ηλ)</label></li>
+        <li><label><input type="checkbox" data-k="c4">Dropout 训练时随机置零并放大 1/(1 − p)，评估时关掉</label></li>
+        <li><label><input type="checkbox" data-k="c5">我看得懂论文里按验证集 BCE 选检查点的代码</label></li>
+      </ul>
+      <span class="small check-msg"></span>
+    </div>
+    <div class="panel stack">
+      <h3>明天（第 10 天）学什么</h3>
+      <p>原书 4.8 数值稳定性和模型初始化（为什么深层网络会梯度消失、梯度爆炸，Xavier 初始化），4.9 环境和分布偏移（训练数据和实际使用的数据不一样时会怎样）。后者正好是你论文“用模拟器评估、用真实日志训练”要面对的问题。</p>
+    </div>
+  </div>
+</section>
+</main>
+
 <div class="wrap"><section class="part road-sec" id="road">
   <div class="part-h"><div class="eyebrow">课程表</div><h2>按你的论文排的学习路线</h2><span class="src">第 1 到 7 天是基础，按原书顺序。从第 8 天起只挑你论文用到的章节：多层感知机、正则化、自定义模型、循环网络和 LSTM（DKT）、注意力和 Transformer（SAKT、AKT、simpleKT）、Adam，最后是两个书里没有的论文专题。卷积、计算机视觉、NLP 应用等和论文关系不大的章节放到最后选学。</span></div>
   <div class="road" id="roadList"></div>
@@ -2420,16 +2751,16 @@ function tensorRepr(T){if(T.np)return npRepr(T);
   // 对齐 torch._tensor_str._add_suffixes：放不下时换行
   let s='tensor('+body,last=s.length-s.lastIndexOf('\n')+1;for(const x of sufs){if(last+x.length+2>80){s+=',\n'+' '.repeat(7)+x;last=7+x.length}else{s+=', '+x;last+=x.length+2}}
   return s+')'}
-function npFloatStrs(vals){ // numpy 风格：0. , 0.1, 2.5
-  const fin=vals.filter(Number.isFinite);let d=0;for(const v of fin){const s=String(+v.toFixed(8));const p=s.indexOf('.');if(p>=0)d=Math.max(d,s.length-p-1)}d=Math.min(d,8);
-  return vals.map(v=>{if(Number.isNaN(v))return'nan';if(!Number.isFinite(v))return v>0?'inf':'-inf';let s=v.toFixed(d);if(d>0){const t=s.replace(/0+$/,'');s=t.padEnd(s.length,' ')}else s+='.';return s})}
-function npRepr(T){const vals=[...T.data];let strs;if(T.dtype==='bool')strs=vals.map(v=>v?' True':'False');else if(T.dtype==='int64')strs=vals.map(String);else strs=npFloatStrs(vals);
-  const w=Math.max(1,...strs.map(s=>s.length)),map=new Map();vals.forEach((v,i)=>map.set(i,strs[i]));
-  if(T.shape.length===0)return strs[0].trim();
-  let i=0;const f=()=>strs[i++];const fake={shape:T.shape,data:T.data};const st=strides(T.shape);const nd=T.shape.length;
-  const rec=(dim,off,indent)=>{const n=T.shape[dim];if(dim===nd-1){const items=[];for(let k=0;k<n;k++)items.push(strs[off+k*st[dim]].padStart(w));const per=Math.max(1,Math.floor((75-indent)/(w+2)));const lines=[];for(let k=0;k<items.length;k+=per)lines.push(items.slice(k,k+per).join(', '));return'['+lines.join(',\n'+' '.repeat(indent+1))+']'}
-    const subs=[];for(let k=0;k<n;k++)subs.push(rec(dim+1,off+k*st[dim],indent+1));return'['+subs.join(','+'\n'.repeat(nd-dim-1)+' '.repeat(indent+1))+']'};
-  return'array('+rec(0,0,6)+(T.dtype==='float32'?', dtype=float32':'')+')'}
+function npShort(v,f32){if(Number.isNaN(v))return'nan';if(!Number.isFinite(v))return v>0?'inf':'-inf';let s;if(f32){for(let p=1;p<=9;p++){s=v.toPrecision(p);if(Math.fround(+s)===v)break}s=String(+s)}else s=String(v);
+  if(/e/.test(s)){const n=+s;s=Math.abs(n)<1?n.toFixed(Math.min(20,Math.ceil(-Math.log10(Math.abs(n)))+8)).replace(/0+$/,''):n.toFixed(0)}
+  const k=s.indexOf('.');if(k>=0&&s.length-k-1>8){s=v.toFixed(8).replace(/0+$/,'');if(s.endsWith('.'))s=s}return s}
+function npElemStrs(T){const vals=[...T.data];if(T.dtype==='bool')return vals.map(v=>v?' True':'False');if(T.dtype==='int64'){const w=Math.max(...vals.map(v=>String(v).length));return vals.map(v=>String(v).padStart(w))}
+  const f32=T.dtype==='float32',parts=vals.map(v=>{const s=npShort(v,f32);if(!/^-?\d/.test(s))return[s,null];const k=s.indexOf('.');return k<0?[s,'']:[s.slice(0,k),s.slice(k+1)]});
+  const L=Math.max(...parts.map(p=>p[0].length)),Fm=Math.max(0,...parts.map(p=>p[1]==null?0:p[1].length));return parts.map(([a,b])=>b==null?a.padStart(L+1+Fm):a.padStart(L)+'.'+b.padEnd(Fm))}
+function npRepr(T,asStr){const strs=npElemStrs(T),st=strides(T.shape),nd=T.shape.length,sep=asStr?' ':', ';if(nd===0)return strs[0].trim();const w=Math.max(...strs.map(s=>s.length));
+  const base=asStr?1:7;const rec=(dim,off,indent)=>{const n=T.shape[dim];if(dim===nd-1){const items=[];for(let k=0;k<n;k++)items.push(strs[off+k*st[dim]]);const per=Math.max(1,Math.floor((75-indent)/(w+sep.length)));const lines=[];for(let k=0;k<items.length;k+=per)lines.push(items.slice(k,k+per).join(sep));return'['+lines.join((asStr?'':',')+'\n'+' '.repeat(indent+1))+']'}
+    const subs=[];for(let k=0;k<n;k++)subs.push(rec(dim+1,off+k*st[dim],indent+1));return'['+subs.join((asStr?'':',')+'\n'.repeat(nd-dim-1)+' '.repeat(indent+1))+']'};
+  const body=rec(0,0,base-1);return asStr?body:'array('+body+(T.dtype==='float32'?', dtype=float32':'')+')'}
 function pyFloatRepr(v){if(Number.isNaN(v))return'nan';if(!Number.isFinite(v))return v>0?'inf':'-inf';if(v===0)return Object.is(v,-0)?'-0.0':'0.0';
   const e=v.toExponential(),m=e.match(/^(-?)(\d)(?:\.(\d+))?e([+-]\d+)$/),sign=m[1],digits=m[2]+(m[3]||''),exp=+m[4];
   if(exp<-4||exp>=16){const mant=digits.length>1?digits[0]+'.'+digits.slice(1):digits;return sign+mant+'e'+(exp<0?'-':'+')+String(Math.abs(exp)).padStart(2,'0')}
@@ -2444,7 +2775,7 @@ function repr(v){if(isT(v))return(v.isParam?'Parameter containing:\n':'')+tensor
     case'fn':return`<built-in function ${v.name}>`;case'func':return`<function ${v.name} at 0x${(v.id||4400000000).toString(16)}>`;case'gradfn':return`<${v.g.name} object at 0x${v.g.id.toString(16)}>`;
     case'df':return dfRepr(v);case'series':return seriesRepr(v);case'index':return`Index([${v.items.map(x=>strRepr(x)).join(', ')}], dtype='str')`;
     case'iter':return'<generator object>';case'nn':return nnRepr(v);case'fmnist':return fmRepr(v);case'transform':return tfRepr(v);case'fig':return`<Figure size ${v.cols*150}x${v.rows*150} with ${v.axes.length} Axes>`;case'ax':return'<Axes: >';case'axarr':return`array([${v.fig.axes.map(()=>'<Axes: >').join(', ')}], dtype=object)`;case'pil':return`<PIL.Image.Image image mode=L size=${v.W}x${v.H}>`;case'obj':return isModuleObj(v)?modRepr(v):`<__main__.${v.cls.name} object at 0x${(v.id||(v.id=newId())).toString(16)}>`;case'cls':return`<class '__main__.${v.name}'>`;case'optim':return optRepr(v);case'loader':return`<torch.utils.data.dataloader.DataLoader object at 0x${(v.id||(v.id=newId())).toString(16)}>`;case'tdataset':return`<torch.utils.data.dataset.TensorDataset object at 0x${(v.id||(v.id=newId())).toString(16)}>`;case'bound':return`<bound method ${v.f.name} of ${repr(v.self)}>`;case'file':return`<_io.TextIOWrapper name='${v.path}' mode='${v.mode}'>`;case'dummy':return'<object>';case'dist':return`${v.name}()`}return String(v)}
-const str=v=>v.t==='str'?v.v:repr(v);
+const str=v=>v.t==='str'?v.v:(isT(v)&&v.np)?npRepr(v,true):repr(v);
 
 // ---------- 类型与广播 ----------
 function asTensor(v){if(isT(v))return v;if(v.t==='int'){const t=new Tensor([],[v.v],'int64');t.weak=true;return t}if(v.t==='float'){const t=new Tensor([],[v.v],'float64');t.weak=true;t.weakFloat=true;return t}if(v.t==='bool'){const t=new Tensor([],[v.v],'bool');t.weak=true;return t}
@@ -2563,6 +2894,8 @@ function maxmin(x,y,sign){const A=asTensor(x),Bt=asTensor(y),out=bshape(A.shape,
 // PyTorch 的 arange 用乘加融合（FMA）算 start + i*step，这里精确模拟
 function splitD(a){const t=134217729*a,hi=t-(t-a);return[hi,a-hi]}
 function fmaD(a,b,c){const p=a*b;if(!Number.isFinite(p))return p+c;const[ah,al]=splitD(a),[bh,bl]=splitD(b);const e=((ah*bh-p)+ah*bl+al*bh)+al*bl;const s=p+c,bb=s-p,es=(p-(s-bb))+(c-bb);return s+(es+e)}
+
+function gammaFn(x){if(Number.isInteger(x)&&x>0&&x<171){let r=1;for(let i=2;i<x;i++)r*=i;return r}if(x<0.5)return Math.PI/(Math.sin(Math.PI*x)*gammaFn(1-x));x-=1;const g=7,c=[0.99999999999980993,676.5203681218851,-1259.1392167224028,771.32342877765313,-176.61502916214059,12.507343278686905,-0.13857109526572012,9.9843695780195716e-6,1.5056327351493116e-7];let a=c[0];const t=x+g+0.5;for(let i=1;i<9;i++)a+=c[i]/(x+i);return Math.sqrt(2*Math.PI)*t**(x+0.5)*Math.exp(-t)*a}
 
 // ---------- 索引 ----------
 function selection(T,items){const nd=T.shape.length;let k=0;const sel=[];const nonEll=items.filter(it=>!it.ellipsis&&!it.none).length;
@@ -2735,8 +3068,10 @@ const numpy=mod('numpy',{
   linspace:fn('linspace',a=>{const s=numOf(a[0]),e=numOf(a[1]),n=a[2]?intOf(a[2]):50;return mkT([n],Array.from({length:n},(_,i)=>n===1?s:s+(e-s)*i/(n-1)),'float64',true)}),
   ...Object.fromEntries(['exp','log','sqrt','sin','cos','abs','tanh'].map(n=>[n,fn(n,a=>{const v=a[0];if(!isT(v)&&pyNum(v)!=null){const r=F(UN[n][0](pyNum(v)));r.np=true;return r}return unary(isT(v)?v:asTensor(v),n)})])),
   zeros:fn('zeros',a=>{const s=dimsArg([a[0]]);return mkT(s,new Array(prod(s)).fill(0),'float64',true)}),ones:fn('ones',a=>{const s=dimsArg([a[0]]);return mkT(s,new Array(prod(s)).fill(1),'float64',true)}),
+  power:fn('power',a=>binop('**',asTensor(a[0]),asTensor(a[1]))),dot:fn('dot',a=>matmul(asTensor(a[0]),asTensor(a[1]))),sum:fn('sum',(a,kw)=>reduce(asTensor(a[0]),dimArg(a,kw,1),'sum',keepArg(kw))),mean:fn('mean',(a,kw)=>reduce(asTensor(a[0]),dimArg(a,kw,1),'mean',keepArg(kw))),
   pi:F(Math.PI),e:F(Math.E),nan:F(NaN),float32:DT('float32'),float64:DT('float64'),
-  random:mod('numpy.random',{normal:fn('normal',(a,kw)=>{const m=numOf(kwOr(kw,a,'loc',0,F(0))),sd=numOf(kwOr(kw,a,'scale',1,F(1))),s=dimsArg([kwOr(kw,a,'size',2,tup([]))]);return mkT(s,Array.from({length:prod(s)},()=>m+sd*gauss()),'float64',true)}),rand:fn('rand',a=>{const s=dimsArg(a);return mkT(s,Array.from({length:prod(s)},rand),'float64',true)})}),
+  random:mod('numpy.random',{normal:fn('normal',(a,kw)=>{const m=numOf(kwOr(kw,a,'loc',0,F(0))),sd=numOf(kwOr(kw,a,'scale',1,F(1))),s=dimsArg([kwOr(kw,a,'size',2,tup([]))]);return mkT(s,Array.from({length:prod(s)},()=>m+sd*gauss()),'float64',true)}),rand:fn('rand',a=>{const s=dimsArg(a);return mkT(s,Array.from({length:prod(s)},rand),'float64',true)}),
+    shuffle:fn('shuffle',a=>{const T=a[0];if(isT(T)){const n=T.shape[0],row=T.data.length/n,d=T.data;for(let i=n-1;i>0;i--){const j=Math.floor(rand()*(i+1));for(let k=0;k<row;k++){const t=d[i*row+k];d[i*row+k]=d[j*row+k];d[j*row+k]=t}}}else{const L=a[0].items;for(let i=L.length-1;i>0;i--){const j=Math.floor(rand()*(i+1));[L[i],L[j]]=[L[j],L[i]]}}return NONE}),seed:fn('seed',a=>{seed=intOf(a[0])*2654435761|0;return NONE})}),
 });
 const pandas=mod('pandas',{read_csv:fn('read_csv',a=>readCSV(str(a[0]))),get_dummies:fn('get_dummies',(a,kw)=>getDummies(a[0],kw)),DataFrame:fn('DataFrame',a=>a[0].t==='dict'?dfFromDict(a[0]):err('TypeError','本页的 DataFrame 只支持用字典创建')),
   Series:fn('Series',(a,kw)=>{const c=pyListCol(iterate(a[0]));return mkSeries(c.v,c.dt,c.v.map((_,i)=>i),kw.name?str(kw.name):null)}),isna:fn('isna',a=>dfAttr(a[0],'isna').call([],{})),NA:F(NaN)});
@@ -2744,7 +3079,7 @@ const os=mod('os',{makedirs:fn('makedirs',(a,kw)=>{const p=normPath(str(a[0]));i
   listdir:fn('listdir',a=>{const p=normPath(a[0]?str(a[0]):'.');return list([...FS.keys()].filter(k=>(k.includes('/')?k.slice(0,k.lastIndexOf('/')):'.')===p).map(k=>S(k.split('/').pop())))}),
   path:mod('os.path',{join:fn('join',a=>S(a.map(str).join('/'))),exists:fn('exists',a=>{const p=normPath(str(a[0]));return B(FS.has(p)||DIRS.has(p))})}),getcwd:fn('getcwd',()=>S('/home/d2l/notebooks'))});
 const math=mod('math',{sqrt:fn('sqrt',a=>F(Math.sqrt(numOf(a[0])))),exp:fn('exp',a=>F(Math.exp(numOf(a[0])))),log:fn('log',a=>F(a[1]?Math.log(numOf(a[0]))/Math.log(numOf(a[1])):Math.log(numOf(a[0])))),
-  sin:fn('sin',a=>F(Math.sin(numOf(a[0])))),cos:fn('cos',a=>F(Math.cos(numOf(a[0])))),pi:F(Math.PI),e:F(Math.E),inf:F(Infinity),floor:fn('floor',a=>I(Math.floor(numOf(a[0])))),ceil:fn('ceil',a=>I(Math.ceil(numOf(a[0])))),factorial:fn('factorial',a=>{let r=1;for(let i=2;i<=intOf(a[0]);i++)r*=i;return I(r)})});
+  sin:fn('sin',a=>F(Math.sin(numOf(a[0])))),cos:fn('cos',a=>F(Math.cos(numOf(a[0])))),pi:F(Math.PI),e:F(Math.E),inf:F(Infinity),floor:fn('floor',a=>I(Math.floor(numOf(a[0])))),ceil:fn('ceil',a=>I(Math.ceil(numOf(a[0])))),gamma:fn('gamma',a=>F(gammaFn(numOf(a[0])))),factorial:fn('factorial',a=>{let r=1;for(let i=2;i<=intOf(a[0]);i++)r*=i;return I(r)})});
 const random=mod('random',{random:fn('random',()=>F(rand())),seed:fn('seed',a=>{seed=intOf(a[0])*2654435761|0;return NONE}),randint:fn('randint',a=>{const lo=intOf(a[0]),hi=intOf(a[1]);return I(lo+Math.floor(rand()*(hi-lo+1)))}),
   shuffle:fn('shuffle',a=>{const L=a[0].items;for(let i=L.length-1;i>0;i--){const j=Math.floor(rand()*(i+1));[L[i],L[j]]=[L[j],L[i]]}return NONE}),choice:fn('choice',a=>{const L=iterate(a[0]);return L[Math.floor(rand()*L.length)]}),
   uniform:fn('uniform',a=>F(numOf(a[0])+rand()*(numOf(a[1])-numOf(a[0])))),gauss:fn('gauss',a=>F(numOf(a[0])+numOf(a[1])*gauss()))});
@@ -2780,7 +3115,7 @@ function d2lMod(ctx){return mod('d2l',{
 
 // ---------- 张量的属性和方法 ----------
 function tensorAttr(T,name){
-  switch(name){case'shape':return{t:'size',dims:T.shape.slice()};case'dtype':return DT(T.dtype);case'T':return transpose2(T);case'ndim':return I(T.shape.length);
+  switch(name){case'shape':return T.np?tup(T.shape.map(I)):{t:'size',dims:T.shape.slice()};case'dtype':return DT(T.dtype);case'T':return transpose2(T);case'ndim':return I(T.shape.length);
     case'requires_grad':return B(T.requires_grad);case'grad':return T.grad||NONE;case'grad_fn':return T.grad_fn?{t:'gradfn',g:T.grad_fn}:NONE;case'is_leaf':return B(!T.grad_fn);case'data':{const d=mkT(T.shape.slice(),[],T.dtype);d.data=T.data;return d}}
   const m=tensorMethod(T,name);if(m)return fn(name,m);err('AttributeError',`'${T.np?'numpy.ndarray':'Tensor'}' object has no attribute '${name}'`)}
 function tensorMethod(T,name){
@@ -2805,7 +3140,7 @@ function tensorMethod(T,name){
     sub_:a=>{checkInplace(T);const r=binop('-',T,a[0]);T.data.set(r.data);return T},add_:a=>{checkInplace(T);const r=binop('+',T,a[0]);T.data.set(r.data);return T},
     argmax:(a,kw)=>argmaxT(T,dimArg(a,kw),keepArg(kw),1),argmin:(a,kw)=>argmaxT(T,dimArg(a,kw),keepArg(kw),-1),
     unsqueeze:a=>{const s=T.shape.slice();let d=intOf(a[0]);if(d<0)d+=s.length+1;s.splice(d,0,1);return reshapeT(T,s)},squeeze:()=>reshapeT(T,T.shape.filter(d=>d!==1)),
-    flatten:()=>reshapeT(T,[-1]),softmax:(a,kw)=>softmaxT(T,intOf(kwOr(kw,a,'dim',0))),log_softmax:(a,kw)=>softmaxT(T,intOf(kwOr(kw,a,'dim',0)),true),all:()=>mkT([],[T.data.every(Boolean)?1:0],'bool',T.np),any:()=>mkT([],[T.data.some(Boolean)?1:0],'bool',T.np),round:()=>mkT(T.shape.slice(),Array.from(T.data,v=>Math.round(v)),T.dtype,T.np),__len__:()=>I(T.shape[0])};
+    flatten:()=>reshapeT(T,[-1]),pow:a=>binop('**',T,a[0]),softmax:(a,kw)=>softmaxT(T,intOf(kwOr(kw,a,'dim',0))),log_softmax:(a,kw)=>softmaxT(T,intOf(kwOr(kw,a,'dim',0)),true),all:()=>mkT([],[T.data.every(Boolean)?1:0],'bool',T.np),any:()=>mkT([],[T.data.some(Boolean)?1:0],'bool',T.np),round:()=>mkT(T.shape.slice(),Array.from(T.data,v=>Math.round(v)),T.dtype,T.np),__len__:()=>I(T.shape[0])};
   return M[name]}
 
 // ---------- 内置函数 ----------
@@ -3004,15 +3339,19 @@ const nnF=mod('torch.nn.functional',{relu:fn('relu',a=>unary(a[0],'relu')),sigmo
 const nnMod=mod('torch.nn',{Module:ModuleCls,init:nnInit,functional:nnF,Parameter:fn('Parameter',(a,kw)=>{const T=asTensor(a[0]);const p=mkParam(T.shape.slice(),T.data);p.dtype=T.dtype;if(kw.requires_grad&&!truthy(kw.requires_grad))p.requires_grad=false;return p})});
 for(const k of NN_KINDS)nnMod.attrs[k]=fn(k,(a,kw)=>nnMake(k,a,kw));
 // 优化器
-function optMake(kind,a,kw){const ps=iterate(a[0]).filter(isT);if(!ps.length)err('ValueError','optimizer got an empty parameter list');const g={lr:numOf(kwOr(kw,a,'lr',1,F(kind==='SGD'?NaN:0.001))),momentum:kw.momentum?numOf(kw.momentum):0,weight_decay:kw.weight_decay?numOf(kw.weight_decay):0};
-  if(kind==='SGD'&&Number.isNaN(g.lr))err('TypeError',"SGD.__init__() missing 1 required positional argument: 'lr'");if(kind==='Adam'){const b=kw.betas?iterate(kw.betas).map(numOf):[0.9,0.999];g.b1=b[0];g.b2=b[1];g.eps=kw.eps?numOf(kw.eps):1e-8}
-  const pg=mkDict([[S('lr'),F(g.lr)],[S('momentum'),F(g.momentum)],[S('weight_decay'),F(g.weight_decay)]]);return{t:'optim',kind,params:ps,g,pg,state:new Map(),t_:0}}
-function optAttr(o,name){const lr=()=>{const e=o.pg.m.get(numKey(S('lr')));return numOf(e[1])};
-  if(name==='param_groups')return list([o.pg]);
+function optMake(kind,a,kw){const items=a[0].t==='list'||a[0].t==='tuple'||a[0].t==='iter'?iterate(a[0]):[a[0]];const toList=v=>isT(v)?[v]:iterate(v).filter(isT);
+  const defLr=numOf(kwOr(kw,a,'lr',1,F(kind==='SGD'?NaN:0.001)));if(kind==='SGD'&&Number.isNaN(defLr))err('TypeError',"SGD.__init__() missing 1 required positional argument: 'lr'");
+  const raw={lr:kwOr(kw,a,'lr',1,F(defLr)),momentum:kw.momentum||I(0),weight_decay:kw.weight_decay||I(0)};const base={lr:defLr,momentum:numOf(raw.momentum),weight_decay:numOf(raw.weight_decay)};if(kind==='Adam'){const b=kw.betas?iterate(kw.betas).map(numOf):[0.9,0.999];base.b1=b[0];base.b2=b[1];base.eps=kw.eps?numOf(kw.eps):1e-8}
+  const groups=items.length&&items[0].t==='dict'?items.map(d=>{const g={...base},r={...raw};let ps=[];for(const[k,v]of d.m.values()){const key=str(k);if(key==='params')ps=toList(v);else{g[key]=numOf(v);r[key]=v}}return{params:ps,g,r}}):[{params:items.filter(isT),g:base,r:raw}];
+  if(!groups.some(x=>x.params.length))err('ValueError','optimizer got an empty parameter list');
+  for(const G of groups)G.pg=mkDict([[S('params'),list(G.params)],[S('lr'),G.r.lr],[S('momentum'),G.r.momentum],[S('weight_decay'),G.r.weight_decay]]);
+  return{t:'optim',kind,groups,params:groups.flatMap(G=>G.params),g:groups[0].g,pg:groups[0].pg,state:new Map(),t_:0}}
+function optAttr(o,name){
+  if(name==='param_groups')return list(o.groups.map(G=>G.pg));
   if(name==='zero_grad')return fn('zero_grad',(a,kw)=>{const none=kw.set_to_none?truthy(kw.set_to_none):true;for(const p of o.params){if(none)p.grad=null;else if(p.grad)p.grad.data.fill(0)}return NONE});
-  if(name==='step')return fn('step',()=>{o.t_++;const L=lr(),g=o.g;for(const p of o.params){if(!p.grad)continue;const gr=Float64Array.from(p.grad.data);if(g.weight_decay)for(let i=0;i<gr.length;i++)gr[i]+=g.weight_decay*p.data[i];
+  if(name==='step')return fn('step',()=>{o.t_++;for(const G of o.groups){const g=G.g,L=numOf(G.pg.m.get(numKey(S('lr')))[1]),wd=numOf(G.pg.m.get(numKey(S('weight_decay')))[1]);for(const p of G.params){if(!p.grad)continue;const gr=Float64Array.from(p.grad.data);if(wd)for(let i=0;i<gr.length;i++)gr[i]+=wd*p.data[i];
       if(o.kind==='SGD'){let d=gr;if(g.momentum){let v=o.state.get(p);if(!v){v=Float64Array.from(gr)}else for(let i=0;i<v.length;i++)v[i]=g.momentum*v[i]+gr[i];o.state.set(p,v);d=v}for(let i=0;i<p.data.length;i++)p.data[i]=castVal(p.data[i]-L*d[i],p.dtype)}
-      else{let s=o.state.get(p);if(!s){s={m:new Float64Array(gr.length),v:new Float64Array(gr.length)};o.state.set(p,s)}const c1=1-g.b1**o.t_,c2=1-g.b2**o.t_;for(let i=0;i<gr.length;i++){s.m[i]=g.b1*s.m[i]+(1-g.b1)*gr[i];s.v[i]=g.b2*s.v[i]+(1-g.b2)*gr[i]*gr[i];p.data[i]=castVal(p.data[i]-L*(s.m[i]/c1)/(Math.sqrt(s.v[i]/c2)+g.eps),p.dtype)}}}return NONE});
+      else{let s=o.state.get(p);if(!s){s={m:new Float64Array(gr.length),v:new Float64Array(gr.length)};o.state.set(p,s)}const c1=1-g.b1**o.t_,c2=1-g.b2**o.t_;for(let i=0;i<gr.length;i++){s.m[i]=g.b1*s.m[i]+(1-g.b1)*gr[i];s.v[i]=g.b2*s.v[i]+(1-g.b2)*gr[i]*gr[i];p.data[i]=castVal(p.data[i]-L*(s.m[i]/c1)/(Math.sqrt(s.v[i]/c2)+g.eps),p.dtype)}}}}return NONE});
   err('AttributeError',`'${o.kind}' object has no attribute '${name}'`)}
 function optRepr(o){const g=o.g,lines=o.kind==='SGD'?[['dampening','0'],['differentiable','False'],['foreach','None'],['fused','None'],['lr',pyFloatRepr(g.lr)],['maximize','False'],['momentum',g.momentum?pyFloatRepr(g.momentum):'0'],['nesterov','False'],['weight_decay',g.weight_decay?pyFloatRepr(g.weight_decay):'0']]
   :[['amsgrad','False'],['betas',`(${pyFloatRepr(g.b1)}, ${pyFloatRepr(g.b2)})`],['capturable','False'],['decoupled_weight_decay','False'],['differentiable','False'],['eps',String(g.eps)],['foreach','None'],['fused','None'],['lr',pyFloatRepr(g.lr)],['maximize','False'],['weight_decay',g.weight_decay?pyFloatRepr(g.weight_decay):'0']];
@@ -3218,6 +3557,16 @@ def train_ch3(net, train_iter, test_iter, loss, num_epochs, updater):
     assert train_loss < 0.65, train_loss
     assert train_acc <= 1 and train_acc > 0.7, train_acc
     assert test_acc <= 1 and test_acc > 0.7, test_acc
+
+def evaluate_loss(net, data_iter, loss):
+    """评估给定数据集上模型的损失"""
+    metric = d2l.Accumulator(2)
+    for X, y in data_iter:
+        out = net(X)
+        y = d2l.reshape(y, out.shape)
+        l = loss(out, y)
+        metric.add(d2l.reduce_sum(l), d2l.size(l))
+    return metric[0] / metric[1]
 
 def predict_ch3(net, test_iter, n=6):
     """预测标签（定义见第3章）"""
@@ -3448,6 +3797,7 @@ function exec(s,env,ctx){ctx.line=s.line;if(++ctx.steps>3e6)err('TimeoutError','
   switch(s.k){case'expr':{const v=evalE(s.e,env,ctx);ctx.last=v;return}
     case'assign':{const v=evalE(s.value,env,ctx);for(const t of s.targets)assignTo(t,v,env,ctx);ctx.last=undefined;return}
     case'aug':{const t=s.target,cur=evalE(t,env,ctx),v=evalE(s.value,env,ctx);ctx.last=undefined;
+      if(t.k==='sub'&&isT(cur)){const o=evalE(t.obj,env,ctx);if(isT(o)){checkInplace(o);setItem(o,subItems(t.items,env,ctx),binop(s.op,cur,v));ctx.touched.push(o);return}}
       if(isT(cur)){checkInplace(cur);const r=s.op==='@'?matmul(cur,asTensor(v)):binop(s.op,cur,v);if(r.shape.join()!==cur.shape.join())err('RuntimeError',`output with shape [${cur.shape.join(', ')}] doesn't match the broadcast shape [${r.shape.join(', ')}]`);
         if(RANK[r.dtype]>RANK[cur.dtype])err('RuntimeError',`result type ${r.dtype==='float32'?'Float':r.dtype==='float64'?'Double':'Long'} can't be cast to the desired output type ${cur.dtype==='int64'?'Long':cur.dtype==='float32'?'Float':'Bool'}`);
         for(let i=0;i<r.data.length;i++)cur.data[i]=castVal(r.data[i],cur.dtype);if(r.grad_fn&&!cur.grad_fn){/* 非叶子原地更新：保持简单 */}cur.meta={kind:'assign',mask:new Uint8Array(cur.data.length).fill(1)};ctx.touched.push(cur);return}
@@ -3490,7 +3840,7 @@ function colors(){const cs=getComputedStyle(document.documentElement),g=n=>cs.ge
 function fitCanvas(cv,W,H){const r=window.devicePixelRatio||1;cv.width=Math.round(W*r);cv.height=Math.round(H*r);cv.style.width=W+'px';cv.style.height=H+'px';const c=cv.getContext('2d');c.setTransform(r,0,0,r,0,0);return c}
 const MONO='11px "JetBrains Mono",ui-monospace,monospace';
 const bodyFont=px=>`${px}px ${getComputedStyle(document.body).fontFamily}`;
-const DAYS=['1','2','3','4','5','6','7','8'];
+const DAYS=['1','2','3','4','5','6','7','8','9'];
 
 // ---------- 张量图示 ----------
 function cellText(v,dtype){if(dtype==='bool')return v?'T':'F';if(dtype==='int64')return String(v);if(!Number.isFinite(v))return String(v);return Number.isInteger(v)?String(v):(Math.abs(v)>=100?v.toFixed(0):v.toFixed(2))}
@@ -3551,12 +3901,12 @@ function vizValue(v,env){if(!v)return'';if(MT.isT(v))return`<div class="vz">${vi
 // ---------- 画图（d2l.plot / plt.plot） ----------
 const SERIESC=['--accent','--pos','--neg','--muted'];
 function drawPlot(cv,fig){const C=colors(),cs=getComputedStyle(document.documentElement);const W=Math.max(260,Math.min(560,cv.parentElement.clientWidth||520)),H=Math.round(W*0.62),ctx=fitCanvas(cv,W,H);
-  const pl=50,pr=12,pt=fig.legend?30:12,pb=36;const xs=fig.series.flatMap(s=>s.x).filter(Number.isFinite),ys=[...fig.series.flatMap(s=>s.y),...fig.hlines].filter(Number.isFinite);if(!xs.length)return;
-  let x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys);if(x1===x0)x1=x0+1;if(y1===y0){y1+=1;y0-=1}const py=(y1-y0)*.06;y0-=py;y1+=py;if(fig.xlim){[x0,x1]=fig.xlim}if(fig.ylim){[y0,y1]=fig.ylim}
+  const pl=50,pr=12,pt=fig.legend?30:12,pb=36,lg=fig.yscale==='log',T=v=>lg?(v>0?Math.log10(v):NaN):v;const xs=fig.series.flatMap(s=>s.x).filter(Number.isFinite),ys=[...fig.series.flatMap(s=>s.y),...fig.hlines].map(T).filter(Number.isFinite);if(!xs.length)return;
+  let x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys);if(x1===x0)x1=x0+1;if(y1===y0){y1+=1;y0-=1}const py=(y1-y0)*.06;y0-=py;y1+=py;if(fig.xlim){[x0,x1]=fig.xlim}if(fig.ylim){[y0,y1]=fig.ylim.map(T)}
   const nice=(lo,hi,n)=>{const sp=hi-lo,st0=sp/n,mg=10**Math.floor(Math.log10(st0)),e=st0/mg,st=(e>=7.5?10:e>=3.5?5:e>=1.5?2:1)*mg;const t=[];for(let v=Math.ceil(lo/st)*st;v<=hi+st*1e-9;v+=st)t.push(+v.toFixed(10));return t};
-  const sx=x=>pl+(x-x0)/(x1-x0)*(W-pl-pr),sy=y=>pt+(y1-y)/(y1-y0)*(H-pt-pb);
+  const sx=x=>pl+(x-x0)/(x1-x0)*(W-pl-pr),sy0=y=>pt+(y1-y)/(y1-y0)*(H-pt-pb),sy=y=>sy0(T(y));const SUP={'-':'⁻',0:'⁰',1:'¹',2:'²',3:'³',4:'⁴',5:'⁵',6:'⁶',7:'⁷',8:'⁸',9:'⁹'};
   ctx.font=MONO;ctx.fillStyle=C.muted;ctx.strokeStyle=C.line;ctx.lineWidth=1;ctx.textAlign='right';ctx.textBaseline='middle';
-  for(const t of nice(y0,y1,4)){const y=Math.round(sy(t))+.5;ctx.beginPath();ctx.moveTo(pl,y);ctx.lineTo(W-pr,y);ctx.stroke();ctx.fillText(String(+t.toPrecision(6)),pl-6,y)}
+  let yt=lg?nice(y0,y1,5).filter(Number.isInteger):nice(y0,y1,4);const pow=lg&&yt.length>=2;if(lg&&!pow)yt=nice(y0,y1,4);for(const t of yt){const y=Math.round(sy0(t))+.5;ctx.beginPath();ctx.moveTo(pl,y);ctx.lineTo(W-pr,y);ctx.stroke();ctx.fillText(pow?'10'+String(t).replace(/./g,c=>SUP[c]):lg?String(+(10**t).toPrecision(3)):String(+t.toPrecision(6)),pl-6,y)}
   ctx.textAlign='center';ctx.textBaseline='top';for(const t of nice(x0,x1,5)){const x=Math.round(sx(t))+.5;ctx.fillText(String(+t.toPrecision(6)),x,H-pb+6)}
   ctx.font=bodyFont(12);ctx.fillStyle=C.ink;if(fig.xlabel)ctx.fillText(fig.xlabel,(pl+W-pr)/2,H-16);if(fig.ylabel){ctx.save();ctx.translate(13,(pt+H-pb)/2);ctx.rotate(-Math.PI/2);ctx.textBaseline='middle';ctx.fillText(fig.ylabel,0,0);ctx.restore()}
   for(const h of fig.hlines){ctx.strokeStyle=C.ink;ctx.setLineDash([5,4]);ctx.beginPath();ctx.moveTo(pl,sy(h));ctx.lineTo(W-pr,sy(h));ctx.stroke();ctx.setLineDash([])}
@@ -3600,7 +3950,7 @@ function setupCells(){$$('.cell').forEach((cell,i)=>{const ta=cell.querySelector
     else if(e.key==='Tab'&&!e.shiftKey){e.preventDefault();const s=ta.selectionStart;ta.setRangeText('    ',s,ta.selectionEnd,'end');autoSize(ta)}})})}
 function runAll(day){ENVS[day]=MT.newEnv();EXEC[day]=0;MT.resetFS();let errs=0;const main=$('#day'+day);
   $$('.cell',main).forEach(c=>{if(c.dataset.manual){const out=c.querySelector('.out');out.className='out';out.textContent='';const t=document.createElement('span');t.className='tip';t.textContent=`这一格要手动运行：${c.dataset.manual}。准备好了点这一格右上角的“运行”。`;out.appendChild(t);out.hidden=false;return}if(!runCellEl(c))errs++});RAN[day]=true;
-  const expected={'1':0,'2':5,'3':3,'4':0,'5':0,'6':0,'7':0,'8':0}[day]||0;
+  const expected={'1':0,'2':5,'3':3,'4':0,'5':0,'6':0,'7':0,'8':0,'9':0}[day]||0;
   $$('.runAllMsg',main).forEach(m=>m.textContent=errs>expected?`运行完了，有 ${errs} 个格子报错，往下找红字。`:expected?`全部运行完了。其中 ${expected} 个格子是故意报错的，用来练习读报错。`:'全部运行完了，没有报错。')}
 document.addEventListener('click',e=>{const b=e.target.closest('.runAll');if(b)runAll(b.dataset.day)});
 
@@ -3816,7 +4166,7 @@ function drawImage(cv,img,px){const{H,W}=img;cv.width=W;cv.height=H;cv.style.wid
   for(let k=0;k<W*H;k++){const[r,g,b]=viridis((img.px[k]-lo)/rg);d.data[k*4]=r;d.data[k*4+1]=g;d.data[k*4+2]=b;d.data[k*4+3]=255}c.putImageData(d,0,0)}
 function renderFig(wrap,fig){if(fig.axes.some(a=>a.image)){const grid=document.createElement('div');grid.className='imgrid';grid.style.gridTemplateColumns=`repeat(${fig.cols},minmax(0,1fr))`;
     for(const ax of fig.axes){const cell=document.createElement('figure');if(ax.title){const t=document.createElement('figcaption');t.textContent=ax.title;cell.appendChild(t)}if(ax.image){const cv=document.createElement('canvas');cv.setAttribute('aria-label',ax.title||'图片');cell.appendChild(cv);drawImage(cv,ax.image,72)}grid.appendChild(cell)}wrap.appendChild(grid);return}
-  for(const ax of fig.axes){if(!ax.lines.length)continue;const spec={series:ax.lines.map((l,i)=>({x:l.x,y:l.y,label:ax.legend[i]||'',...fmtStyle(l.fmt,i)})),hlines:[],xlabel:ax.xlabel,ylabel:ax.ylabel,legend:ax.legend.length>0,xlim:ax.xlim,ylim:ax.ylim};const cv=document.createElement('canvas');cv.setAttribute('aria-label','训练曲线');wrap.appendChild(cv);drawPlot(cv,spec)}}
+  for(const ax of fig.axes){if(!ax.lines.length)continue;const spec={series:ax.lines.map((l,i)=>({x:l.x,y:l.y,label:ax.legend[i]||'',...fmtStyle(l.fmt,i)})),hlines:[],xlabel:ax.xlabel,ylabel:ax.ylabel,legend:ax.legend.length>0,xlim:ax.xlim,ylim:ax.ylim,yscale:ax.yscale};const cv=document.createElement('canvas');cv.setAttribute('aria-label','训练曲线');wrap.appendChild(cv);drawPlot(cv,spec)}}
 
 // ---------- 第 7 天：解压内嵌的 Fashion-MNIST，像素查看器 ----------
 let FM_U8=null;
@@ -3856,6 +4206,36 @@ function actRender(){const x=+$('#actX').value;$('#actXv').textContent=x.toFixed
   $('#actCalc').textContent=`函数        值          导数\nReLU     ${Math.max(0,x).toFixed(4).padStart(8)}     ${(x>0?1:0).toFixed(4).padStart(8)}   ${x>0?'导数是 1，梯度原样通过':'导数是 0，梯度被挡住'}\nsigmoid  ${s.toFixed(4).padStart(8)}     ${(s*(1-s)).toFixed(4).padStart(8)}   ${Math.abs(x)>4?'导数接近 0：饱和区，梯度几乎消失':'最大 0.25，在 x = 0 处'}\ntanh     ${t.toFixed(4).padStart(8)}     ${(1-t*t).toFixed(4).padStart(8)}   ${Math.abs(x)>3?'导数接近 0：饱和区':'最大 1，在 x = 0 处'}\n\n叠 10 层 sigmoid、每层导数都取最大值 0.25：\n0.25^10 = ${(0.25**10).toExponential(2)}，梯度到第一层时几乎没了。`}
 $('#actX').addEventListener('input',actRender);
 
+// ---------- 第 9 天：论文的数据划分 ----------
+const SP_DS=[['ASSISTments 2009',3841,{train:3718,val:411,test:1050}],['EdNet',5000,{train:3600,val:400,test:1000}],['Algebra 2005',574,{train:1604,val:183,test:448}],['Junyi',5000,{train:5159,val:571,test:1414}]];
+function spRender(){const[nm,n,w]=SP_DS[+$('#spDs').value],nt=Math.max(1,Math.round(0.2*n)),rest=n-nt,nv=Math.max(1,Math.round(0.1*rest)),ntr=rest-nv;
+  $('#spBar').innerHTML=[['tr','训练',ntr],['va','验证',nv],['te','测试',nt]].map(([c,l,k])=>`<div class="${c}" style="flex:${k}"><b>${l}</b> ${k}</div>`).join('');
+  $('#spCalc').textContent=`${nm}：一共 ${n} 个学生\n先随机打乱，取 20% = ${nt} 个做测试集\n剩下 ${rest} 个里取 10% = ${nv} 个做验证集\n其余 ${ntr} 个做训练集\n\n每个学生的做题序列再切成 100 步一段（窗口）：\n训练 ${w.train} 段，验证 ${w.val} 段，测试 ${w.test} 段\n\n代码：experiment.py 第 648 到 650 行（prep_world）\n训练集：拿来更新参数\n验证集：每个 epoch 算一次 BCE，挑最好的检查点\n测试集：最后只看一次，报告在论文表格里`}
+$('#spDs').innerHTML=SP_DS.map((d,i)=>`<option value="${i}">${d[0]}（${d[1]} 个学生）</option>`).join('');$('#spDs').onchange=spRender;
+// ---------- 第 9 天：λ 把最优解拉向原点 ----------
+const RD={A:[[3,1.2],[1.2,0.8]],ws:[2,1.4]};
+function rdSolve(l){const[[a,b],[c,d]]=RD.A,p=a+l,s=d+l,det=p*s-b*c,r0=a*RD.ws[0]+b*RD.ws[1],r1=c*RD.ws[0]+d*RD.ws[1];return[(s*r0-b*r1)/det,(p*r1-c*r0)/det]}
+function rdRender(){const host=$('#rdHost');if(!host.offsetParent)return;const C=colors(),l=10**+$('#rdL').value;$('#rdLv').textContent=l<0.1?l.toFixed(3):l.toFixed(2);
+  const W=Math.max(240,host.clientWidth),H=Math.round(Math.min(300,W*.8)),ctx=fitCanvas($('#rdCv'),W,H),sc=Math.min(W,H)/4.2,ox=W*.3,oy=H*.75,sx=x=>ox+x*sc,sy=y=>oy-y*sc;
+  ctx.strokeStyle=C.line;ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(0,oy);ctx.lineTo(W,oy);ctx.moveTo(ox,0);ctx.lineTo(ox,H);ctx.stroke();
+  const[[a,b],[,d]]=RD.A,tr=(a+d)/2,q=Math.sqrt(((a-d)/2)**2+b*b),e1=tr+q,e2=tr-q,th=Math.atan2(e1-a,b);
+  ctx.strokeStyle=C.muted;ctx.globalAlpha=.6;for(const lv of[0.1,0.4,1,2,3.5]){ctx.beginPath();for(let k=0;k<=80;k++){const t=k/80*2*Math.PI,u=Math.sqrt(2*lv/e1)*Math.cos(t),v=Math.sqrt(2*lv/e2)*Math.sin(t),x=RD.ws[0]+u*Math.cos(th)-v*Math.sin(th),y=RD.ws[1]+u*Math.sin(th)+v*Math.cos(th);k?ctx.lineTo(sx(x),sy(y)):ctx.moveTo(sx(x),sy(y))}ctx.stroke()}ctx.globalAlpha=1;
+  ctx.strokeStyle=C.muted;ctx.lineWidth=2;ctx.beginPath();for(let k=0;k<=120;k++){const p=rdSolve(10**(-2+k/120*4.5));k?ctx.lineTo(sx(p[0]),sy(p[1])):ctx.moveTo(sx(p[0]),sy(p[1]))}ctx.stroke();
+  ctx.strokeStyle=C.ink;ctx.lineWidth=2;const X=sx(RD.ws[0]),Y=sy(RD.ws[1]);ctx.beginPath();ctx.moveTo(X-5,Y-5);ctx.lineTo(X+5,Y+5);ctx.moveTo(X+5,Y-5);ctx.lineTo(X-5,Y+5);ctx.stroke();
+  const w=rdSolve(l);ctx.fillStyle=C.accent;ctx.strokeStyle=C.surface;ctx.beginPath();ctx.arc(sx(w[0]),sy(w[1]),6,0,7);ctx.fill();ctx.stroke();
+  ctx.font=bodyFont(12);ctx.fillStyle=C.ink;ctx.fillText('w₁',W-20,oy-6);ctx.fillText('w₂',ox+6,14);ctx.fillText('原点',ox+4,oy+14);
+  const n0=Math.hypot(...RD.ws),n1=Math.hypot(...w),L=x=>{const u=x[0]-RD.ws[0],v=x[1]-RD.ws[1];return(a*u*u+2*b*u*v+d*v*v)/2};
+  $('#rdCalc').textContent=`λ = ${l.toPrecision(3)}\n\n不加惩罚的最优解 w* = (${RD.ws[0].toFixed(2)}, ${RD.ws[1].toFixed(2)})  ‖w*‖ = ${n0.toFixed(3)}\n加惩罚后的最优解 w  = (${w[0].toFixed(3)}, ${w[1].toFixed(3)})  ‖w‖ = ${n1.toFixed(3)}\n\n原来的损失 L(w)      = ${L(w).toFixed(4)}（比最小值 0 高了）\n惩罚项 (λ/2)‖w‖²    = ${(l/2*n1*n1).toFixed(4)}\n两项加起来是最小的。\n\n${l<0.05?'λ 很小：几乎没有约束，w ≈ w*。':l>20?'λ 很大：w 被压得接近 0，模型几乎什么都学不到（欠拟合）。':'λ 适中：用一点训练损失换更小的权重。'}`}
+$('#rdL').addEventListener('input',rdRender);
+// ---------- 第 9 天：Dropout 丢掉了谁 ----------
+const DP={h:[1.2,0.4,2.5,0.9,1.8,0.0,3.1,0.7,1.5,2.2,0.3,1.1,2.8,0.6,1.9,1.0],mask:null};
+function dpSample(){const p=+$('#dpP').value;DP.mask=DP.h.map(()=>Math.random()>p);DP.avg=null;dpRender()}
+function dpAvg(){const p=+$('#dpP').value,s=DP.h.map(()=>0);for(let r=0;r<1000;r++)DP.h.forEach((v,i)=>{if(Math.random()>p)s[i]+=p<1?v/(1-p):0});DP.avg=s.map(v=>v/1000);dpRender()}
+function dpRender(){const p=+$('#dpP').value;$('#dpPv').textContent=p.toFixed(2);if(!DP.mask)DP.mask=DP.h.map((_,i)=>i%2===0);const k=1/(1-p);
+  $('#dpGrid').innerHTML=DP.h.map((v,i)=>{const on=DP.mask[i];return`<div class="${on?'on':'off'}"><span class="small muted">原值 ${v.toFixed(1)}</span><b>${on?(v*k).toFixed(2):'0'}</b>${DP.avg?`<span class="small">平均 ${DP.avg[i].toFixed(2)}</span>`:''}</div>`}).join('');
+  const kept=DP.mask.filter(Boolean).length,sum0=DP.h.reduce((a,b)=>a+b,0),sum1=DP.h.reduce((a,v,i)=>a+(DP.mask[i]?v*k:0),0);
+  $('#dpCalc').textContent=`p = ${p.toFixed(2)}：每个单元以 ${p.toFixed(2)} 的概率被置 0，留下的乘 1/(1 − p) = ${k.toFixed(3)}\n这次留下 ${kept} / 16 个\n\n原来 16 个数的和：${sum0.toFixed(2)}\n丢弃并放大后的和：${sum1.toFixed(2)}（每次都不同，但期望等于原来的和）${DP.avg?`\n1000 次平均后的和：${DP.avg.reduce((a,b)=>a+b,0).toFixed(2)}，每格的平均都接近原值`:''}\n\nmodel.eval() 时 Dropout 什么也不做，输出就是原来的 h。`}
+$('#dpP').addEventListener('input',()=>{DP.avg=null;dpRender()});$('#dpGo').onclick=dpSample;$('#dp100').onclick=dpAvg;
 // ---------- 小结勾选、课程表、切换天数 ----------
 function checksSetup(){$$('.check-list').forEach(ul=>{const day=ul.dataset.day,key='checks'+day,st=store.get(key,{});$$('input',ul).forEach(c=>{c.checked=!!st[c.dataset.k];c.onchange=()=>{const s=store.get(key,{});s[c.dataset.k]=c.checked;store.set(key,s);checkMsg(ul)}});checkMsg(ul)})}
 function checkMsg(ul){const day=ul.dataset.day,all=$$('input',ul),n=all.filter(c=>c.checked).length,msg=ul.parentElement.querySelector('.check-msg');const done=n===all.length;
@@ -3868,7 +4248,7 @@ const ROAD=[['1','第 1 章 引言 + 2.1 数据操作'],['2','2.2 数据预处�
   ['18','11.4 至 11.6 + 11.10 小批量随机梯度下降、动量、Adam（论文用的优化器）','paper'],['19','论文专题：离线策略评估 IPS、SNIPS、DR（书里没有）','paper'],['20','论文专题：逐行读你的 experiment.py','paper'],
   ['选学','4.7 前向传播、反向传播和计算图；4.10 Kaggle 房价预测'],['选学','第 6 至 7 章 卷积神经网络（LeNet、ResNet 等）'],['选学','9.3 至 9.8 深度和双向循环网络、机器翻译、seq2seq'],['选学','第 11 章其余优化算法、第 12 章计算性能'],['选学','第 13 至 15 章 计算机视觉、自然语言处理']];
 function roadRender(){$('#roadList').innerHTML=ROAD.map(([d,t,f])=>{const live=DAYS.includes(d);return`<div><span class="d">${/^\d+$/.test(d)?`第 ${d} 天`:d}</span><span>${live?`<a href="#day${d}">${esc(t)}</a>`:esc(t)}${f==='paper'?' <span class="mark">论文</span>':''}</span><span class="st${live?' now':''}">${live?'已上线':'未上线'}</span></div>`}).join('')}
-const REDRAW={'1':()=>{kRender();imRender();ofRender()},'2':()=>{dotRender();normRender()},'3':()=>{secRender();gradRender()},'4':()=>{diceRender();bayesRender();bktRender()},'5':()=>{houseRender();if(!sgd.X)sgdData();sgdRender()},'6':()=>{smRender();calRender()},'7':()=>{pixRender()},'8':()=>{uaRender();actRender()}};
+const REDRAW={'1':()=>{kRender();imRender();ofRender()},'2':()=>{dotRender();normRender()},'3':()=>{secRender();gradRender()},'4':()=>{diceRender();bayesRender();bktRender()},'5':()=>{houseRender();if(!sgd.X)sgdData();sgdRender()},'6':()=>{smRender();calRender()},'7':()=>{pixRender()},'8':()=>{uaRender();actRender()},'9':()=>{spRender();rdRender();dpRender()}};
 function showDay(day,scroll){if(!DAYS.includes(day))day='1';$$('main.day').forEach(m=>m.hidden=m.dataset.day!==day);$$('[data-nav]').forEach(a=>a.classList.toggle('on',a.dataset.nav===day));store.set('lastDay',day);
   if(!RAN[day]){if(day==='7'&&!FM_U8){fmReady.then(ok=>{if(ok&&!RAN['7']){runAll('7');REDRAW['7']()}});}else runAll(day)}$$('#day'+day+' textarea').forEach(autoSize);REDRAW[day]();if(scroll)window.scrollTo(0,0)}
 function route(){const h=location.hash.replace('#','');const m=h.match(/^day(\d+)$/);if(m){showDay(m[1],true);return}
@@ -3962,6 +4342,17 @@ const QUIZ={
  {t:'c',q:'MLP：784 → 256（ReLU）→ 10，一共多少个参数？',o:['203530','200704','7850','204800'],a:0,why:'784 × 256 + 256 + 256 × 10 + 10 = 200704 + 256 + 2560 + 10 = 203530。'},
  {t:'c',q:'simpleKT 的输出头 nn.Sequential(nn.Linear(128, 64), nn.ReLU(), nn.Linear(64, 1)) 有多少个参数？',o:['8192','8321','8256','193'],a:1,why:'128 × 64 + 64 = 8256，64 × 1 + 1 = 65，共 8321。ReLU 没有参数。'},
  {t:'shape',q:'nn.Sequential(nn.Flatten(), nn.Linear(784, 256), nn.ReLU()) 作用在 64 张图上，输出形状？',code:'nn.Sequential(nn.Flatten(), nn.Linear(784, 256), nn.ReLU())(torch.zeros(64, 1, 28, 28))',why:'Flatten 把 [64, 1, 28, 28] 变成 [64, 784]，全连接层变成 [64, 256]，ReLU 不改形状。'},
+],
+'9':[
+ {t:'c',q:'选“隐藏层几层、学习率多大”这类超参数时，应该看哪个数据集上的表现？',o:['训练集','验证集','测试集','三个都看，取平均'],a:1,why:'测试集只能在最后看一次。用测试集挑超参数，它就等于参与了训练，报告出来的结果会偏乐观。'},
+ {t:'c',q:'训练损失 0.62、测试损失 0.63，两条曲线都很早就不降了。最可能是什么情况？',o:['过拟合','欠拟合','正好','测试集泄漏'],a:1,why:'两种误差都高而且差不多，说明模型连训练数据都拟合不好，表达能力不够，是欠拟合。可以换更复杂的模型。'},
+ {t:'c',q:'只有 100 个训练样本，用 19 阶多项式（20 个参数）去拟合 3 阶多项式生成的数据，会出现什么？',o:['欠拟合','过拟合：训练损失低、测试损失降不下去','两种损失都降到 0','报错'],a:1,why:'模型比数据复杂得多，会去拟合噪声，高次项的权重也不再是 0。这是今天 4.4.3 节最后一个实验。'},
+ {t:'c',q:'损失加上 (λ/2)‖w‖² 以后，用学习率 η 做一步梯度下降，w 的更新是什么？',o:['w ← w − η∂L/∂w','w ← (1 − ηλ)w − η∂L/∂w','w ← (1 + ηλ)w − η∂L/∂w','w ← w − λ∂L/∂w'],a:1,why:'(λ/2)‖w‖² 的梯度是 λw，所以 w − η(∂L/∂w + λw) = (1 − ηλ)w − η∂L/∂w。每一步先把 w 缩小一点，所以叫权重衰减。'},
+ {t:'c',q:'torch.optim.SGD([{"params": net[0].weight, "weight_decay": 3}, {"params": net[0].bias}], lr=0.003) 的意思是？',o:['权重和偏置都衰减 3','只有权重衰减，偏置不衰减','只有偏置衰减','学习率是 3'],a:1,why:'这是参数组写法：第一组单独设了 weight_decay，第二组没设，用默认值 0。你论文只给策略头 g 加 L2，是同一个思路。'},
+ {t:'c',q:'Dropout 概率 p = 0.5，某个单元原来的输出是 4。训练时它要么变成多少？',o:['0 或 4','0 或 2','0 或 8','2 或 6'],a:2,why:'被丢掉是 0，留下来要除以 (1 − p) = 0.5，变成 8。这样期望值仍然是 0.5×0 + 0.5×8 = 4。'},
+ {t:'c',q:'调用 net.eval() 之后，nn.Dropout 层会怎样？',o:['丢弃概率变成 1','什么也不做，原样输出','丢弃概率减半','报错'],a:1,why:'评估时要用上所有单元，所以 Dropout 直接输出输入。你论文的 train_kt 训练时调 model.train()，评估前调 model.eval()。'},
+ {t:'c',q:'你论文 experiment.py 每个 epoch 在验证集上算 BCE，比之前更低就存下 state_dict，最后恢复最好的那份。这起什么作用？',o:['加快训练','用验证集做模型选择，相当于提前停止，防止用到过拟合以后的参数','增大学习率','让测试集变大'],a:1,why:'后面的 epoch 可能已经开始过拟合，按验证集挑出来的检查点泛化最好。全程没有用到测试集。'},
+ {t:'code',q:'写代码：造一个 nn.Dropout(0.25) 层 drop，把它作用在 torch.ones(4000) 上，结果存成 y。检查：y 里只有 0 和 4/3 两种值，0 的比例在 0.2 到 0.3 之间。',start:'drop = \ny = \n(y == 0).float().mean()',check:env=>{const y=env.vars.y;if(!y||!MT.isT(y)||y.shape.join()!=='4000')return'y 应该是形状 (4000,) 的张量';const k=4/3;let z=0;for(const v of y.data){if(v===0)z++;else if(v===1)return'y 里有 1：Dropout 没起作用。是不是调了 drop.eval()？';else if(Math.abs(v-k)>1e-5)return`y 里有 ${v}，留下来的值应该是 1/(1 − 0.25) ≈ 1.3333`}const f=z/4000;if(f<0.2||f>0.3)return`0 的比例是 ${f.toFixed(3)}，应该在 0.25 附近。是不是用了 eval() 或者 p 写错了？`;return true},why:'drop = nn.Dropout(0.25)，y = drop(torch.ones(4000))。新建的层默认处在训练模式，所以会丢弃。'},
 ],
 };
 function quizState(day){return store.get('quiz'+day,{})}

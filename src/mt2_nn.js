@@ -102,15 +102,19 @@ const nnF=mod('torch.nn.functional',{relu:fn('relu',a=>unary(a[0],'relu')),sigmo
 const nnMod=mod('torch.nn',{Module:ModuleCls,init:nnInit,functional:nnF,Parameter:fn('Parameter',(a,kw)=>{const T=asTensor(a[0]);const p=mkParam(T.shape.slice(),T.data);p.dtype=T.dtype;if(kw.requires_grad&&!truthy(kw.requires_grad))p.requires_grad=false;return p})});
 for(const k of NN_KINDS)nnMod.attrs[k]=fn(k,(a,kw)=>nnMake(k,a,kw));
 // 优化器
-function optMake(kind,a,kw){const ps=iterate(a[0]).filter(isT);if(!ps.length)err('ValueError','optimizer got an empty parameter list');const g={lr:numOf(kwOr(kw,a,'lr',1,F(kind==='SGD'?NaN:0.001))),momentum:kw.momentum?numOf(kw.momentum):0,weight_decay:kw.weight_decay?numOf(kw.weight_decay):0};
-  if(kind==='SGD'&&Number.isNaN(g.lr))err('TypeError',"SGD.__init__() missing 1 required positional argument: 'lr'");if(kind==='Adam'){const b=kw.betas?iterate(kw.betas).map(numOf):[0.9,0.999];g.b1=b[0];g.b2=b[1];g.eps=kw.eps?numOf(kw.eps):1e-8}
-  const pg=mkDict([[S('lr'),F(g.lr)],[S('momentum'),F(g.momentum)],[S('weight_decay'),F(g.weight_decay)]]);return{t:'optim',kind,params:ps,g,pg,state:new Map(),t_:0}}
-function optAttr(o,name){const lr=()=>{const e=o.pg.m.get(numKey(S('lr')));return numOf(e[1])};
-  if(name==='param_groups')return list([o.pg]);
+function optMake(kind,a,kw){const items=a[0].t==='list'||a[0].t==='tuple'||a[0].t==='iter'?iterate(a[0]):[a[0]];const toList=v=>isT(v)?[v]:iterate(v).filter(isT);
+  const defLr=numOf(kwOr(kw,a,'lr',1,F(kind==='SGD'?NaN:0.001)));if(kind==='SGD'&&Number.isNaN(defLr))err('TypeError',"SGD.__init__() missing 1 required positional argument: 'lr'");
+  const raw={lr:kwOr(kw,a,'lr',1,F(defLr)),momentum:kw.momentum||I(0),weight_decay:kw.weight_decay||I(0)};const base={lr:defLr,momentum:numOf(raw.momentum),weight_decay:numOf(raw.weight_decay)};if(kind==='Adam'){const b=kw.betas?iterate(kw.betas).map(numOf):[0.9,0.999];base.b1=b[0];base.b2=b[1];base.eps=kw.eps?numOf(kw.eps):1e-8}
+  const groups=items.length&&items[0].t==='dict'?items.map(d=>{const g={...base},r={...raw};let ps=[];for(const[k,v]of d.m.values()){const key=str(k);if(key==='params')ps=toList(v);else{g[key]=numOf(v);r[key]=v}}return{params:ps,g,r}}):[{params:items.filter(isT),g:base,r:raw}];
+  if(!groups.some(x=>x.params.length))err('ValueError','optimizer got an empty parameter list');
+  for(const G of groups)G.pg=mkDict([[S('params'),list(G.params)],[S('lr'),G.r.lr],[S('momentum'),G.r.momentum],[S('weight_decay'),G.r.weight_decay]]);
+  return{t:'optim',kind,groups,params:groups.flatMap(G=>G.params),g:groups[0].g,pg:groups[0].pg,state:new Map(),t_:0}}
+function optAttr(o,name){
+  if(name==='param_groups')return list(o.groups.map(G=>G.pg));
   if(name==='zero_grad')return fn('zero_grad',(a,kw)=>{const none=kw.set_to_none?truthy(kw.set_to_none):true;for(const p of o.params){if(none)p.grad=null;else if(p.grad)p.grad.data.fill(0)}return NONE});
-  if(name==='step')return fn('step',()=>{o.t_++;const L=lr(),g=o.g;for(const p of o.params){if(!p.grad)continue;const gr=Float64Array.from(p.grad.data);if(g.weight_decay)for(let i=0;i<gr.length;i++)gr[i]+=g.weight_decay*p.data[i];
+  if(name==='step')return fn('step',()=>{o.t_++;for(const G of o.groups){const g=G.g,L=numOf(G.pg.m.get(numKey(S('lr')))[1]),wd=numOf(G.pg.m.get(numKey(S('weight_decay')))[1]);for(const p of G.params){if(!p.grad)continue;const gr=Float64Array.from(p.grad.data);if(wd)for(let i=0;i<gr.length;i++)gr[i]+=wd*p.data[i];
       if(o.kind==='SGD'){let d=gr;if(g.momentum){let v=o.state.get(p);if(!v){v=Float64Array.from(gr)}else for(let i=0;i<v.length;i++)v[i]=g.momentum*v[i]+gr[i];o.state.set(p,v);d=v}for(let i=0;i<p.data.length;i++)p.data[i]=castVal(p.data[i]-L*d[i],p.dtype)}
-      else{let s=o.state.get(p);if(!s){s={m:new Float64Array(gr.length),v:new Float64Array(gr.length)};o.state.set(p,s)}const c1=1-g.b1**o.t_,c2=1-g.b2**o.t_;for(let i=0;i<gr.length;i++){s.m[i]=g.b1*s.m[i]+(1-g.b1)*gr[i];s.v[i]=g.b2*s.v[i]+(1-g.b2)*gr[i]*gr[i];p.data[i]=castVal(p.data[i]-L*(s.m[i]/c1)/(Math.sqrt(s.v[i]/c2)+g.eps),p.dtype)}}}return NONE});
+      else{let s=o.state.get(p);if(!s){s={m:new Float64Array(gr.length),v:new Float64Array(gr.length)};o.state.set(p,s)}const c1=1-g.b1**o.t_,c2=1-g.b2**o.t_;for(let i=0;i<gr.length;i++){s.m[i]=g.b1*s.m[i]+(1-g.b1)*gr[i];s.v[i]=g.b2*s.v[i]+(1-g.b2)*gr[i]*gr[i];p.data[i]=castVal(p.data[i]-L*(s.m[i]/c1)/(Math.sqrt(s.v[i]/c2)+g.eps),p.dtype)}}}}return NONE});
   err('AttributeError',`'${o.kind}' object has no attribute '${name}'`)}
 function optRepr(o){const g=o.g,lines=o.kind==='SGD'?[['dampening','0'],['differentiable','False'],['foreach','None'],['fused','None'],['lr',pyFloatRepr(g.lr)],['maximize','False'],['momentum',g.momentum?pyFloatRepr(g.momentum):'0'],['nesterov','False'],['weight_decay',g.weight_decay?pyFloatRepr(g.weight_decay):'0']]
   :[['amsgrad','False'],['betas',`(${pyFloatRepr(g.b1)}, ${pyFloatRepr(g.b2)})`],['capturable','False'],['decoupled_weight_decay','False'],['differentiable','False'],['eps',String(g.eps)],['foreach','None'],['fused','None'],['lr',pyFloatRepr(g.lr)],['maximize','False'],['weight_decay',g.weight_decay?pyFloatRepr(g.weight_decay):'0']];
