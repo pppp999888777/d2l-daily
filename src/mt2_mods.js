@@ -5,6 +5,7 @@ const DT=n=>({t:'dtype',name:n});
 const mod=(name,attrs)=>({t:'mod',name,attrs});
 function kwOr(kw,args,name,i,def){return kw[name]!==undefined?kw[name]:args[i]!==undefined?args[i]:def}
 function dimArg(a,kw,i=0){const v=kw.dim||kw.axis||a[i];if(!v||v.t==='none')return null;if(v.t==='list'||v.t==='tuple')return v.items.map(intOf);return intOf(v)}
+const corrArg=kw=>kw.correction&&kw.correction.t!=='none'?numOf(kw.correction):kw.unbiased&&!kw.unbiased.v?0:1;
 const keepArg=kw=>!!((kw.keepdim&&kw.keepdim.v)||(kw.keepdims&&kw.keepdims.v));
 function makeCat(args,kw){const seq=args[0];if(!seq||!(seq.t==='tuple'||seq.t==='list'))err('TypeError','cat() 的第一个参数要是一组张量，比如 (X, Y)');let dim=kw.dim?intOf(kw.dim):(args[1]?intOf(args[1]):0);
   const ts=seq.items.map(asTensor),nd=ts[0].shape.length;if(dim<0)dim+=nd;if(dim<0||dim>=nd)err('IndexError','Dimension out of range');
@@ -39,7 +40,7 @@ const torch=mod('torch',{
   mv:fn('mv',a=>{const A=asTensor(a[0]),x=asTensor(a[1]);if(A.shape.length!==2||x.shape.length!==1)err('RuntimeError','vector + matrix @ vector expected, got 1, 2, 2');return matmul(A,x,'mv')}),
   dot:fn('dot',a=>{const A=asTensor(a[0]),Bt=asTensor(a[1]);if(A.shape.length!==1||Bt.shape.length!==1)err('RuntimeError',`1D tensors expected, but got ${A.shape.length}D and ${Bt.shape.length}D tensors`);if(A.dtype!==Bt.dtype)err('RuntimeError',`dot : expected both vectors to have same dtype, but found ${A.dtype==='int64'?'Long':'Float'} and ${Bt.dtype==='int64'?'Long':'Float'}`);return matmul(A,Bt)}),
   norm:fn('norm',a=>normT(asTensor(a[0]))),
-  sum:fn('sum',(a,kw)=>reduce(asTensor(a[0]),dimArg(a,kw,1),'sum',keepArg(kw))),mean:fn('mean',(a,kw)=>reduce(asTensor(a[0]),dimArg(a,kw,1),'mean',keepArg(kw))),
+  sum:fn('sum',(a,kw)=>reduce(asTensor(a[0]),dimArg(a,kw,1),'sum',keepArg(kw))),mean:fn('mean',(a,kw)=>reduce(asTensor(a[0]),dimArg(a,kw,1),'mean',keepArg(kw))),clamp:fn('clamp',(a,kw)=>clampT(asTensor(a[0]),kw.min||a[1],kw.max||a[2])),clip:fn('clip',(a,kw)=>clampT(asTensor(a[0]),kw.min||a[1],kw.max||a[2])),var:fn('var',(a,kw)=>varStd(asTensor(a[0]),dimArg(a,kw,1),corrArg(kw),keepArg(kw),false)),std:fn('std',(a,kw)=>varStd(asTensor(a[0]),dimArg(a,kw,1),corrArg(kw),keepArg(kw),true)),
   max:fn('max',(a,kw)=>a[1]&&isT(a[1])?maxmin(a[0],a[1],1):reduce(asTensor(a[0]),dimArg(a,kw,1),'max',keepArg(kw))),min:fn('min',(a,kw)=>a[1]&&isT(a[1])?maxmin(a[0],a[1],-1):reduce(asTensor(a[0]),dimArg(a,kw,1),'min',keepArg(kw))),
   maximum:fn('maximum',a=>maxmin(a[0],a[1],1)),minimum:fn('minimum',a=>maxmin(a[0],a[1],-1)),
   eye:fn('eye',(a,kw)=>{const n=intOf(a[0]),m=a[1]?intOf(a[1]):n;const d=[];for(let i=0;i<n;i++)for(let j=0;j<m;j++)d.push(i===j?1:0);return mkT([n,m],d,dtypeKw(kw,'float32'))}),
@@ -82,7 +83,7 @@ function plotFig(ctx){if(!ctx.fig){ctx.fig={series:[],hlines:[],xlabel:'',ylabel
 function d2lPlot(a,kw,ctx){let X=a[0],Y=kwOr(kw,a,'Y',1,null);const xl=kwOr(kw,a,'xlabel',2,NONE),yl=kwOr(kw,a,'ylabel',3,NONE),lg=kwOr(kw,a,'legend',4,NONE);
   const isList=v=>v&&(v.t==='list'||v.t==='tuple')&&v.items.length&&(isT(v.items[0])||v.items[0].t==='list');
   let Xs=isList(X)?X.items:[X],Ys;if(!Y||Y.t==='none'){Ys=Xs;Xs=Ys.map(y=>null)}else Ys=isList(Y)?Y.items:[Y];if(Xs.length===1&&Ys.length>1)Xs=Ys.map(()=>Xs[0]);
-  const labels=lg&&lg.t!=='none'?lg.items.map(str):[];const fig={series:Ys.map((y,i)=>{const yv=toXY(y),xv=Xs[i]?toXY(Xs[i]):yv.map((_,k)=>k);return{x:xv,y:yv,label:labels[i]||'',dash:i>0&&!labels.length?false:i===1}}),hlines:[],xlabel:xl.t==='str'?xl.v:'',ylabel:yl.t==='str'?yl.v:'',legend:labels.length>0};
+  const labels=lg&&lg.t!=='none'?lg.items.map(str):[];const fig={series:Ys.map((y,i)=>{const yv=toXY(y),xv=Xs[i]?toXY(Xs[i]):yv.map((_,k)=>k);return{x:xv,y:yv,label:labels[i]||''}}),hlines:[],xlabel:xl.t==='str'?xl.v:'',ylabel:yl.t==='str'?yl.v:'',legend:labels.length>0};
   ctx.plots.push(fig);return NONE}
 const pltAxes={t:'mod',name:'Axes',attrs:{}};
 function pltMod(ctx){return{t:'mod',name:'matplotlib.pyplot',attrs:new Proxy({},{get:(o,name)=>{

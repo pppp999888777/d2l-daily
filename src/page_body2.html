@@ -1,7 +1,7 @@
 <header class="top"><div class="wrap">
   <span class="brand">动手学深度学习每日课</span>
   <nav class="days" id="dayNav" aria-label="课程天数">
-    <a href="#day1" data-nav="1">第 1 天</a><a href="#day2" data-nav="2">第 2 天</a><a href="#day3" data-nav="3">第 3 天</a><a href="#day4" data-nav="4">第 4 天</a><a href="#day5" data-nav="5">第 5 天</a><a href="#day6" data-nav="6">第 6 天</a><a href="#day7" data-nav="7">第 7 天</a><a href="#day8" data-nav="8">第 8 天</a><a href="#day9" data-nav="9">第 9 天</a>
+    <a href="#day1" data-nav="1">第 1 天</a><a href="#day2" data-nav="2">第 2 天</a><a href="#day3" data-nav="3">第 3 天</a><a href="#day4" data-nav="4">第 4 天</a><a href="#day5" data-nav="5">第 5 天</a><a href="#day6" data-nav="6">第 6 天</a><a href="#day7" data-nav="7">第 7 天</a><a href="#day8" data-nav="8">第 8 天</a><a href="#day9" data-nav="9">第 9 天</a><a href="#day10" data-nav="10">第 10 天</a>
     <a href="#road" class="road-link">课程表</a>
     <a class="soon" href="#road">第 9 天</a><a class="soon" href="#road">第 10 天</a>
   </nav>
@@ -1074,7 +1074,7 @@ X1.shape, w_star</textarea></div>
         <label class="ctrl" for="sgE">epoch 数 <output id="sgEv">1</output><input type="range" id="sgE" min="1" max="5" value="1"></label>
         <button class="btn primary" id="sgRun">训练</button><button class="btn" id="sgReset">参数归零</button>
       </div>
-      <div class="two"><div class="cv" id="sgHost"><canvas id="sgCv" aria-label="参数在损失等高线上的路径"></canvas></div><div class="stack"><div class="cv"><canvas id="sgLoss" aria-label="每一步之后的训练损失"></canvas></div><div class="calc" id="sgCalc"></div></div></div>
+      <div class="two"><div class="cv" id="sgHost"><canvas id="sgCv" aria-label="参数在损失等高线上的路径"></canvas></div><div class="stack"><div class="cv"><canvas id="sgLoss" aria-label="每一步之后的训练损失"></canvas></div><div class="calc pw" id="sgCalc"></div></div></div>
     </div>
     <div class="prose"><p>训练完的模型拿来估计新房子的价格，叫<b>预测</b>。很多人也叫“推断”，原书提醒在统计学里“推断”指的是估计参数，跟统计学家交流时容易误会。</p></div>
   </div>
@@ -2460,6 +2460,211 @@ print(bool((net(x) == net(x)).all()))</textarea></div>
     <div class="panel stack">
       <h3>明天（第 10 天）学什么</h3>
       <p>原书 4.8 数值稳定性和模型初始化（为什么深层网络会梯度消失、梯度爆炸，Xavier 初始化），4.9 环境和分布偏移（训练数据和实际使用的数据不一样时会怎样）。后者正好是你论文“用模拟器评估、用真实日志训练”要面对的问题。</p>
+    </div>
+  </div>
+</section>
+</main>
+
+<main class="wrap day" id="day10" data-day="10" hidden>
+<section class="hero">
+  <div class="eyebrow">第 10 天 · 原书第 4.8 节 + 第 4.9 节 · 论文路线第 3 课</div>
+  <h1>梯度为什么会消失，数据为什么会“变”</h1>
+  <p class="lead">前半天看深层网络里梯度怎么一层层变小或变大，以及初始化为什么重要。后半天看训练数据和实际使用的数据不一样时会出什么问题、怎么用“重要性权重”去纠正。后者就是你论文离线策略评估（OPE）里 π/μ 权重的来历。</p>
+  <div class="plan">
+    <div><b class="k">今天的时间</b>大约 60 分钟。今天的代码格都很快，自动运行。</div>
+    <div><b class="k">学完你能</b><ul><li>说清梯度消失和梯度爆炸的原因</li><li>推出 Xavier 初始化的方差</li><li>区分协变量偏移、标签偏移、概念偏移</li><li>用一个分类器估计重要性权重 β(x)</li></ul></div>
+    <div><b class="k">和你的论文</b><ul><li><code>clip_grad_norm_(params, 5.0)</code></li><li>策略头 g 初始化为 0</li><li>OPE 里的权重 π/μ 和截断 20</li></ul></div>
+  </div>
+</section>
+
+<section class="part" id="numstab">
+  <div class="part-h"><div class="eyebrow">第一部分</div><h2>4.8 数值稳定性和模型初始化</h2><span class="src">对应原书第 4.8 节，代码来自原书 PyTorch 版</span></div>
+  <div class="prose"><div class="row"><button class="btn primary runAll" data-day="10">从头全部运行</button><span class="small muted runAllMsg"></span></div></div>
+
+  <div class="blk"><div class="blk-h"><span class="n">4.8.1</span><h3>梯度消失和梯度爆炸</h3></div>
+    <div class="prose">
+      <p>一个 L 层的网络，第 l 层算 h⁽ˡ⁾ = f_l(h⁽ˡ⁻¹⁾)。按链式法则，损失对第 l 层参数的梯度是 L − l 个矩阵连乘再乘一个向量：</p>
+      <p class="math">∂o/∂W⁽ˡ⁾ = M⁽ᴸ⁾ · M⁽ᴸ⁻¹⁾ ⋯ M⁽ˡ⁺¹⁾ · v⁽ˡ⁾，其中 M⁽ᵏ⁾ = ∂h⁽ᵏ⁾/∂h⁽ᵏ⁻¹⁾</p>
+      <p>很多个数连乘，结果要么越来越小（<b>梯度消失</b>，前面的层几乎学不动），要么越来越大（<b>梯度爆炸</b>，参数一步就飞出去）。这和 0.9¹⁰⁰ ≈ 0.00003、1.1¹⁰⁰ ≈ 13781 是一个道理。</p>
+      <p><b>梯度消失</b>的经典原因是 sigmoid。它的导数最大只有 0.25，输入稍大或稍小，导数就接近 0。下面画出 sigmoid 和它的导数：</p>
+    </div>
+    <div class="cell"><textarea>%matplotlib inline
+import torch
+from d2l import torch as d2l
+
+x = torch.arange(-8.0, 8.0, 0.1, requires_grad=True)
+y = torch.sigmoid(x)
+y.backward(torch.ones_like(x))
+
+d2l.plot(x.detach().numpy(), [y.detach().numpy(), x.grad.numpy()],
+         legend=['sigmoid', 'gradient'], figsize=(4.5, 2.5))</textarea></div>
+    <div class="prose"><p>两端的梯度有多小？</p></div>
+    <div class="cell"><textarea>x.grad[[0, 40, 80, 120, 159]], x.grad.max()</textarea></div>
+    <div class="prose"><p><b>梯度爆炸</b>：拿一个 4×4 的随机矩阵，连乘 100 个随机矩阵。每次运行结果都不一样，但数会大到 10²⁰ 以上。</p></div>
+    <div class="cell"><textarea>M = torch.normal(0, 1, size=(4,4))
+print('一个矩阵 \n',M)
+for i in range(100):
+    M = torch.mm(M,torch.normal(0, 1, size=(4, 4)))
+
+print('乘以100个矩阵后\n', M)</textarea></div>
+    <div class="prose">
+      <p><b>对称性</b>：如果一层的所有权重都初始化成同一个值，这一层的每个隐藏单元算出来完全一样，反向传播时梯度也完全一样，更新后还是一样。不管训练多久，这一层就相当于只有 1 个单元。随机初始化就是为了打破这种对称。下面把一个线性层的权重全设成 0.5：</p>
+    </div>
+    <div class="cell"><textarea>from torch import nn
+lin = nn.Linear(300, 200)
+nn.init.zeros_(lin.bias)
+nn.init.constant_(lin.weight, 0.5)
+X = torch.ones(2, 300)
+lin(X)[:, :5]     # 200 个输出单元算出来全一样</textarea></div>
+    <div class="cell"><textarea>lin(X).sum().backward()
+lin.weight.grad[:5, :4]    # 每个单元收到的梯度也一样</textarea></div>
+    <div class="callout"><h4>对照你的论文：策略头为什么可以初始化成 0</h4><p>你论文 DKT 的策略头在 <code>experiment.py</code> 第 1039 到 1040 行全部初始化成 0：</p>
+<pre class="code">self.g = nn.Linear(d, K)
+nn.init.zeros_(self.g.weight); nn.init.zeros_(self.g.bias)</pre>
+      <p>这不会有对称性问题。对称性问题出在<b>隐藏层</b>：后面的层要靠前面各单元的不同输出。g 是最后一层，K 个输出对应 K 个知识点，各自收到的梯度不同，训练一步就分开了。初始化成 0 是故意的：一开始 g(h) = 0，策略打分就只剩 −(p − 0.7)²/T，策略和“选最接近 0.7 的题”这条规则完全一样，训练再从这里慢慢偏离。</p></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">4.8.2</span><h3>参数初始化</h3></div>
+    <div class="prose">
+      <p>不指定的话，PyTorch 会给每种层一个默认初始化，中等规模的问题一般够用。<b>Xavier 初始化</b>的想法是：让每一层输出的方差和输入的方差一样，信号就不会一层层放大或缩小。</p>
+      <p>考虑一个没有激活函数的全连接层 o_i = Σⱼ w_ij·x_j，输入有 n_in 个，输出有 n_out 个。设权重均值 0、方差 σ²，输入均值 0、方差 γ²，且相互独立。那么：</p>
+      <p class="math">Var[o_i] = Σⱼ E[w²_ij]·E[x²_j] = n_in · σ² · γ²</p>
+      <p>要让 Var[o_i] = γ²，需要 n_in·σ² = 1。反向传播时同样的推导给出 n_out·σ² = 1。两个条件没法同时满足，Xavier 取折中：</p>
+      <p class="math">σ² = 2 / (n_in + n_out)</p>
+      <p>如果用均匀分布 U(−a, a)，它的方差是 a²/3。令 a²/3 = 2/(n_in + n_out)，得到 a = √(6 / (n_in + n_out))。</p>
+    </div>
+    <div class="cell"><textarea>lin = nn.Linear(300, 200)
+nn.init.xavier_uniform_(lin.weight)
+b = (6 / (300 + 200)) ** 0.5
+print('理论边界 a =', round(b, 4), ' 实际最大绝对值：', lin.weight.abs().max().item())
+print('理论方差 =', 2 / 500, ' 实际方差：', lin.weight.var().item())</textarea></div>
+    <div class="prose"><p>实验：10 层、每层 256 个单元、ReLU 激活。权重乘 0.01 时信号几乎消失；按 He 初始化（σ² = 2/n_in，专门为 ReLU 设计，补偿 ReLU 砍掉一半的方差）时，信号的大小保持住了。</p></div>
+    <div class="cell"><textarea>for name, scale in [('std = 0.01', 0.01), ('He: std = sqrt(2/256)', (2 / 256) ** 0.5)]:
+    h = torch.randn(200, 256)
+    for i in range(10):
+        W = torch.randn(256, 256) * scale
+        h = torch.relu(h @ W)
+    print(name, '→ 第 10 层输出的标准差：', h.std().item())</textarea></div>
+    <div class="panel stack" id="sigLab">
+      <h4>信号穿过 L 层</h4>
+      <p class="small muted">一个每层 64 个单元的网络，输入 64 个样本。实线是每一层输出的标准差（前向信号），虚线是损失对每一层权重的梯度大小（反向信号）。纵轴是对数刻度，每一格差 10 倍。两条线都保持水平，才说明信号既没有消失也没有爆炸。</p>
+      <div class="row">
+        <label class="ctrl" for="sgAct">激活函数 <select id="sgAct"><option value="sigmoid">sigmoid</option><option value="tanh">tanh</option><option value="relu" selected>ReLU</option></select></label>
+        <label class="ctrl" for="sgInit">初始化 <select id="sgInit"><option value="small">N(0, 0.01²)</option><option value="one">N(0, 1)</option><option value="xavier">Xavier：σ² = 2/(n_in + n_out)</option><option value="he" selected>He：σ² = 2/n_in</option></select></label>
+        <label class="ctrl" for="sgL">层数 <output id="sgLv">20</output><input type="range" id="sgL" min="2" max="40" step="1" value="20"></label>
+      </div>
+      <div class="cv" id="sgHost"><canvas id="sgCv" aria-label="每一层的前向信号和梯度大小"></canvas></div>
+      <div class="calc pw" id="sgCalc"></div>
+    </div>
+    <div class="callout"><h4>对照你的论文：梯度裁剪</h4><p>对付梯度爆炸，最直接的办法是<b>梯度裁剪</b>：如果所有参数梯度合起来的长度（L2 范数）超过一个上限，就整体按比例缩小到这个上限，方向不变。你论文的 <code>train_kt</code> 在第 1364 行每一步都这么做：</p>
+<pre class="code">opt.zero_grad(set_to_none=True); loss.backward()
+nn.utils.clip_grad_norm_(params, 5.0); opt.step()      <span class="c"># 梯度总长度最多 5</span></pre>
+      <p>循环神经网络（DKT 用的 LSTM）沿时间步展开后非常“深”，最容易梯度爆炸。第 13 天学 RNN 时会自己实现一遍梯度裁剪。</p></div>
+  </div>
+</section>
+
+<section class="part" id="shift">
+  <div class="part-h"><div class="eyebrow">第二部分</div><h2>4.9 环境和分布偏移</h2><span class="src">对应原书第 4.9 节。原书这一节没有代码，下面的代码格是本页补充的</span></div>
+  <div class="blk"><div class="blk-h"><span class="n">4.9.1</span><h3>三种分布偏移</h3></div>
+    <div class="prose">
+      <p>训练数据来自分布 p_S(x, y)（源分布），模型上线后遇到的数据来自 p_T(x, y)（目标分布）。两者不一样时，按训练集挑出来的最好的模型，上线后不一定好。原书分三种情况：</p>
+      <ul>
+        <li><b>协变量偏移</b>：输入的分布变了，p(x) 不同，但“给定输入，标签怎么来”没变，p(y | x) 相同。例子：用真实照片训练猫狗分类器，上线后要分类卡通图片。</li>
+        <li><b>标签偏移</b>：标签的分布变了，p(y) 不同，但 p(x | y) 没变。例子：用夏天的病例训练诊断模型，冬天流感病人的比例大增。</li>
+        <li><b>概念偏移</b>：标签本身的定义变了，p(y | x) 不同。例子：同一种饮料，在美国不同地区叫 soda、pop 或 coke。</li>
+      </ul>
+      <p>原书还提醒了一种更麻烦的情况：模型自己的决策会改变以后的数据。比如贷款模型拒绝了某类人，以后就再也看不到这类人还不还款的数据了。</p>
+    </div>
+    <div class="callout"><h4>对照你的论文：这正是 OPE 要解决的问题</h4><p>你论文的真实日志是在<b>原来的出题策略 μ</b> 下收集的：学生做了哪些题、按什么顺序做，都由 μ 决定。你训练的新策略 π 会选不同的题，于是学生遇到的“状态和题目”的分布就变了。这是原书说的“模型的决策改变了数据”，也是一种协变量偏移。直接拿日志里的平均奖励当新策略的成绩是有偏的，所以论文用离线策略评估（OPE）给每条记录加权重 π(a | s) / μ(a | s)。下面就来看这种权重是怎么来的。</p></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">4.9.3</span><h3>协变量偏移纠正：重要性加权</h3></div>
+    <div class="prose">
+      <p>我们真正想最小化的是目标分布上的风险 E_{x∼p_T}[l(f(x), y)]，但手里只有源分布的样本。因为 p(y | x) 没变，可以把目标分布的期望改写成源分布的期望：</p>
+      <p class="math">E_{p_T}[l] = E_{p_S}[ β(x) · l ]，其中 β(x) = p_T(x) / p_S(x)</p>
+      <p>也就是说，给每个训练样本乘一个权重 β(xᵢ)：在目标分布里更常见的样本权重大，更少见的权重小。这就是<b>重要性加权</b>。</p>
+      <p>β 怎么来？原书给了一个巧妙的办法：训练一个分类器区分“这个 x 来自源分布还是目标分布”（目标记为 1）。两边样本一样多时，分类器输出的对数几率 h(x) 正好估计了 log(p_T(x)/p_S(x))，所以 <b>β(x) = exp(h(x))</b>。</p>
+    </div>
+    <div class="panel stack" id="shLab">
+      <h4>拖动目标分布，看加权有没有用</h4>
+      <p class="small muted">真实规律是抛物线 y = x²/2（灰线）。蓝点是训练样本（源分布），橙色区域是上线后会遇到的 x（目标分布）。模型只是一条直线。不加权的直线（虚线）在源分布那块拟合得最好；按 β = p_T/p_S 加权后的直线（实线）会照顾目标分布那块。</p>
+      <div class="row"><label class="ctrl" for="shM">目标分布的中心 <output id="shMv">1.00</output><input type="range" id="shM" min="-0.5" max="2" step="0.05" value="1"></label>
+        <label class="ctrl" for="shClip">β 截断上限 <select id="shClip"><option value="1e9">不截断</option><option value="20" selected>20（和你论文的 WCLIP 一样）</option><option value="5">5</option></select></label></div>
+      <div class="cv" id="shHost"><canvas id="shCv" aria-label="源分布、目标分布和两条拟合直线"></canvas></div>
+      <div class="calc pw" id="shCalc"></div>
+    </div>
+    <div class="prose"><p>用 PyTorch 做一遍：源分布中心在 −0.5，目标分布中心在 1.0。</p></div>
+    <div class="cell"><textarea>import torch
+from torch import nn
+torch.manual_seed(0)
+n = 500
+f = lambda x: x ** 2 / 2            # 真实规律：一条抛物线
+x_src = torch.normal(-0.5, 0.6, size=(n, 1))   # 训练数据从这里来（源分布）
+x_tgt = torch.normal(1.0, 0.6, size=(n, 1))    # 实际使用时的数据（目标分布）
+y_src = f(x_src) + torch.normal(0, 0.1, size=(n, 1))
+y_tgt = f(x_tgt) + torch.normal(0, 0.1, size=(n, 1))
+x_src.mean(), x_tgt.mean()</textarea></div>
+    <div class="prose"><p>带权重的线性回归：损失是 Σ βᵢ·(ŷᵢ − yᵢ)² / Σ βᵢ。先不加权（全是 1），看看在目标分布上误差有多大。</p></div>
+    <div class="cell"><textarea>def fit(weights):
+    net = nn.Linear(1, 1)
+    opt = torch.optim.SGD(net.parameters(), lr=0.1)
+    for epoch in range(300):
+        l = (weights * (net(x_src) - y_src) ** 2).sum() / weights.sum()
+        opt.zero_grad()
+        l.backward()
+        opt.step()
+    return net
+
+def target_mse(net):
+    return ((net(x_tgt) - y_tgt) ** 2).mean().item()
+
+net_plain = fit(torch.ones(n, 1))
+print('不加权，目标分布上的 MSE：', round(target_mse(net_plain), 4))</textarea></div>
+    <div class="prose"><p>训练一个逻辑回归分类器区分两个分布，用它的对数几率算 β，再截断到 20，然后加权重新拟合：</p></div>
+    <div class="cell"><textarea>X = torch.cat([x_src, x_tgt])
+z = torch.cat([torch.zeros(n, 1), torch.ones(n, 1)])   # 1 表示来自目标分布
+clf = nn.Linear(1, 1)
+opt = torch.optim.SGD(clf.parameters(), lr=0.5)
+bce = nn.BCEWithLogitsLoss()
+for step in range(300):
+    l = bce(clf(X), z)
+    opt.zero_grad()
+    l.backward()
+    opt.step()
+beta = torch.exp(clf(x_src)).detach().clamp(max=20)   # β(x) ≈ p_目标(x) / p_源(x)
+print('β 的最小值和最大值：', round(beta.min().item(), 4), round(beta.max().item(), 2))
+net_w = fit(beta)
+print('加权后，目标分布上的 MSE：', round(target_mse(net_w), 4))</textarea></div>
+    <div class="prose"><p>加权后，目标分布上的误差小了一个数量级左右（每次随机数不同，具体数字会变）。代价是：权重很不均匀，等于只有少数样本在起作用，结果的方差变大。这就是为什么要截断，也是你论文报告“有效样本量” ESS 的原因。</p></div>
+    <div class="callout"><h4>对照你的论文：OPE 的权重</h4><p><code>experiment.py</code> 第 1431 到 1432 行。<code>pia</code> 是新策略 π 选中日志里那道题的概率，<code>W["mu"]</code> 是原来的策略 μ 选它的概率（从日志里估出来的）：</p>
+<pre class="code">pia = pi.gather(-1, a.unsqueeze(-1)).squeeze(-1)
+w = (pia / W["mu"][bt, 1:Lb]).clamp(max=WCLIP)        <span class="c"># WCLIP = 20.0</span></pre>
+      <p>和上面的 β 是同一个思路：<b>目标分布的概率除以数据实际来自的分布的概率</b>，再截断到 20。区别是这里的“分布”是选题的分布，而且 μ 不用分类器估计，是直接按日志里的频率算的。第 19 天的 OPE 专题会把 IPS、SNIPS、DR 三种估计逐一实现。</p></div>
+  </div>
+</section>
+
+<section class="part quiz-sec">
+  <div class="part-h"><div class="eyebrow">课后题</div><h2>做几道题检查一下</h2><span class="src">选择题点选项马上出结果；写形状和写代码的题，网页会现场运行代码判断对错。答题记录只存在你这台设备的浏览器里。</span></div>
+  <div class="quiz dayquiz" data-day="10"></div>
+  <div class="row small muted quizscore" data-day="10"></div>
+</section>
+
+<section class="part">
+  <div class="part-h"><div class="eyebrow">今日小结</div><h2>今天学会了吗？</h2></div>
+  <div class="two">
+    <div class="panel stack">
+      <ul class="check-list" data-day="10">
+        <li><label><input type="checkbox" data-k="c1">梯度是很多矩阵连乘，所以会消失或爆炸；sigmoid 的导数最大只有 0.25</label></li>
+        <li><label><input type="checkbox" data-k="c2">隐藏层权重全相同会有对称性问题，随机初始化打破对称</label></li>
+        <li><label><input type="checkbox" data-k="c3">Xavier：σ² = 2/(n_in + n_out)；ReLU 用 He：σ² = 2/n_in</label></li>
+        <li><label><input type="checkbox" data-k="c4">协变量偏移、标签偏移、概念偏移分别是哪个分布变了</label></li>
+        <li><label><input type="checkbox" data-k="c5">重要性权重 β = p_T/p_S，论文里 OPE 的 π/μ 是同一个思路</label></li>
+      </ul>
+      <span class="small check-msg"></span>
+    </div>
+    <div class="panel stack">
+      <h3>明天（第 11 天）学什么</h3>
+      <p>原书第 5 章：层和块（自己写 <code>nn.Module</code>）、参数管理（怎么查看、共享、初始化参数）、读写文件（<code>torch.save</code> / <code>load_state_dict</code>）。学完就能读懂你论文里每个 KT 模型的类定义，以及第 9 天见过的保存最佳检查点的代码。</p>
     </div>
   </div>
 </section>

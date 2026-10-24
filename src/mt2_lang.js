@@ -7,7 +7,7 @@ function tensorAttr(T,name){
 function tensorMethod(T,name){
   const M={reshape:a=>reshapeT(T,dimsArg(a)),view:a=>reshapeT(T,dimsArg(a)),numel:()=>I(T.data.length),
     size:a=>a.length?I(T.shape[intOf(a[0])<0?T.shape.length+intOf(a[0]):intOf(a[0])]):{t:'size',dims:T.shape.slice()},
-    sum:(a,kw)=>reduce(T,dimArg(a,kw),'sum',keepArg(kw)),mean:(a,kw)=>reduce(T,dimArg(a,kw),'mean',keepArg(kw)),max:(a,kw)=>reduce(T,dimArg(a,kw),'max',keepArg(kw)),min:(a,kw)=>reduce(T,dimArg(a,kw),'min',keepArg(kw)),
+    sum:(a,kw)=>reduce(T,dimArg(a,kw),'sum',keepArg(kw)),mean:(a,kw)=>reduce(T,dimArg(a,kw),'mean',keepArg(kw)),clamp:(a,kw)=>clampT(T,kw.min||a[0],kw.max||a[1]),clip:(a,kw)=>clampT(T,kw.min||a[0],kw.max||a[1]),var:(a,kw)=>varStd(T,dimArg(a,kw),corrArg(kw),keepArg(kw),false),std:(a,kw)=>varStd(T,dimArg(a,kw),corrArg(kw),keepArg(kw),true),max:(a,kw)=>reduce(T,dimArg(a,kw),'max',keepArg(kw)),min:(a,kw)=>reduce(T,dimArg(a,kw),'min',keepArg(kw)),
     cumsum:(a,kw)=>cumsum(T,dimArg(a,kw)),norm:()=>normT(T),
     item:()=>{if(T.data.length!==1)err('RuntimeError',`a Tensor with ${T.data.length} elements cannot be converted to Scalar`);const v=T.data[0];return isFloatDt(T.dtype)?F(v):T.dtype==='bool'?B(v):I(v)},
     tolist:()=>{const rec=(d,off)=>{if(d===T.shape.length){const v=T.data[off];return isFloatDt(T.dtype)?F(v):T.dtype==='bool'?B(v):I(v)}const st=strides(T.shape);const r=[];for(let i=0;i<T.shape[d];i++)r.push(rec(d+1,off+i*st[d]));return list(r)};return rec(0,0)},

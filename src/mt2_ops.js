@@ -7,7 +7,7 @@ function elemFormatter(vals,dtype){
   const fin=vals.filter(Number.isFinite),nz=fin.map(Math.abs).filter(v=>v>0);
   const intMode=fin.every(v=>Math.ceil(v)===v);
   let sci=false;
-  if(nz.length){const mx=Math.max(...nz),mn=Math.min(...nz);sci=intMode?mx>1e8:(mx/mn>1000||mx>1e8||mn<1e-4)}
+  if(nz.length){const mx=Math.max(...nz),mn=Math.min(...nz);sci=mx/mn>1000||mx>1e8||mn<1e-4}
   return v=>{if(Number.isNaN(v))return'nan';if(!Number.isFinite(v))return v>0?'inf':'-inf';
     if(sci)return sciStr(v);if(intMode)return(Object.is(v,-0)?'-0':v.toFixed(0))+'.';return v.toFixed(4)}}
 function summarizedIdx(n,summ){return summ&&n>6?[0,1,2,-1,n-3,n-2,n-1]:[...Array(n).keys()]}
@@ -18,7 +18,7 @@ function nestedStr(T,indent0,f,w){const nd=T.shape.length,st=strides(T.shape),su
   return rec(0,0,indent0)}
 function shownVals(T){const nd=T.shape.length,st=strides(T.shape),summ=T.data.length>1000,out=[];const collect=(dim,off)=>{if(dim===nd){out.push(T.data[off]);return}for(const i of summarizedIdx(T.shape[dim],summ))if(i>=0)collect(dim+1,off+i*st[dim])};collect(0,0);return out}
 function tensorRepr(T){if(T.np)return npRepr(T);
-  const shown=shownVals(T),f=elemFormatter(shown,T.dtype),w=isFloatDt(T.dtype)&&!shown.some(v=>Number.isFinite(v)&&v!==0)?1:Math.max(1,...shown.map(v=>f(v).length));
+  const shown=shownVals(T),f=elemFormatter(shown,T.dtype),w=isFloatDt(T.dtype)?Math.max(1,...shown.filter(v=>Number.isFinite(v)&&v!==0).map(v=>f(v).length)):Math.max(1,...shown.map(v=>f(v).length));
   let body=T.shape.length===0?f(T.data[0]):nestedStr(T,7,f,w);if(T.data.length===0)body='[]';
   const sufs=[];if(!(T.dtype==='int64'||T.dtype==='float32'||T.dtype==='bool'))sufs.push(`dtype=torch.${T.dtype}`);
   if(T.grad_fn)sufs.push(`grad_fn=<${T.grad_fn.name}>`);else if(T.requires_grad)sufs.push('requires_grad=True');
@@ -117,6 +117,14 @@ function reshapeT(T,dims){let neg=dims.indexOf(-1);const known=prod(dims.filter(
   if(prod(dims)!==T.data.length)err('RuntimeError',`shape '[${dims.join(', ')}]' is invalid for input of size ${T.data.length}`);
   const R=mkT(dims,[],T.dtype,T.np);R.data=T.data;return track(R,[T],'ViewBackward0',g=>[g])}
 function normDims(T,dim){const nd=T.shape.length;const ds=(Array.isArray(dim)?dim:[dim]).map(d=>{if(d<0)d+=nd;if(d<0||d>=nd)err('IndexError',`Dimension out of range (expected to be in range of [${-nd}, ${nd-1}], but got ${d})`);return d});return[...new Set(ds)].sort((a,b)=>a-b)}
+function clampT(T,lo,hi){const L=lo&&lo.t!=='none'?numOf(lo):-Infinity,H=hi&&hi.t!=='none'?numOf(hi):Infinity;if(L===-Infinity&&H===Infinity)err('RuntimeError',"torch.clamp: At least one of 'min' or 'max' must not be None");
+  const dt=T.dtype==='bool'?'int64':T.dtype,out=Float64Array.from(T.data,v=>Number.isNaN(v)?v:Math.min(H,Math.max(L,v)));
+  return track(mkT(T.shape.slice(),out,dt,T.np),[T],'ClampBackward1',g=>[Float64Array.from(g,(gv,k)=>T.data[k]>=L&&T.data[k]<=H?gv:0)])}
+function varStd(T,dim,corr,keep,isStd){ // 用可求导的基本运算拼出 var / std，最后改成 torch 的 grad_fn 名字
+  if(!isFloatDt(T.dtype))err('RuntimeError',`std and var only support floating point and complex dtypes`);
+  const ds=dim==null?T.shape.map((_,i)=>i):normDims(T,dim),cnt=prod(ds.map(d=>T.shape[d]));
+  const mu=reduce(T,dim,'mean',true),dev=binop('-',T,mu),sq=binop('*',dev,dev),sm=reduce(sq,dim,'sum',keep);
+  let out=binop('/',sm,mkT([],[Math.max(0,cnt-corr)],T.dtype));if(isStd)out=unary(out,'sqrt');if(out.grad_fn)out.grad_fn.name=isStd?'StdBackward0':'VarBackward0';return out}
 function reduce(T,dim,kind,keep){
   if(kind==='mean'&&!isFloatDt(T.dtype))err('RuntimeError',`mean(): could not infer output dtype. Input dtype must be either a floating point or complex dtype. Got: ${T.dtype==='int64'?'Long':'Bool'}`);
   const f=kind==='max'?Math.max:kind==='min'?Math.min:(a,b)=>a+b,init=kind==='max'?-Infinity:kind==='min'?Infinity:0;

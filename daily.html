@@ -91,6 +91,8 @@ input[type=text]{font:inherit;font-family:var(--f-mono);font-size:14px;color:var
 .dpgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(76px,1fr));gap:6px}
 .dpgrid>div{display:flex;flex-direction:column;gap:2px;padding:6px 8px;border-radius:8px;border:1px solid var(--line);font-family:var(--f-mono)}
 .dpgrid .on{background:color-mix(in srgb,var(--accent) 14%,var(--surface))}.dpgrid .off{background:var(--sunk);opacity:.6}
+.calc.pw{white-space:pre-wrap}
+.math{font-family:var(--f-mono);font-size:14px;padding:6px 10px;background:var(--sunk);border-radius:8px;overflow-x:auto;margin:0}
 .calc{font-family:var(--f-mono);font-size:13px;background:var(--sunk);border-radius:8px;padding:10px 12px;white-space:pre;overflow-x:auto;line-height:1.7}
 .ok{color:var(--ok);font-weight:600} .bad{color:var(--bad);font-weight:600}
 table.t{border-collapse:collapse;width:100%;font-size:14px}
@@ -205,7 +207,7 @@ code.big{font-size:.8em;background:var(--sunk);padding:0 .25em;border-radius:6px
 </style><header class="top"><div class="wrap">
   <span class="brand">动手学深度学习每日课</span>
   <nav class="days" id="dayNav" aria-label="课程天数">
-    <a href="#day1" data-nav="1">第 1 天</a><a href="#day2" data-nav="2">第 2 天</a><a href="#day3" data-nav="3">第 3 天</a><a href="#day4" data-nav="4">第 4 天</a><a href="#day5" data-nav="5">第 5 天</a><a href="#day6" data-nav="6">第 6 天</a><a href="#day7" data-nav="7">第 7 天</a><a href="#day8" data-nav="8">第 8 天</a><a href="#day9" data-nav="9">第 9 天</a>
+    <a href="#day1" data-nav="1">第 1 天</a><a href="#day2" data-nav="2">第 2 天</a><a href="#day3" data-nav="3">第 3 天</a><a href="#day4" data-nav="4">第 4 天</a><a href="#day5" data-nav="5">第 5 天</a><a href="#day6" data-nav="6">第 6 天</a><a href="#day7" data-nav="7">第 7 天</a><a href="#day8" data-nav="8">第 8 天</a><a href="#day9" data-nav="9">第 9 天</a><a href="#day10" data-nav="10">第 10 天</a>
     <a href="#road" class="road-link">课程表</a>
     <a class="soon" href="#road">第 9 天</a><a class="soon" href="#road">第 10 天</a>
   </nav>
@@ -1278,7 +1280,7 @@ X1.shape, w_star</textarea></div>
         <label class="ctrl" for="sgE">epoch 数 <output id="sgEv">1</output><input type="range" id="sgE" min="1" max="5" value="1"></label>
         <button class="btn primary" id="sgRun">训练</button><button class="btn" id="sgReset">参数归零</button>
       </div>
-      <div class="two"><div class="cv" id="sgHost"><canvas id="sgCv" aria-label="参数在损失等高线上的路径"></canvas></div><div class="stack"><div class="cv"><canvas id="sgLoss" aria-label="每一步之后的训练损失"></canvas></div><div class="calc" id="sgCalc"></div></div></div>
+      <div class="two"><div class="cv" id="sgHost"><canvas id="sgCv" aria-label="参数在损失等高线上的路径"></canvas></div><div class="stack"><div class="cv"><canvas id="sgLoss" aria-label="每一步之后的训练损失"></canvas></div><div class="calc pw" id="sgCalc"></div></div></div>
     </div>
     <div class="prose"><p>训练完的模型拿来估计新房子的价格，叫<b>预测</b>。很多人也叫“推断”，原书提醒在统计学里“推断”指的是估计参数，跟统计学家交流时容易误会。</p></div>
   </div>
@@ -2669,6 +2671,211 @@ print(bool((net(x) == net(x)).all()))</textarea></div>
 </section>
 </main>
 
+<main class="wrap day" id="day10" data-day="10" hidden>
+<section class="hero">
+  <div class="eyebrow">第 10 天 · 原书第 4.8 节 + 第 4.9 节 · 论文路线第 3 课</div>
+  <h1>梯度为什么会消失，数据为什么会“变”</h1>
+  <p class="lead">前半天看深层网络里梯度怎么一层层变小或变大，以及初始化为什么重要。后半天看训练数据和实际使用的数据不一样时会出什么问题、怎么用“重要性权重”去纠正。后者就是你论文离线策略评估（OPE）里 π/μ 权重的来历。</p>
+  <div class="plan">
+    <div><b class="k">今天的时间</b>大约 60 分钟。今天的代码格都很快，自动运行。</div>
+    <div><b class="k">学完你能</b><ul><li>说清梯度消失和梯度爆炸的原因</li><li>推出 Xavier 初始化的方差</li><li>区分协变量偏移、标签偏移、概念偏移</li><li>用一个分类器估计重要性权重 β(x)</li></ul></div>
+    <div><b class="k">和你的论文</b><ul><li><code>clip_grad_norm_(params, 5.0)</code></li><li>策略头 g 初始化为 0</li><li>OPE 里的权重 π/μ 和截断 20</li></ul></div>
+  </div>
+</section>
+
+<section class="part" id="numstab">
+  <div class="part-h"><div class="eyebrow">第一部分</div><h2>4.8 数值稳定性和模型初始化</h2><span class="src">对应原书第 4.8 节，代码来自原书 PyTorch 版</span></div>
+  <div class="prose"><div class="row"><button class="btn primary runAll" data-day="10">从头全部运行</button><span class="small muted runAllMsg"></span></div></div>
+
+  <div class="blk"><div class="blk-h"><span class="n">4.8.1</span><h3>梯度消失和梯度爆炸</h3></div>
+    <div class="prose">
+      <p>一个 L 层的网络，第 l 层算 h⁽ˡ⁾ = f_l(h⁽ˡ⁻¹⁾)。按链式法则，损失对第 l 层参数的梯度是 L − l 个矩阵连乘再乘一个向量：</p>
+      <p class="math">∂o/∂W⁽ˡ⁾ = M⁽ᴸ⁾ · M⁽ᴸ⁻¹⁾ ⋯ M⁽ˡ⁺¹⁾ · v⁽ˡ⁾，其中 M⁽ᵏ⁾ = ∂h⁽ᵏ⁾/∂h⁽ᵏ⁻¹⁾</p>
+      <p>很多个数连乘，结果要么越来越小（<b>梯度消失</b>，前面的层几乎学不动），要么越来越大（<b>梯度爆炸</b>，参数一步就飞出去）。这和 0.9¹⁰⁰ ≈ 0.00003、1.1¹⁰⁰ ≈ 13781 是一个道理。</p>
+      <p><b>梯度消失</b>的经典原因是 sigmoid。它的导数最大只有 0.25，输入稍大或稍小，导数就接近 0。下面画出 sigmoid 和它的导数：</p>
+    </div>
+    <div class="cell"><textarea>%matplotlib inline
+import torch
+from d2l import torch as d2l
+
+x = torch.arange(-8.0, 8.0, 0.1, requires_grad=True)
+y = torch.sigmoid(x)
+y.backward(torch.ones_like(x))
+
+d2l.plot(x.detach().numpy(), [y.detach().numpy(), x.grad.numpy()],
+         legend=['sigmoid', 'gradient'], figsize=(4.5, 2.5))</textarea></div>
+    <div class="prose"><p>两端的梯度有多小？</p></div>
+    <div class="cell"><textarea>x.grad[[0, 40, 80, 120, 159]], x.grad.max()</textarea></div>
+    <div class="prose"><p><b>梯度爆炸</b>：拿一个 4×4 的随机矩阵，连乘 100 个随机矩阵。每次运行结果都不一样，但数会大到 10²⁰ 以上。</p></div>
+    <div class="cell"><textarea>M = torch.normal(0, 1, size=(4,4))
+print('一个矩阵 \n',M)
+for i in range(100):
+    M = torch.mm(M,torch.normal(0, 1, size=(4, 4)))
+
+print('乘以100个矩阵后\n', M)</textarea></div>
+    <div class="prose">
+      <p><b>对称性</b>：如果一层的所有权重都初始化成同一个值，这一层的每个隐藏单元算出来完全一样，反向传播时梯度也完全一样，更新后还是一样。不管训练多久，这一层就相当于只有 1 个单元。随机初始化就是为了打破这种对称。下面把一个线性层的权重全设成 0.5：</p>
+    </div>
+    <div class="cell"><textarea>from torch import nn
+lin = nn.Linear(300, 200)
+nn.init.zeros_(lin.bias)
+nn.init.constant_(lin.weight, 0.5)
+X = torch.ones(2, 300)
+lin(X)[:, :5]     # 200 个输出单元算出来全一样</textarea></div>
+    <div class="cell"><textarea>lin(X).sum().backward()
+lin.weight.grad[:5, :4]    # 每个单元收到的梯度也一样</textarea></div>
+    <div class="callout"><h4>对照你的论文：策略头为什么可以初始化成 0</h4><p>你论文 DKT 的策略头在 <code>experiment.py</code> 第 1039 到 1040 行全部初始化成 0：</p>
+<pre class="code">self.g = nn.Linear(d, K)
+nn.init.zeros_(self.g.weight); nn.init.zeros_(self.g.bias)</pre>
+      <p>这不会有对称性问题。对称性问题出在<b>隐藏层</b>：后面的层要靠前面各单元的不同输出。g 是最后一层，K 个输出对应 K 个知识点，各自收到的梯度不同，训练一步就分开了。初始化成 0 是故意的：一开始 g(h) = 0，策略打分就只剩 −(p − 0.7)²/T，策略和“选最接近 0.7 的题”这条规则完全一样，训练再从这里慢慢偏离。</p></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">4.8.2</span><h3>参数初始化</h3></div>
+    <div class="prose">
+      <p>不指定的话，PyTorch 会给每种层一个默认初始化，中等规模的问题一般够用。<b>Xavier 初始化</b>的想法是：让每一层输出的方差和输入的方差一样，信号就不会一层层放大或缩小。</p>
+      <p>考虑一个没有激活函数的全连接层 o_i = Σⱼ w_ij·x_j，输入有 n_in 个，输出有 n_out 个。设权重均值 0、方差 σ²，输入均值 0、方差 γ²，且相互独立。那么：</p>
+      <p class="math">Var[o_i] = Σⱼ E[w²_ij]·E[x²_j] = n_in · σ² · γ²</p>
+      <p>要让 Var[o_i] = γ²，需要 n_in·σ² = 1。反向传播时同样的推导给出 n_out·σ² = 1。两个条件没法同时满足，Xavier 取折中：</p>
+      <p class="math">σ² = 2 / (n_in + n_out)</p>
+      <p>如果用均匀分布 U(−a, a)，它的方差是 a²/3。令 a²/3 = 2/(n_in + n_out)，得到 a = √(6 / (n_in + n_out))。</p>
+    </div>
+    <div class="cell"><textarea>lin = nn.Linear(300, 200)
+nn.init.xavier_uniform_(lin.weight)
+b = (6 / (300 + 200)) ** 0.5
+print('理论边界 a =', round(b, 4), ' 实际最大绝对值：', lin.weight.abs().max().item())
+print('理论方差 =', 2 / 500, ' 实际方差：', lin.weight.var().item())</textarea></div>
+    <div class="prose"><p>实验：10 层、每层 256 个单元、ReLU 激活。权重乘 0.01 时信号几乎消失；按 He 初始化（σ² = 2/n_in，专门为 ReLU 设计，补偿 ReLU 砍掉一半的方差）时，信号的大小保持住了。</p></div>
+    <div class="cell"><textarea>for name, scale in [('std = 0.01', 0.01), ('He: std = sqrt(2/256)', (2 / 256) ** 0.5)]:
+    h = torch.randn(200, 256)
+    for i in range(10):
+        W = torch.randn(256, 256) * scale
+        h = torch.relu(h @ W)
+    print(name, '→ 第 10 层输出的标准差：', h.std().item())</textarea></div>
+    <div class="panel stack" id="sigLab">
+      <h4>信号穿过 L 层</h4>
+      <p class="small muted">一个每层 64 个单元的网络，输入 64 个样本。实线是每一层输出的标准差（前向信号），虚线是损失对每一层权重的梯度大小（反向信号）。纵轴是对数刻度，每一格差 10 倍。两条线都保持水平，才说明信号既没有消失也没有爆炸。</p>
+      <div class="row">
+        <label class="ctrl" for="sgAct">激活函数 <select id="sgAct"><option value="sigmoid">sigmoid</option><option value="tanh">tanh</option><option value="relu" selected>ReLU</option></select></label>
+        <label class="ctrl" for="sgInit">初始化 <select id="sgInit"><option value="small">N(0, 0.01²)</option><option value="one">N(0, 1)</option><option value="xavier">Xavier：σ² = 2/(n_in + n_out)</option><option value="he" selected>He：σ² = 2/n_in</option></select></label>
+        <label class="ctrl" for="sgL">层数 <output id="sgLv">20</output><input type="range" id="sgL" min="2" max="40" step="1" value="20"></label>
+      </div>
+      <div class="cv" id="sgHost"><canvas id="sgCv" aria-label="每一层的前向信号和梯度大小"></canvas></div>
+      <div class="calc pw" id="sgCalc"></div>
+    </div>
+    <div class="callout"><h4>对照你的论文：梯度裁剪</h4><p>对付梯度爆炸，最直接的办法是<b>梯度裁剪</b>：如果所有参数梯度合起来的长度（L2 范数）超过一个上限，就整体按比例缩小到这个上限，方向不变。你论文的 <code>train_kt</code> 在第 1364 行每一步都这么做：</p>
+<pre class="code">opt.zero_grad(set_to_none=True); loss.backward()
+nn.utils.clip_grad_norm_(params, 5.0); opt.step()      <span class="c"># 梯度总长度最多 5</span></pre>
+      <p>循环神经网络（DKT 用的 LSTM）沿时间步展开后非常“深”，最容易梯度爆炸。第 13 天学 RNN 时会自己实现一遍梯度裁剪。</p></div>
+  </div>
+</section>
+
+<section class="part" id="shift">
+  <div class="part-h"><div class="eyebrow">第二部分</div><h2>4.9 环境和分布偏移</h2><span class="src">对应原书第 4.9 节。原书这一节没有代码，下面的代码格是本页补充的</span></div>
+  <div class="blk"><div class="blk-h"><span class="n">4.9.1</span><h3>三种分布偏移</h3></div>
+    <div class="prose">
+      <p>训练数据来自分布 p_S(x, y)（源分布），模型上线后遇到的数据来自 p_T(x, y)（目标分布）。两者不一样时，按训练集挑出来的最好的模型，上线后不一定好。原书分三种情况：</p>
+      <ul>
+        <li><b>协变量偏移</b>：输入的分布变了，p(x) 不同，但“给定输入，标签怎么来”没变，p(y | x) 相同。例子：用真实照片训练猫狗分类器，上线后要分类卡通图片。</li>
+        <li><b>标签偏移</b>：标签的分布变了，p(y) 不同，但 p(x | y) 没变。例子：用夏天的病例训练诊断模型，冬天流感病人的比例大增。</li>
+        <li><b>概念偏移</b>：标签本身的定义变了，p(y | x) 不同。例子：同一种饮料，在美国不同地区叫 soda、pop 或 coke。</li>
+      </ul>
+      <p>原书还提醒了一种更麻烦的情况：模型自己的决策会改变以后的数据。比如贷款模型拒绝了某类人，以后就再也看不到这类人还不还款的数据了。</p>
+    </div>
+    <div class="callout"><h4>对照你的论文：这正是 OPE 要解决的问题</h4><p>你论文的真实日志是在<b>原来的出题策略 μ</b> 下收集的：学生做了哪些题、按什么顺序做，都由 μ 决定。你训练的新策略 π 会选不同的题，于是学生遇到的“状态和题目”的分布就变了。这是原书说的“模型的决策改变了数据”，也是一种协变量偏移。直接拿日志里的平均奖励当新策略的成绩是有偏的，所以论文用离线策略评估（OPE）给每条记录加权重 π(a | s) / μ(a | s)。下面就来看这种权重是怎么来的。</p></div>
+  </div>
+
+  <div class="blk"><div class="blk-h"><span class="n">4.9.3</span><h3>协变量偏移纠正：重要性加权</h3></div>
+    <div class="prose">
+      <p>我们真正想最小化的是目标分布上的风险 E_{x∼p_T}[l(f(x), y)]，但手里只有源分布的样本。因为 p(y | x) 没变，可以把目标分布的期望改写成源分布的期望：</p>
+      <p class="math">E_{p_T}[l] = E_{p_S}[ β(x) · l ]，其中 β(x) = p_T(x) / p_S(x)</p>
+      <p>也就是说，给每个训练样本乘一个权重 β(xᵢ)：在目标分布里更常见的样本权重大，更少见的权重小。这就是<b>重要性加权</b>。</p>
+      <p>β 怎么来？原书给了一个巧妙的办法：训练一个分类器区分“这个 x 来自源分布还是目标分布”（目标记为 1）。两边样本一样多时，分类器输出的对数几率 h(x) 正好估计了 log(p_T(x)/p_S(x))，所以 <b>β(x) = exp(h(x))</b>。</p>
+    </div>
+    <div class="panel stack" id="shLab">
+      <h4>拖动目标分布，看加权有没有用</h4>
+      <p class="small muted">真实规律是抛物线 y = x²/2（灰线）。蓝点是训练样本（源分布），橙色区域是上线后会遇到的 x（目标分布）。模型只是一条直线。不加权的直线（虚线）在源分布那块拟合得最好；按 β = p_T/p_S 加权后的直线（实线）会照顾目标分布那块。</p>
+      <div class="row"><label class="ctrl" for="shM">目标分布的中心 <output id="shMv">1.00</output><input type="range" id="shM" min="-0.5" max="2" step="0.05" value="1"></label>
+        <label class="ctrl" for="shClip">β 截断上限 <select id="shClip"><option value="1e9">不截断</option><option value="20" selected>20（和你论文的 WCLIP 一样）</option><option value="5">5</option></select></label></div>
+      <div class="cv" id="shHost"><canvas id="shCv" aria-label="源分布、目标分布和两条拟合直线"></canvas></div>
+      <div class="calc pw" id="shCalc"></div>
+    </div>
+    <div class="prose"><p>用 PyTorch 做一遍：源分布中心在 −0.5，目标分布中心在 1.0。</p></div>
+    <div class="cell"><textarea>import torch
+from torch import nn
+torch.manual_seed(0)
+n = 500
+f = lambda x: x ** 2 / 2            # 真实规律：一条抛物线
+x_src = torch.normal(-0.5, 0.6, size=(n, 1))   # 训练数据从这里来（源分布）
+x_tgt = torch.normal(1.0, 0.6, size=(n, 1))    # 实际使用时的数据（目标分布）
+y_src = f(x_src) + torch.normal(0, 0.1, size=(n, 1))
+y_tgt = f(x_tgt) + torch.normal(0, 0.1, size=(n, 1))
+x_src.mean(), x_tgt.mean()</textarea></div>
+    <div class="prose"><p>带权重的线性回归：损失是 Σ βᵢ·(ŷᵢ − yᵢ)² / Σ βᵢ。先不加权（全是 1），看看在目标分布上误差有多大。</p></div>
+    <div class="cell"><textarea>def fit(weights):
+    net = nn.Linear(1, 1)
+    opt = torch.optim.SGD(net.parameters(), lr=0.1)
+    for epoch in range(300):
+        l = (weights * (net(x_src) - y_src) ** 2).sum() / weights.sum()
+        opt.zero_grad()
+        l.backward()
+        opt.step()
+    return net
+
+def target_mse(net):
+    return ((net(x_tgt) - y_tgt) ** 2).mean().item()
+
+net_plain = fit(torch.ones(n, 1))
+print('不加权，目标分布上的 MSE：', round(target_mse(net_plain), 4))</textarea></div>
+    <div class="prose"><p>训练一个逻辑回归分类器区分两个分布，用它的对数几率算 β，再截断到 20，然后加权重新拟合：</p></div>
+    <div class="cell"><textarea>X = torch.cat([x_src, x_tgt])
+z = torch.cat([torch.zeros(n, 1), torch.ones(n, 1)])   # 1 表示来自目标分布
+clf = nn.Linear(1, 1)
+opt = torch.optim.SGD(clf.parameters(), lr=0.5)
+bce = nn.BCEWithLogitsLoss()
+for step in range(300):
+    l = bce(clf(X), z)
+    opt.zero_grad()
+    l.backward()
+    opt.step()
+beta = torch.exp(clf(x_src)).detach().clamp(max=20)   # β(x) ≈ p_目标(x) / p_源(x)
+print('β 的最小值和最大值：', round(beta.min().item(), 4), round(beta.max().item(), 2))
+net_w = fit(beta)
+print('加权后，目标分布上的 MSE：', round(target_mse(net_w), 4))</textarea></div>
+    <div class="prose"><p>加权后，目标分布上的误差小了一个数量级左右（每次随机数不同，具体数字会变）。代价是：权重很不均匀，等于只有少数样本在起作用，结果的方差变大。这就是为什么要截断，也是你论文报告“有效样本量” ESS 的原因。</p></div>
+    <div class="callout"><h4>对照你的论文：OPE 的权重</h4><p><code>experiment.py</code> 第 1431 到 1432 行。<code>pia</code> 是新策略 π 选中日志里那道题的概率，<code>W["mu"]</code> 是原来的策略 μ 选它的概率（从日志里估出来的）：</p>
+<pre class="code">pia = pi.gather(-1, a.unsqueeze(-1)).squeeze(-1)
+w = (pia / W["mu"][bt, 1:Lb]).clamp(max=WCLIP)        <span class="c"># WCLIP = 20.0</span></pre>
+      <p>和上面的 β 是同一个思路：<b>目标分布的概率除以数据实际来自的分布的概率</b>，再截断到 20。区别是这里的“分布”是选题的分布，而且 μ 不用分类器估计，是直接按日志里的频率算的。第 19 天的 OPE 专题会把 IPS、SNIPS、DR 三种估计逐一实现。</p></div>
+  </div>
+</section>
+
+<section class="part quiz-sec">
+  <div class="part-h"><div class="eyebrow">课后题</div><h2>做几道题检查一下</h2><span class="src">选择题点选项马上出结果；写形状和写代码的题，网页会现场运行代码判断对错。答题记录只存在你这台设备的浏览器里。</span></div>
+  <div class="quiz dayquiz" data-day="10"></div>
+  <div class="row small muted quizscore" data-day="10"></div>
+</section>
+
+<section class="part">
+  <div class="part-h"><div class="eyebrow">今日小结</div><h2>今天学会了吗？</h2></div>
+  <div class="two">
+    <div class="panel stack">
+      <ul class="check-list" data-day="10">
+        <li><label><input type="checkbox" data-k="c1">梯度是很多矩阵连乘，所以会消失或爆炸；sigmoid 的导数最大只有 0.25</label></li>
+        <li><label><input type="checkbox" data-k="c2">隐藏层权重全相同会有对称性问题，随机初始化打破对称</label></li>
+        <li><label><input type="checkbox" data-k="c3">Xavier：σ² = 2/(n_in + n_out)；ReLU 用 He：σ² = 2/n_in</label></li>
+        <li><label><input type="checkbox" data-k="c4">协变量偏移、标签偏移、概念偏移分别是哪个分布变了</label></li>
+        <li><label><input type="checkbox" data-k="c5">重要性权重 β = p_T/p_S，论文里 OPE 的 π/μ 是同一个思路</label></li>
+      </ul>
+      <span class="small check-msg"></span>
+    </div>
+    <div class="panel stack">
+      <h3>明天（第 11 天）学什么</h3>
+      <p>原书第 5 章：层和块（自己写 <code>nn.Module</code>）、参数管理（怎么查看、共享、初始化参数）、读写文件（<code>torch.save</code> / <code>load_state_dict</code>）。学完就能读懂你论文里每个 KT 模型的类定义，以及第 9 天见过的保存最佳检查点的代码。</p>
+    </div>
+  </div>
+</section>
+</main>
+
 <div class="wrap"><section class="part road-sec" id="road">
   <div class="part-h"><div class="eyebrow">课程表</div><h2>按你的论文排的学习路线</h2><span class="src">第 1 到 7 天是基础，按原书顺序。从第 8 天起只挑你论文用到的章节：多层感知机、正则化、自定义模型、循环网络和 LSTM（DKT）、注意力和 Transformer（SAKT、AKT、simpleKT）、Adam，最后是两个书里没有的论文专题。卷积、计算机视觉、NLP 应用等和论文关系不大的章节放到最后选学。</span></div>
   <div class="road" id="roadList"></div>
@@ -2733,7 +2940,7 @@ function elemFormatter(vals,dtype){
   const fin=vals.filter(Number.isFinite),nz=fin.map(Math.abs).filter(v=>v>0);
   const intMode=fin.every(v=>Math.ceil(v)===v);
   let sci=false;
-  if(nz.length){const mx=Math.max(...nz),mn=Math.min(...nz);sci=intMode?mx>1e8:(mx/mn>1000||mx>1e8||mn<1e-4)}
+  if(nz.length){const mx=Math.max(...nz),mn=Math.min(...nz);sci=mx/mn>1000||mx>1e8||mn<1e-4}
   return v=>{if(Number.isNaN(v))return'nan';if(!Number.isFinite(v))return v>0?'inf':'-inf';
     if(sci)return sciStr(v);if(intMode)return(Object.is(v,-0)?'-0':v.toFixed(0))+'.';return v.toFixed(4)}}
 function summarizedIdx(n,summ){return summ&&n>6?[0,1,2,-1,n-3,n-2,n-1]:[...Array(n).keys()]}
@@ -2744,7 +2951,7 @@ function nestedStr(T,indent0,f,w){const nd=T.shape.length,st=strides(T.shape),su
   return rec(0,0,indent0)}
 function shownVals(T){const nd=T.shape.length,st=strides(T.shape),summ=T.data.length>1000,out=[];const collect=(dim,off)=>{if(dim===nd){out.push(T.data[off]);return}for(const i of summarizedIdx(T.shape[dim],summ))if(i>=0)collect(dim+1,off+i*st[dim])};collect(0,0);return out}
 function tensorRepr(T){if(T.np)return npRepr(T);
-  const shown=shownVals(T),f=elemFormatter(shown,T.dtype),w=isFloatDt(T.dtype)&&!shown.some(v=>Number.isFinite(v)&&v!==0)?1:Math.max(1,...shown.map(v=>f(v).length));
+  const shown=shownVals(T),f=elemFormatter(shown,T.dtype),w=isFloatDt(T.dtype)?Math.max(1,...shown.filter(v=>Number.isFinite(v)&&v!==0).map(v=>f(v).length)):Math.max(1,...shown.map(v=>f(v).length));
   let body=T.shape.length===0?f(T.data[0]):nestedStr(T,7,f,w);if(T.data.length===0)body='[]';
   const sufs=[];if(!(T.dtype==='int64'||T.dtype==='float32'||T.dtype==='bool'))sufs.push(`dtype=torch.${T.dtype}`);
   if(T.grad_fn)sufs.push(`grad_fn=<${T.grad_fn.name}>`);else if(T.requires_grad)sufs.push('requires_grad=True');
@@ -2843,6 +3050,14 @@ function reshapeT(T,dims){let neg=dims.indexOf(-1);const known=prod(dims.filter(
   if(prod(dims)!==T.data.length)err('RuntimeError',`shape '[${dims.join(', ')}]' is invalid for input of size ${T.data.length}`);
   const R=mkT(dims,[],T.dtype,T.np);R.data=T.data;return track(R,[T],'ViewBackward0',g=>[g])}
 function normDims(T,dim){const nd=T.shape.length;const ds=(Array.isArray(dim)?dim:[dim]).map(d=>{if(d<0)d+=nd;if(d<0||d>=nd)err('IndexError',`Dimension out of range (expected to be in range of [${-nd}, ${nd-1}], but got ${d})`);return d});return[...new Set(ds)].sort((a,b)=>a-b)}
+function clampT(T,lo,hi){const L=lo&&lo.t!=='none'?numOf(lo):-Infinity,H=hi&&hi.t!=='none'?numOf(hi):Infinity;if(L===-Infinity&&H===Infinity)err('RuntimeError',"torch.clamp: At least one of 'min' or 'max' must not be None");
+  const dt=T.dtype==='bool'?'int64':T.dtype,out=Float64Array.from(T.data,v=>Number.isNaN(v)?v:Math.min(H,Math.max(L,v)));
+  return track(mkT(T.shape.slice(),out,dt,T.np),[T],'ClampBackward1',g=>[Float64Array.from(g,(gv,k)=>T.data[k]>=L&&T.data[k]<=H?gv:0)])}
+function varStd(T,dim,corr,keep,isStd){ // 用可求导的基本运算拼出 var / std，最后改成 torch 的 grad_fn 名字
+  if(!isFloatDt(T.dtype))err('RuntimeError',`std and var only support floating point and complex dtypes`);
+  const ds=dim==null?T.shape.map((_,i)=>i):normDims(T,dim),cnt=prod(ds.map(d=>T.shape[d]));
+  const mu=reduce(T,dim,'mean',true),dev=binop('-',T,mu),sq=binop('*',dev,dev),sm=reduce(sq,dim,'sum',keep);
+  let out=binop('/',sm,mkT([],[Math.max(0,cnt-corr)],T.dtype));if(isStd)out=unary(out,'sqrt');if(out.grad_fn)out.grad_fn.name=isStd?'StdBackward0':'VarBackward0';return out}
 function reduce(T,dim,kind,keep){
   if(kind==='mean'&&!isFloatDt(T.dtype))err('RuntimeError',`mean(): could not infer output dtype. Input dtype must be either a floating point or complex dtype. Got: ${T.dtype==='int64'?'Long':'Bool'}`);
   const f=kind==='max'?Math.max:kind==='min'?Math.min:(a,b)=>a+b,init=kind==='max'?-Infinity:kind==='min'?Infinity:0;
@@ -3012,6 +3227,7 @@ const DT=n=>({t:'dtype',name:n});
 const mod=(name,attrs)=>({t:'mod',name,attrs});
 function kwOr(kw,args,name,i,def){return kw[name]!==undefined?kw[name]:args[i]!==undefined?args[i]:def}
 function dimArg(a,kw,i=0){const v=kw.dim||kw.axis||a[i];if(!v||v.t==='none')return null;if(v.t==='list'||v.t==='tuple')return v.items.map(intOf);return intOf(v)}
+const corrArg=kw=>kw.correction&&kw.correction.t!=='none'?numOf(kw.correction):kw.unbiased&&!kw.unbiased.v?0:1;
 const keepArg=kw=>!!((kw.keepdim&&kw.keepdim.v)||(kw.keepdims&&kw.keepdims.v));
 function makeCat(args,kw){const seq=args[0];if(!seq||!(seq.t==='tuple'||seq.t==='list'))err('TypeError','cat() 的第一个参数要是一组张量，比如 (X, Y)');let dim=kw.dim?intOf(kw.dim):(args[1]?intOf(args[1]):0);
   const ts=seq.items.map(asTensor),nd=ts[0].shape.length;if(dim<0)dim+=nd;if(dim<0||dim>=nd)err('IndexError','Dimension out of range');
@@ -3046,7 +3262,7 @@ const torch=mod('torch',{
   mv:fn('mv',a=>{const A=asTensor(a[0]),x=asTensor(a[1]);if(A.shape.length!==2||x.shape.length!==1)err('RuntimeError','vector + matrix @ vector expected, got 1, 2, 2');return matmul(A,x,'mv')}),
   dot:fn('dot',a=>{const A=asTensor(a[0]),Bt=asTensor(a[1]);if(A.shape.length!==1||Bt.shape.length!==1)err('RuntimeError',`1D tensors expected, but got ${A.shape.length}D and ${Bt.shape.length}D tensors`);if(A.dtype!==Bt.dtype)err('RuntimeError',`dot : expected both vectors to have same dtype, but found ${A.dtype==='int64'?'Long':'Float'} and ${Bt.dtype==='int64'?'Long':'Float'}`);return matmul(A,Bt)}),
   norm:fn('norm',a=>normT(asTensor(a[0]))),
-  sum:fn('sum',(a,kw)=>reduce(asTensor(a[0]),dimArg(a,kw,1),'sum',keepArg(kw))),mean:fn('mean',(a,kw)=>reduce(asTensor(a[0]),dimArg(a,kw,1),'mean',keepArg(kw))),
+  sum:fn('sum',(a,kw)=>reduce(asTensor(a[0]),dimArg(a,kw,1),'sum',keepArg(kw))),mean:fn('mean',(a,kw)=>reduce(asTensor(a[0]),dimArg(a,kw,1),'mean',keepArg(kw))),clamp:fn('clamp',(a,kw)=>clampT(asTensor(a[0]),kw.min||a[1],kw.max||a[2])),clip:fn('clip',(a,kw)=>clampT(asTensor(a[0]),kw.min||a[1],kw.max||a[2])),var:fn('var',(a,kw)=>varStd(asTensor(a[0]),dimArg(a,kw,1),corrArg(kw),keepArg(kw),false)),std:fn('std',(a,kw)=>varStd(asTensor(a[0]),dimArg(a,kw,1),corrArg(kw),keepArg(kw),true)),
   max:fn('max',(a,kw)=>a[1]&&isT(a[1])?maxmin(a[0],a[1],1):reduce(asTensor(a[0]),dimArg(a,kw,1),'max',keepArg(kw))),min:fn('min',(a,kw)=>a[1]&&isT(a[1])?maxmin(a[0],a[1],-1):reduce(asTensor(a[0]),dimArg(a,kw,1),'min',keepArg(kw))),
   maximum:fn('maximum',a=>maxmin(a[0],a[1],1)),minimum:fn('minimum',a=>maxmin(a[0],a[1],-1)),
   eye:fn('eye',(a,kw)=>{const n=intOf(a[0]),m=a[1]?intOf(a[1]):n;const d=[];for(let i=0;i<n;i++)for(let j=0;j<m;j++)d.push(i===j?1:0);return mkT([n,m],d,dtypeKw(kw,'float32'))}),
@@ -3089,7 +3305,7 @@ function plotFig(ctx){if(!ctx.fig){ctx.fig={series:[],hlines:[],xlabel:'',ylabel
 function d2lPlot(a,kw,ctx){let X=a[0],Y=kwOr(kw,a,'Y',1,null);const xl=kwOr(kw,a,'xlabel',2,NONE),yl=kwOr(kw,a,'ylabel',3,NONE),lg=kwOr(kw,a,'legend',4,NONE);
   const isList=v=>v&&(v.t==='list'||v.t==='tuple')&&v.items.length&&(isT(v.items[0])||v.items[0].t==='list');
   let Xs=isList(X)?X.items:[X],Ys;if(!Y||Y.t==='none'){Ys=Xs;Xs=Ys.map(y=>null)}else Ys=isList(Y)?Y.items:[Y];if(Xs.length===1&&Ys.length>1)Xs=Ys.map(()=>Xs[0]);
-  const labels=lg&&lg.t!=='none'?lg.items.map(str):[];const fig={series:Ys.map((y,i)=>{const yv=toXY(y),xv=Xs[i]?toXY(Xs[i]):yv.map((_,k)=>k);return{x:xv,y:yv,label:labels[i]||'',dash:i>0&&!labels.length?false:i===1}}),hlines:[],xlabel:xl.t==='str'?xl.v:'',ylabel:yl.t==='str'?yl.v:'',legend:labels.length>0};
+  const labels=lg&&lg.t!=='none'?lg.items.map(str):[];const fig={series:Ys.map((y,i)=>{const yv=toXY(y),xv=Xs[i]?toXY(Xs[i]):yv.map((_,k)=>k);return{x:xv,y:yv,label:labels[i]||''}}),hlines:[],xlabel:xl.t==='str'?xl.v:'',ylabel:yl.t==='str'?yl.v:'',legend:labels.length>0};
   ctx.plots.push(fig);return NONE}
 const pltAxes={t:'mod',name:'Axes',attrs:{}};
 function pltMod(ctx){return{t:'mod',name:'matplotlib.pyplot',attrs:new Proxy({},{get:(o,name)=>{
@@ -3121,7 +3337,7 @@ function tensorAttr(T,name){
 function tensorMethod(T,name){
   const M={reshape:a=>reshapeT(T,dimsArg(a)),view:a=>reshapeT(T,dimsArg(a)),numel:()=>I(T.data.length),
     size:a=>a.length?I(T.shape[intOf(a[0])<0?T.shape.length+intOf(a[0]):intOf(a[0])]):{t:'size',dims:T.shape.slice()},
-    sum:(a,kw)=>reduce(T,dimArg(a,kw),'sum',keepArg(kw)),mean:(a,kw)=>reduce(T,dimArg(a,kw),'mean',keepArg(kw)),max:(a,kw)=>reduce(T,dimArg(a,kw),'max',keepArg(kw)),min:(a,kw)=>reduce(T,dimArg(a,kw),'min',keepArg(kw)),
+    sum:(a,kw)=>reduce(T,dimArg(a,kw),'sum',keepArg(kw)),mean:(a,kw)=>reduce(T,dimArg(a,kw),'mean',keepArg(kw)),clamp:(a,kw)=>clampT(T,kw.min||a[0],kw.max||a[1]),clip:(a,kw)=>clampT(T,kw.min||a[0],kw.max||a[1]),var:(a,kw)=>varStd(T,dimArg(a,kw),corrArg(kw),keepArg(kw),false),std:(a,kw)=>varStd(T,dimArg(a,kw),corrArg(kw),keepArg(kw),true),max:(a,kw)=>reduce(T,dimArg(a,kw),'max',keepArg(kw)),min:(a,kw)=>reduce(T,dimArg(a,kw),'min',keepArg(kw)),
     cumsum:(a,kw)=>cumsum(T,dimArg(a,kw)),norm:()=>normT(T),
     item:()=>{if(T.data.length!==1)err('RuntimeError',`a Tensor with ${T.data.length} elements cannot be converted to Scalar`);const v=T.data[0];return isFloatDt(T.dtype)?F(v):T.dtype==='bool'?B(v):I(v)},
     tolist:()=>{const rec=(d,off)=>{if(d===T.shape.length){const v=T.data[off];return isFloatDt(T.dtype)?F(v):T.dtype==='bool'?B(v):I(v)}const st=strides(T.shape);const r=[];for(let i=0;i<T.shape[d];i++)r.push(rec(d+1,off+i*st[d]));return list(r)};return rec(0,0)},
@@ -3840,7 +4056,7 @@ function colors(){const cs=getComputedStyle(document.documentElement),g=n=>cs.ge
 function fitCanvas(cv,W,H){const r=window.devicePixelRatio||1;cv.width=Math.round(W*r);cv.height=Math.round(H*r);cv.style.width=W+'px';cv.style.height=H+'px';const c=cv.getContext('2d');c.setTransform(r,0,0,r,0,0);return c}
 const MONO='11px "JetBrains Mono",ui-monospace,monospace';
 const bodyFont=px=>`${px}px ${getComputedStyle(document.body).fontFamily}`;
-const DAYS=['1','2','3','4','5','6','7','8','9'];
+const DAYS=['1','2','3','4','5','6','7','8','9','10'];
 
 // ---------- 张量图示 ----------
 function cellText(v,dtype){if(dtype==='bool')return v?'T':'F';if(dtype==='int64')return String(v);if(!Number.isFinite(v))return String(v);return Number.isInteger(v)?String(v):(Math.abs(v)>=100?v.toFixed(0):v.toFixed(2))}
@@ -3906,7 +4122,7 @@ function drawPlot(cv,fig){const C=colors(),cs=getComputedStyle(document.document
   const nice=(lo,hi,n)=>{const sp=hi-lo,st0=sp/n,mg=10**Math.floor(Math.log10(st0)),e=st0/mg,st=(e>=7.5?10:e>=3.5?5:e>=1.5?2:1)*mg;const t=[];for(let v=Math.ceil(lo/st)*st;v<=hi+st*1e-9;v+=st)t.push(+v.toFixed(10));return t};
   const sx=x=>pl+(x-x0)/(x1-x0)*(W-pl-pr),sy0=y=>pt+(y1-y)/(y1-y0)*(H-pt-pb),sy=y=>sy0(T(y));const SUP={'-':'⁻',0:'⁰',1:'¹',2:'²',3:'³',4:'⁴',5:'⁵',6:'⁶',7:'⁷',8:'⁸',9:'⁹'};
   ctx.font=MONO;ctx.fillStyle=C.muted;ctx.strokeStyle=C.line;ctx.lineWidth=1;ctx.textAlign='right';ctx.textBaseline='middle';
-  let yt=lg?nice(y0,y1,5).filter(Number.isInteger):nice(y0,y1,4);const pow=lg&&yt.length>=2;if(lg&&!pow)yt=nice(y0,y1,4);for(const t of yt){const y=Math.round(sy0(t))+.5;ctx.beginPath();ctx.moveTo(pl,y);ctx.lineTo(W-pr,y);ctx.stroke();ctx.fillText(pow?'10'+String(t).replace(/./g,c=>SUP[c]):lg?String(+(10**t).toPrecision(3)):String(+t.toPrecision(6)),pl-6,y)}
+  let yt=lg?nice(y0,y1,5).filter(Number.isInteger):nice(y0,y1,4);const pow=lg&&yt.length>=2;if(lg&&!pow){yt=[];for(let k=Math.floor(y0);k<=Math.ceil(y1);k++)for(const m of[1,2,5]){const t=Math.log10(m)+k;if(t>=y0&&t<=y1)yt.push(t)}}for(const t of yt){const y=Math.round(sy0(t))+.5;ctx.beginPath();ctx.moveTo(pl,y);ctx.lineTo(W-pr,y);ctx.stroke();ctx.fillText(pow?'10'+String(t).replace(/./g,c=>SUP[c]):lg?String(+(10**t).toPrecision(2)):String(+t.toPrecision(6)),pl-6,y)}
   ctx.textAlign='center';ctx.textBaseline='top';for(const t of nice(x0,x1,5)){const x=Math.round(sx(t))+.5;ctx.fillText(String(+t.toPrecision(6)),x,H-pb+6)}
   ctx.font=bodyFont(12);ctx.fillStyle=C.ink;if(fig.xlabel)ctx.fillText(fig.xlabel,(pl+W-pr)/2,H-16);if(fig.ylabel){ctx.save();ctx.translate(13,(pt+H-pb)/2);ctx.rotate(-Math.PI/2);ctx.textBaseline='middle';ctx.fillText(fig.ylabel,0,0);ctx.restore()}
   for(const h of fig.hlines){ctx.strokeStyle=C.ink;ctx.setLineDash([5,4]);ctx.beginPath();ctx.moveTo(pl,sy(h));ctx.lineTo(W-pr,sy(h));ctx.stroke();ctx.setLineDash([])}
@@ -3950,7 +4166,7 @@ function setupCells(){$$('.cell').forEach((cell,i)=>{const ta=cell.querySelector
     else if(e.key==='Tab'&&!e.shiftKey){e.preventDefault();const s=ta.selectionStart;ta.setRangeText('    ',s,ta.selectionEnd,'end');autoSize(ta)}})})}
 function runAll(day){ENVS[day]=MT.newEnv();EXEC[day]=0;MT.resetFS();let errs=0;const main=$('#day'+day);
   $$('.cell',main).forEach(c=>{if(c.dataset.manual){const out=c.querySelector('.out');out.className='out';out.textContent='';const t=document.createElement('span');t.className='tip';t.textContent=`这一格要手动运行：${c.dataset.manual}。准备好了点这一格右上角的“运行”。`;out.appendChild(t);out.hidden=false;return}if(!runCellEl(c))errs++});RAN[day]=true;
-  const expected={'1':0,'2':5,'3':3,'4':0,'5':0,'6':0,'7':0,'8':0,'9':0}[day]||0;
+  const expected={'1':0,'2':5,'3':3,'4':0,'5':0,'6':0,'7':0,'8':0,'9':0,'10':0}[day]||0;
   $$('.runAllMsg',main).forEach(m=>m.textContent=errs>expected?`运行完了，有 ${errs} 个格子报错，往下找红字。`:expected?`全部运行完了。其中 ${expected} 个格子是故意报错的，用来练习读报错。`:'全部运行完了，没有报错。')}
 document.addEventListener('click',e=>{const b=e.target.closest('.runAll');if(b)runAll(b.dataset.day)});
 
@@ -4236,6 +4452,49 @@ function dpRender(){const p=+$('#dpP').value;$('#dpPv').textContent=p.toFixed(2)
   const kept=DP.mask.filter(Boolean).length,sum0=DP.h.reduce((a,b)=>a+b,0),sum1=DP.h.reduce((a,v,i)=>a+(DP.mask[i]?v*k:0),0);
   $('#dpCalc').textContent=`p = ${p.toFixed(2)}：每个单元以 ${p.toFixed(2)} 的概率被置 0，留下的乘 1/(1 − p) = ${k.toFixed(3)}\n这次留下 ${kept} / 16 个\n\n原来 16 个数的和：${sum0.toFixed(2)}\n丢弃并放大后的和：${sum1.toFixed(2)}（每次都不同，但期望等于原来的和）${DP.avg?`\n1000 次平均后的和：${DP.avg.reduce((a,b)=>a+b,0).toFixed(2)}，每格的平均都接近原值`:''}\n\nmodel.eval() 时 Dropout 什么也不做，输出就是原来的 h。`}
 $('#dpP').addEventListener('input',()=>{DP.avg=null;dpRender()});$('#dpGo').onclick=dpSample;$('#dp100').onclick=dpAvg;
+// ---------- 第 10 天：信号穿过 L 层 ----------
+function sgRng(seed){let s=seed>>>0;const u=()=>{s=s+0x6D2B79F5>>>0;let t=Math.imul(s^s>>>15,1|s);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296};return()=>{let a=0;while(!a)a=u();return Math.sqrt(-2*Math.log(a))*Math.cos(2*Math.PI*u())}}
+const SG_ACT={sigmoid:[x=>1/(1+Math.exp(-x)),(x,y)=>y*(1-y)],tanh:[Math.tanh,(x,y)=>1-y*y],relu:[x=>x>0?x:0,x=>x>0?1:0]};
+function sgSim(act,init,L){const n=64,B=64,g=sgRng(7),[f,df]=SG_ACT[act],sd={small:0.01,one:1,xavier:Math.sqrt(2/(n+n)),he:Math.sqrt(2/n)}[init];
+  const Ws=[],Zs=[],Hs=[];let h=Array.from({length:B*n},()=>g());Hs.push(h);
+  for(let l=0;l<L;l++){const W=Float64Array.from({length:n*n},()=>g()*sd),z=new Float64Array(B*n);for(let b=0;b<B;b++)for(let i=0;i<n;i++){const hv=h[b*n+i];if(!hv)continue;for(let j=0;j<n;j++)z[b*n+j]+=hv*W[i*n+j]}
+    const o=Float64Array.from(z,v=>f(v));Ws.push(W);Zs.push(z);Hs.push(o);h=o}
+  const fstd=Hs.slice(1).map(a=>{let m=0;for(const v of a)m+=v;m/=a.length;let s=0;for(const v of a)s+=(v-m)**2;return Math.sqrt(s/a.length)});
+  let gh=Array.from({length:B*n},()=>g()/B);const gn=new Array(L);
+  for(let l=L-1;l>=0;l--){const z=Zs[l],o=Hs[l+1],hin=Hs[l],W=Ws[l],gz=Float64Array.from(gh,(v,k)=>v*df(z[k],o[k]));let s=0;
+    for(let i=0;i<n;i++)for(let j=0;j<n;j++){let a=0;for(let b=0;b<B;b++)a+=hin[b*n+i]*gz[b*n+j];s+=a*a}gn[l]=Math.sqrt(s);
+    const nh=new Float64Array(B*n);for(let b=0;b<B;b++)for(let i=0;i<n;i++){let a=0;for(let j=0;j<n;j++)a+=gz[b*n+j]*W[i*n+j];nh[b*n+i]=a}gh=nh}
+  return{fstd,gn,sd}}
+function sgRender(){const host=$('#sgHost');if(!host.offsetParent)return;const act=$('#sgAct').value,init=$('#sgInit').value,L=+$('#sgL').value;$('#sgLv').textContent=L;
+  const r=sgSim(act,init,L),xs=Array.from({length:L},(_,i)=>i+1),cl=v=>Math.max(1e-30,Math.min(1e30,v));
+  host.innerHTML='<canvas id="sgCv" aria-label="每一层的前向信号和梯度大小"></canvas>';
+  drawPlot($('#sgCv'),{series:[{x:xs,y:r.fstd.map(cl),label:'前向：输出的标准差'},{x:xs,y:r.gn.map(cl),label:'反向：权重梯度的大小'}],hlines:[],xlabel:'第几层',ylabel:'',legend:true,yscale:'log'});
+  const ratio=(a,b)=>a/b,fr=ratio(r.fstd[L-1],r.fstd[0]),gr=ratio(r.gn[0],r.gn[L-1]),e=v=>v.toExponential(1);
+  const verdict=v=>v<1e-3?'消失了':v>1e3?'爆炸了':v<0.1||v>10?'有明显变化':'基本保持住了';
+  $('#sgCalc').textContent=`每层权重的标准差 σ = ${r.sd.toPrecision(3)}${init==='xavier'?'（Xavier：√(2/(64+64))）':init==='he'?'（He：√(2/64)）':''}\n\n前向信号：第 1 层 ${e(r.fstd[0])}，第 ${L} 层 ${e(r.fstd[L-1])}，${verdict(fr)}\n反向梯度：最后一层 ${e(r.gn[L-1])}，第 1 层 ${e(r.gn[0])}，${verdict(gr)}\n\n${act==='sigmoid'?'sigmoid 的导数最大 0.25，层数一多梯度就消失；而且它的输出均值不是 0，信号也很难保持。':act==='relu'&&init==='he'?'ReLU 会把一半的输出变成 0，方差减半；He 初始化把 σ² 乘 2 正好补回来。':act==='relu'&&init==='xavier'?'Xavier 没考虑 ReLU 砍掉一半，所以每层信号缩小一点，层数多了就看得出来。试试 He。':init==='one'?'σ = 1 太大：每层把信号放大约 √64 = 8 倍（ReLU 是约 5.7 倍）。':init==='small'?'σ = 0.01 太小：每层把信号缩小到约 0.01 × √64 = 0.08 倍。':'tanh 在 0 附近导数是 1，配 Xavier 比较稳。'}`}
+['#sgAct','#sgInit'].forEach(s=>$(s).onchange=sgRender);$('#sgL').addEventListener('input',sgRender);
+// ---------- 第 10 天：协变量偏移和重要性加权 ----------
+const SH={n:300,s:0.6,mS:-0.5};
+(function(){const g=sgRng(11);SH.x=Array.from({length:SH.n},()=>SH.mS+SH.s*g());SH.y=SH.x.map(x=>x*x/2+0.1*g())})();
+function shFit(w){let sw=0,sx=0,sy=0,sxx=0,sxy=0;SH.x.forEach((x,i)=>{const v=w[i];sw+=v;sx+=v*x;sy+=v*SH.y[i];sxx+=v*x*x;sxy+=v*x*SH.y[i]});const mx=sx/sw,my=sy/sw,b1=(sxy/sw-mx*my)/(sxx/sw-mx*mx);return[my-b1*mx,b1]}
+function shRender(){const host=$('#shHost');if(!host.offsetParent)return;const C=colors(),mT=+$('#shM').value,clip=+$('#shClip').value;$('#shMv').textContent=mT.toFixed(2);
+  const pdf=(x,m)=>Math.exp(-((x-m)**2)/(2*SH.s*SH.s)),beta=SH.x.map(x=>Math.min(clip,pdf(x,mT)/pdf(x,SH.mS)));
+  const fp=shFit(SH.x.map(()=>1)),fw=shFit(beta);
+  // 目标分布上的期望 MSE：在目标分布上数值积分（噪声方差 0.01 加上去）
+  let mp=0,mw=0,z=0;for(let k=0;k<=400;k++){const x=mT-4*SH.s+8*SH.s*k/400,p=pdf(x,mT),t=x*x/2;z+=p;mp+=p*(fp[0]+fp[1]*x-t)**2;mw+=p*(fw[0]+fw[1]*x-t)**2}mp=mp/z+0.01;mw=mw/z+0.01;
+  const sw=beta.reduce((a,b)=>a+b,0),sw2=beta.reduce((a,b)=>a+b*b,0),ess=sw*sw/sw2,nclip=beta.filter(b=>b>=clip).length;
+  const W=Math.max(260,host.clientWidth),H=Math.round(Math.min(320,W*.72)),ctx=fitCanvas($('#shCv'),W,H),x0=-2.4,x1=3.4,y0=-0.8,y1=3.2,sx=x=>(x-x0)/(x1-x0)*W,sy=y=>H-26-(y-y0)/(y1-y0)*(H-36);
+  ctx.strokeStyle=C.line;ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(0,sy(0));ctx.lineTo(W,sy(0));ctx.moveTo(sx(0),0);ctx.lineTo(sx(0),H);ctx.stroke();
+  const dens=(m,col)=>{ctx.fillStyle=col;ctx.globalAlpha=.22;ctx.beginPath();ctx.moveTo(sx(x0),H);for(let k=0;k<=200;k++){const x=x0+(x1-x0)*k/200;ctx.lineTo(sx(x),H-pdf(x,m)*40)}ctx.lineTo(sx(x1),H);ctx.fill();ctx.globalAlpha=1};
+  dens(SH.mS,C.accent);dens(mT,C.pos);
+  ctx.save();ctx.beginPath();ctx.rect(0,0,W,H);ctx.clip();
+  ctx.strokeStyle=C.muted;ctx.lineWidth=2;ctx.beginPath();for(let k=0;k<=200;k++){const x=x0+(x1-x0)*k/200;k?ctx.lineTo(sx(x),sy(x*x/2)):ctx.moveTo(sx(x),sy(x*x/2))}ctx.stroke();
+  SH.x.forEach((x,i)=>{ctx.fillStyle=C.accent;ctx.globalAlpha=Math.min(1,.15+.5*beta[i]/Math.max(...beta));ctx.beginPath();ctx.arc(sx(x),sy(SH.y[i]),2.2,0,7);ctx.fill()});ctx.globalAlpha=1;
+  const ln=(c,col,dash)=>{ctx.strokeStyle=col;ctx.lineWidth=2;ctx.setLineDash(dash);ctx.beginPath();ctx.moveTo(sx(x0),sy(c[0]+c[1]*x0));ctx.lineTo(sx(x1),sy(c[0]+c[1]*x1));ctx.stroke();ctx.setLineDash([])};
+  ln(fp,C.ink,[6,4]);ln(fw,C.pos,[]);ctx.restore();
+  ctx.font=bodyFont(12);[[C.ink,[6,4],'不加权的直线'],[C.pos,[],'加权的直线']].forEach(([c,d,t],i)=>{ctx.strokeStyle=c;ctx.setLineDash(d);ctx.beginPath();ctx.moveTo(8,14+i*16);ctx.lineTo(28,14+i*16);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle=C.ink;ctx.fillText(t,34,18+i*16)});ctx.fillStyle=C.muted;ctx.fillText('蓝点和蓝色区域：源分布　橙色区域：目标分布',8,50);
+  $('#shCalc').textContent=`源分布中心 −0.50，目标分布中心 ${mT.toFixed(2)}，两边标准差都是 0.6\nβ(x) = p_T(x) / p_S(x)，这里两个分布已知，直接算${clip<1e8?`，再截断到 ${clip}（被截断的样本 ${nclip} 个）`:''}\n\n                目标分布上的 MSE\n不加权          ${mp.toFixed(4)}\n加权            ${mw.toFixed(4)}\n\n有效样本量 ESS = (Σβ)² / Σβ² = ${ess.toFixed(1)}（一共 ${SH.n} 个样本）\n${ess<20?'ESS 很小：只有极少数样本的权重大，加权结果很不稳定。两个分布离得太远时，重要性加权也救不了。':ess<SH.n*0.5?'权重比较不均匀，加权估计的方差会变大。':'两个分布很接近，权重都差不多，加不加权区别不大。'}`}
+$('#shM').addEventListener('input',shRender);$('#shClip').onchange=shRender;
 // ---------- 小结勾选、课程表、切换天数 ----------
 function checksSetup(){$$('.check-list').forEach(ul=>{const day=ul.dataset.day,key='checks'+day,st=store.get(key,{});$$('input',ul).forEach(c=>{c.checked=!!st[c.dataset.k];c.onchange=()=>{const s=store.get(key,{});s[c.dataset.k]=c.checked;store.set(key,s);checkMsg(ul)}});checkMsg(ul)})}
 function checkMsg(ul){const day=ul.dataset.day,all=$$('input',ul),n=all.filter(c=>c.checked).length,msg=ul.parentElement.querySelector('.check-msg');const done=n===all.length;
@@ -4248,7 +4507,7 @@ const ROAD=[['1','第 1 章 引言 + 2.1 数据操作'],['2','2.2 数据预处�
   ['18','11.4 至 11.6 + 11.10 小批量随机梯度下降、动量、Adam（论文用的优化器）','paper'],['19','论文专题：离线策略评估 IPS、SNIPS、DR（书里没有）','paper'],['20','论文专题：逐行读你的 experiment.py','paper'],
   ['选学','4.7 前向传播、反向传播和计算图；4.10 Kaggle 房价预测'],['选学','第 6 至 7 章 卷积神经网络（LeNet、ResNet 等）'],['选学','9.3 至 9.8 深度和双向循环网络、机器翻译、seq2seq'],['选学','第 11 章其余优化算法、第 12 章计算性能'],['选学','第 13 至 15 章 计算机视觉、自然语言处理']];
 function roadRender(){$('#roadList').innerHTML=ROAD.map(([d,t,f])=>{const live=DAYS.includes(d);return`<div><span class="d">${/^\d+$/.test(d)?`第 ${d} 天`:d}</span><span>${live?`<a href="#day${d}">${esc(t)}</a>`:esc(t)}${f==='paper'?' <span class="mark">论文</span>':''}</span><span class="st${live?' now':''}">${live?'已上线':'未上线'}</span></div>`}).join('')}
-const REDRAW={'1':()=>{kRender();imRender();ofRender()},'2':()=>{dotRender();normRender()},'3':()=>{secRender();gradRender()},'4':()=>{diceRender();bayesRender();bktRender()},'5':()=>{houseRender();if(!sgd.X)sgdData();sgdRender()},'6':()=>{smRender();calRender()},'7':()=>{pixRender()},'8':()=>{uaRender();actRender()},'9':()=>{spRender();rdRender();dpRender()}};
+const REDRAW={'1':()=>{kRender();imRender();ofRender()},'2':()=>{dotRender();normRender()},'3':()=>{secRender();gradRender()},'4':()=>{diceRender();bayesRender();bktRender()},'5':()=>{houseRender();if(!sgd.X)sgdData();sgdRender()},'6':()=>{smRender();calRender()},'7':()=>{pixRender()},'8':()=>{uaRender();actRender()},'9':()=>{spRender();rdRender();dpRender()},'10':()=>{sgRender();shRender()}};
 function showDay(day,scroll){if(!DAYS.includes(day))day='1';$$('main.day').forEach(m=>m.hidden=m.dataset.day!==day);$$('[data-nav]').forEach(a=>a.classList.toggle('on',a.dataset.nav===day));store.set('lastDay',day);
   if(!RAN[day]){if(day==='7'&&!FM_U8){fmReady.then(ok=>{if(ok&&!RAN['7']){runAll('7');REDRAW['7']()}});}else runAll(day)}$$('#day'+day+' textarea').forEach(autoSize);REDRAW[day]();if(scroll)window.scrollTo(0,0)}
 function route(){const h=location.hash.replace('#','');const m=h.match(/^day(\d+)$/);if(m){showDay(m[1],true);return}
@@ -4353,6 +4612,17 @@ const QUIZ={
  {t:'c',q:'调用 net.eval() 之后，nn.Dropout 层会怎样？',o:['丢弃概率变成 1','什么也不做，原样输出','丢弃概率减半','报错'],a:1,why:'评估时要用上所有单元，所以 Dropout 直接输出输入。你论文的 train_kt 训练时调 model.train()，评估前调 model.eval()。'},
  {t:'c',q:'你论文 experiment.py 每个 epoch 在验证集上算 BCE，比之前更低就存下 state_dict，最后恢复最好的那份。这起什么作用？',o:['加快训练','用验证集做模型选择，相当于提前停止，防止用到过拟合以后的参数','增大学习率','让测试集变大'],a:1,why:'后面的 epoch 可能已经开始过拟合，按验证集挑出来的检查点泛化最好。全程没有用到测试集。'},
  {t:'code',q:'写代码：造一个 nn.Dropout(0.25) 层 drop，把它作用在 torch.ones(4000) 上，结果存成 y。检查：y 里只有 0 和 4/3 两种值，0 的比例在 0.2 到 0.3 之间。',start:'drop = \ny = \n(y == 0).float().mean()',check:env=>{const y=env.vars.y;if(!y||!MT.isT(y)||y.shape.join()!=='4000')return'y 应该是形状 (4000,) 的张量';const k=4/3;let z=0;for(const v of y.data){if(v===0)z++;else if(v===1)return'y 里有 1：Dropout 没起作用。是不是调了 drop.eval()？';else if(Math.abs(v-k)>1e-5)return`y 里有 ${v}，留下来的值应该是 1/(1 − 0.25) ≈ 1.3333`}const f=z/4000;if(f<0.2||f>0.3)return`0 的比例是 ${f.toFixed(3)}，应该在 0.25 附近。是不是用了 eval() 或者 p 写错了？`;return true},why:'drop = nn.Dropout(0.25)，y = drop(torch.ones(4000))。新建的层默认处在训练模式，所以会丢弃。'},
+],
+'10':[
+ {t:'c',q:'sigmoid 函数导数的最大值是多少？在哪里取到？',o:['1，在 x = 0','0.5，在 x = 0','0.25，在 x = 0','0.25，在 x 很大时'],a:2,why:'σ′(x) = σ(x)(1 − σ(x))，x = 0 时 σ = 0.5，导数是 0.25。x 很大或很小时导数接近 0。'},
+ {t:'c',q:'一个 20 层的网络，每层把梯度乘大约 0.25。传到第 1 层时梯度大约变成原来的多少？',o:['5 倍','0.25 × 20 = 5','0.25²⁰ ≈ 10⁻¹²','不变'],a:2,why:'链式法则是连乘，不是相加。0.25²⁰ ≈ 9×10⁻¹³，前面的层几乎学不到东西，这就是梯度消失。'},
+ {t:'c',q:'把一个隐藏层的所有权重都初始化成同一个常数，会怎样？',o:['训练更快','所有隐藏单元算出相同的值、收到相同的梯度，永远一样，相当于只有 1 个单元','直接报错','梯度爆炸'],a:1,why:'这是对称性问题。随机初始化打破对称。你论文的策略头 g 初始化成 0 没问题，因为它是输出层，不是隐藏层。'},
+ {t:'c',q:'一个全连接层 n_in = 300、n_out = 200。Xavier 初始化的权重方差应该是多少？',o:['1/300','2/500 = 0.004','2/300','6/500'],a:1,why:'σ² = 2/(n_in + n_out) = 2/500。用均匀分布时边界是 √(6/500) ≈ 0.11。'},
+ {t:'c',q:'用真实照片训练猫狗分类器，上线后要分类卡通图片。这是哪种分布偏移？',o:['协变量偏移','标签偏移','概念偏移','没有偏移'],a:0,why:'输入 x 的分布变了（照片变卡通），但“图里是猫还是狗”这个规律 p(y | x) 没变。'},
+ {t:'c',q:'协变量偏移下，重要性权重 β(xᵢ) 等于什么？',o:['p_S(x)/p_T(x)','p_T(x)/p_S(x)','p(y | x)','1/n'],a:1,why:'目标分布的密度除以源分布（训练数据）的密度。在目标分布里更常见的样本权重更大。'},
+ {t:'c',q:'你论文 OPE 里的权重 w = π(a | s)/μ(a | s)，μ 指什么？',o:['新训练的出题策略','收集日志时实际使用的出题策略','学生的真实掌握度','学习率'],a:1,why:'数据是在 μ 下收集的，想评估的是新策略 π。和 β = p_T/p_S 一样：想要的分布除以数据实际来自的分布。'},
+ {t:'c',q:'nn.utils.clip_grad_norm_(params, 5.0) 做了什么？',o:['把每个梯度元素截断到 [−5, 5]','如果所有梯度合起来的 L2 范数超过 5，就整体按比例缩小到 5，方向不变','把学习率设成 5','每 5 步更新一次'],a:1,why:'按范数裁剪保持方向，只缩短长度。逐元素截断的是 clip_grad_value_。你论文 train_kt 每一步都这样做，防止 LSTM 梯度爆炸。'},
+ {t:'code',q:'写代码：把张量 w = torch.tensor([0.5, 3.0, 40.0, 8.0]) 截断到最大 20，存成 wc；再算有效样本量 ess = (wc.sum())**2 / (wc**2).sum()。',start:'w = torch.tensor([0.5, 3.0, 40.0, 8.0])\nwc = \ness = \ness',check:env=>{const w=env.vars.wc,e=env.vars.ess;if(!w||!MT.isT(w)||w.data.length!==4)return'wc 应该是 4 个数的张量';if(Math.abs(w.data[2]-20)>1e-6||Math.abs(w.data[0]-0.5)>1e-6)return`wc 是 [${[...w.data].join(', ')}]，应该是 [0.5, 3, 20, 8]。用 w.clamp(max=20)。`;const ev=e&&(MT.isT(e)?e.data[0]:e.v);if(ev==null||Math.abs(ev-31.5**2/473.25)>1e-3)return`ess 应该约等于 ${(31.5**2/473.25).toFixed(4)}`;return true},why:'wc = w.clamp(max=20) 得到 [0.5, 3, 20, 8]，ESS = 31.5² / 473.25 ≈ 2.10。4 个样本只相当于 2 个，因为权重集中在一个样本上。'},
 ],
 };
 function quizState(day){return store.get('quiz'+day,{})}

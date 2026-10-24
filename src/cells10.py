@@ -1,0 +1,18 @@
+CELLS = [
+"%matplotlib inline\nimport torch\nfrom d2l import torch as d2l",
+"x = torch.arange(-8.0, 8.0, 0.1, requires_grad=True)\ny = torch.sigmoid(x)\ny.backward(torch.ones_like(x))\n\nd2l.plot(x.detach().numpy(), [y.detach().numpy(), x.grad.numpy()],\n         legend=['sigmoid', 'gradient'], figsize=(4.5, 2.5))",
+"x.grad[[0, 40, 80, 120, 159]], x.grad.max()",
+"type(x.detach().numpy()), x.detach().numpy().shape, x.grad.numpy()[:3]",
+"M = torch.tensor([[1.5e25, -3.25e24, 7.0e23, 2.0], [-1.0e25, 4.0e24, -8.5e23, 1.0], [3.0, 2.0, 1.0, 0.5], [6.0e24, -1.0, 2.5, 9.0e22]])\nprint('一个矩阵 \\n', M)\nM",
+"torch.tensor([[1.2345e-30, 5.0], [3.0, 4.0]]), torch.tensor([1e8, 1.0]), torch.tensor([123456789.0, 1.5]), torch.tensor([float('inf'), 1.0, float('nan')])",
+"M = torch.normal(0, 1, size=(4,4))\nfor i in range(100):\n    M = torch.mm(M,torch.normal(0, 1, size=(4, 4)))\nM.shape, M.abs().max() > 1e10",
+"from torch import nn\nlin = nn.Linear(300, 200)\nnn.init.xavier_uniform_(lin.weight)\nb = (6 / (300 + 200)) ** 0.5\nbool(lin.weight.abs().max() <= b), abs(float(lin.weight.var()) - 2 / 500) < 5e-4",
+"nn.init.xavier_normal_(lin.weight)\nabs(float(lin.weight.std()) - (2 / 500) ** 0.5) < 3e-3, lin.weight.shape",
+"nn.init.zeros_(lin.bias)\nnn.init.constant_(lin.weight, 0.5)\nlin.weight[:2, :3], lin.bias[:3]",
+"X = torch.ones(2, 300)\nlin(X)[:, :3]",
+"h = torch.randn(1000, 256)\nfor i in range(10):\n    W = torch.randn(256, 256) * 0.01\n    h = torch.relu(h @ W)\nh.std() < 1e-6",
+"h = torch.randn(1000, 256)\nfor i in range(10):\n    W = torch.randn(256, 256) * (2 / 256) ** 0.5\n    h = torch.relu(h @ W)\n0.3 < float(h.std()) < 3",
+"torch.var(torch.tensor([1.0, 2.0, 3.0, 4.0])), torch.tensor([1.0, 2.0, 3.0, 4.0]).var(unbiased=False), torch.tensor([[1.0, 2.0], [3.0, 5.0]]).std(dim=0)",
+"w = torch.tensor([0.25, 4.0, 1.0])\nw / w.sum(), (w * torch.tensor([1.0, 0.0, 1.0])).sum() / w.sum()",
+"t = torch.tensor([-2.0, 0.5, 3.0, 25.0], requires_grad=True)\nc = t.clamp(max=20)\nc.sum().backward()\nc, t.grad, torch.clamp(t, min=0, max=1), torch.tensor([1, 5, 9]).clamp(2, 6)",
+]
