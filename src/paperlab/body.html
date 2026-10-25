@@ -1,4 +1,4 @@
-<nav class="top" aria-label="章节"><div class="wrap"><b>论文实验室</b><a href="#overview">一页看懂</a><a href="#data">数据集</a><a href="#models">模型</a><a href="#results">结果浏览器</a><a href="#tradeoff">预测好≠出题好</a><a href="#hacking">刷分诊断</a><a href="#sim">模拟器游乐场</a><a href="#robust">稳健性</a><a href="#stats">统计检验</a><a href="#takeaway">结论</a></div></nav>
+<nav class="top" aria-label="章节"><div class="wrap"><b>论文实验室</b><a href="#overview">一页看懂</a><a href="#data">数据集</a><a href="#models">模型</a><a href="#results">结果浏览器</a><a href="#tradeoff">预测好≠出题好</a><a href="#hacking">刷分诊断</a><a href="#ope">离线评估</a><a href="#sim">模拟器游乐场</a><a href="#replay">学生回放</a><a href="#ckpt">训练曲线</a><a href="#robust">稳健性</a><a href="#stats">统计检验</a><a href="#terms">术语</a><a href="#takeaway">结论</a></div></nav>
 <div id="tip" role="status" aria-live="polite"></div>
 <main class="wrap">
 
@@ -78,6 +78,15 @@
   </div>
 </section>
 
+<section id="ope">
+  <div class="sh"><div class="eyebrow">离线评估</div><h2>只看旧日志，能估出新规则的好坏吗？</h2><p class="muted">真实日志上没有“真实的学习收益”，论文用离线策略评估（OPE）来估计：把旧日志按 π/μ 重新加权。模拟器里两样都有，可以直接看 OPE 估得准不准。原理见课程第 19 天。</p></div>
+  <div class="row" style="margin-bottom:12px"><label class="ctl" for="oDs">数据集<select id="oDs"></select></label></div>
+  <div class="grid2">
+    <div class="card stack"><h3>真实日志上的估计</h3><div class="tblwrap"><table><thead><tr><th>方法</th><th class="n">IPS</th><th class="n">SNIPS</th><th class="n">DR ± 标准误</th><th class="n">ESS</th></tr></thead><tbody id="oTbl"></tbody></table></div><p class="note" id="oNote"></p></div>
+    <div class="card stack"><h3>模拟器里：估计值和真实值</h3><div class="chart" id="oChart"></div><div class="legend" id="oLeg"></div><p class="small muted">横轴是 DR 估计，纵轴是同一个估计量在模拟器里的真实值。点落在虚线（y = x）上说明估得准，落在虚线下方说明高估了。</p></div>
+  </div>
+</section>
+
 <section id="sim">
   <div class="sh"><div class="eyebrow">自己动手</div><h2>模拟器游乐场</h2><p class="muted">论文模拟器（<span class="mono">rollout</span>，代码第 810 行）的浏览器版本，参数就是上面那 12 个知识点的拟合值。每个模拟学生能力不同，做 60 题，前测后测都是 12 个知识点的平均答对率。选一个出题规则，运行，看学习收益。</p></div>
   <div class="grid2">
@@ -112,6 +121,35 @@
   <p class="note" style="margin-top:12px" id="simValid"></p>
 </section>
 
+<section id="replay">
+  <div class="sh"><div class="eyebrow">自己动手</div><h2>学生回放：同一个学生，两种出题规则</h2><p class="muted">左右两边是<b>同一个</b>模拟学生（能力和一开始会哪些知识点完全相同），用两种规则各做 60 题。拖动或播放，看 12 个知识点怎样被学会、被遗忘。蓝色 = 已掌握，橙框 = 这一步出的题。</p></div>
+  <div class="card stack">
+    <div class="row">
+      <label class="ctl" for="rpDs">数据集<select id="rpDs"></select></label>
+      <label class="ctl" for="rpA">左边的规则<select id="rpA"></select></label>
+      <label class="ctl" for="rpB">右边的规则<select id="rpB"></select></label>
+      <button class="btn ghost" id="rpNew">换一个学生</button>
+    </div>
+    <div class="row"><button class="btn" id="rpPlay">播放</button><label class="ctl" for="rpT" style="flex:1;min-width:200px">第几步 <output id="rpTv" class="mono">0</output><input type="range" id="rpT" min="0" max="60" step="1" value="0" style="width:100%"></label></div>
+    <div class="grid2"><div class="stack" id="rpPA"></div><div class="stack" id="rpPB"></div></div>
+    <p class="note" id="rpNote"></p>
+  </div>
+</section>
+
+<section id="ckpt">
+  <div class="sh"><div class="eyebrow">训练过程</div><h2>训练曲线：两种选检查点的标准</h2><p class="muted">决策导向的方法训练 15 轮，每轮结束记录两样东西：验证集 BCE（预测好不好）和决策价值（模拟器里是验证队列的真实 NLG，真实日志里是验证日志的 DR）。两条竖线是两种标准各自选中的那一轮。</p></div>
+  <div class="card stack">
+    <div class="row">
+      <label class="ctl" for="ckDs">数据集<select id="ckDs"></select></label>
+      <label class="ctl" for="ckM">方法<select id="ckM"></select></label>
+      <label class="ctl" for="ckW">环境<select id="ckW"><option value="sim">模拟器</option><option value="real">真实日志</option></select></label>
+      <label class="ctl" for="ckS">随机种子<select id="ckS"><option>0</option><option>1</option><option>2</option><option>3</option><option>4</option></select></label>
+    </div>
+    <div class="grid2"><div class="stack"><h3>验证集 BCE（越低越好）</h3><div class="chart" id="ckBce"></div></div><div class="stack"><h3 id="ckDecT">决策价值（越高越好）</h3><div class="chart" id="ckDec"></div></div></div>
+    <p class="note" id="ckNote"></p>
+  </div>
+</section>
+
 <section id="robust">
   <div class="sh"><div class="eyebrow">稳健性</div><h2>换个设置，结论还成立吗？</h2></div>
   <div class="grid2">
@@ -129,6 +167,11 @@
     <div class="row"><label class="ctl" for="stCmp">比较<select id="stCmp"></select></label></div>
     <div class="tblwrap"><table><thead><tr><th>指标</th><th class="n">A 的均值</th><th class="n">B 的均值</th><th class="n">差值 A − B</th><th class="n">95% 置信区间</th><th class="n">A 更好的比例</th><th class="n">Wilcoxon p（Holm）</th></tr></thead><tbody id="stTbl"></tbody></table></div>
   </div>
+</section>
+
+<section id="terms">
+  <div class="sh"><div class="eyebrow">术语</div><h2>论文里的名词</h2><p class="muted">每个名词后面是课程里讲它的那一天。</p></div>
+  <div class="models" id="termList"></div>
 </section>
 
 <section id="takeaway">

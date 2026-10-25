@@ -89,6 +89,11 @@ tr.hl td{background:color-mix(in srgb,var(--s2) 9%,transparent)}
 .traj div.m{background:color-mix(in srgb,var(--s1) 55%,var(--paper));color:var(--ink)}
 .traj div.lr{outline:2px solid var(--s2);outline-offset:-2px}
 .hist td{font-size:13px}
+.skgrid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:4px}
+.sk{display:flex;flex-direction:column;align-items:center;border:1px solid var(--line);border-radius:6px;padding:4px 0;background:var(--soft);font-family:var(--f-mono);font-size:12px;line-height:1.3}
+.sk span{font-size:10.5px;color:var(--muted)}
+.sk.m{background:color-mix(in srgb,var(--s1) 55%,var(--paper))}.sk.m span{color:var(--ink)}
+.sk.cur{outline:3px solid var(--s2);outline-offset:-2px}
 footer{padding-block:40px 60px;color:var(--muted);font-size:13px}
 a{color:var(--s1)}
 </style>

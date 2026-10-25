@@ -20,4 +20,11 @@ const POL={
   logging:()=>st=>{const{S,N,K}=st,acc=S.map((s,k)=>(s+1)/(N[k]+2)),sc=acc.map(a=>-((a-0.7)**2)/0.02),m=Math.max(...sc),e=sc.map(v=>Math.exp(v-m)),z=e.reduce((a,b)=>a+b,0);const p=e.map(v=>0.5/K+0.5*v/z);let c=st.u(),k=0;while(k<K-1&&(c-=p[k])>=0)k++;return k},
   // 论文的 ModelPolicy：第 1 步随机；之后选“预测答对概率”最接近 c 的知识点。经验估计和 EmpAcc 一样：(答对数 + 2·先验) / (做题数 + 2)，先验取这个知识点的平均正确率
   target:(c,est)=>st=>{const{S,N,K,sim,L,t}=st;if(t===0)return Math.min(K-1,Math.floor(st.u()*K));let best=0,bd=Infinity;for(let k=0;k<K;k++){const m=sim.p0[k]*(1-sim.s[k])+(1-sim.p0[k])*sim.g[k],p=est==='oracle'?(L[k]?1-sim.s[k]:sim.g[k]):(S[k]+2*m)/(N[k]+2);const d=Math.abs(p-c)+1e-9*k;if(d<bd){bd=d;best=k}}return best}};
-if(typeof module!=='undefined')module.exports={makeSim,rollout,POL};
+// 回放用：只模拟一个学生，记下每一步的掌握状态（逻辑和 rollout 相同，随机数先抽能力和初始状态，所以同一个种子就是同一个学生）
+function rolloutOne(sim,policy,seed,T=60){const K=sim.K,u=mulberry(seed),gauss=()=>{let a=0;while(!a)a=u();return Math.sqrt(-2*Math.log(a))*Math.cos(2*Math.PI*u())};
+  const th=0.7*gauss(),L=sim.p0.map(p=>u()<sig(lgt(p)+th)),leff=sim.l.map(p=>sig(lgt(p)+0.5*th));const perf=Lr=>Lr.reduce((s,v,k)=>s+(v?1-sim.s[k]:sim.g[k]),0)/K;
+  const pu=mulberry(seed*7919+13);// 出题和作答用另一条随机数，两边的学生初始完全一样
+  const S=new Array(K).fill(0),N=new Array(K).fill(0),steps=[{L:L.slice(),perf:perf(L)}];
+  for(let t=0;t<T;t++){const a=policy({sim,S,N,L,t,u:pu,K}),Lk=L[a],p=Lk?1-sim.s[a]:sim.g[a],y=pu()<p,learn=!Lk&&pu()<leff[a];const forgot=[];
+    for(let k=0;k<K;k++)if(k!==a&&L[k]&&pu()<sim.fs[k]){L[k]=false;forgot.push(k)}if(learn)L[a]=true;S[a]+=y?1:0;N[a]++;steps.push({a,y,Lk,learn,forgot,L:L.slice(),perf:perf(L)})}
+  return{theta:th,steps}}

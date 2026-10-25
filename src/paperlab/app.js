@@ -60,17 +60,19 @@ function scatter(host,pts,o){const W=Math.max(320,host.clientWidth||600),H=Math.
   niceTicks(x0,x1,5).forEach(t=>{s+=`<text x="${sx(t)}" y="${H-pb+16}" text-anchor="middle">${o.fx(t)}</text>`});
   s+=`<text x="${(pl+W-pr)/2}" y="${H-4}" text-anchor="middle" class="lab">${esc(o.xl)}</text><text transform="translate(12 ${(pt+H-pb)/2}) rotate(-90)" text-anchor="middle" class="lab">${esc(o.yl)}</text>`;
   (o.hl||[]).forEach(h=>{s+=`<line x1="${pl}" x2="${W-pr}" y1="${sy(h.v)}" y2="${sy(h.v)}" stroke="var(--ink)" stroke-dasharray="4 3"/><text x="${W-pr-4}" y="${sy(h.v)-5}" text-anchor="end" class="lab" style="font-size:11px">${esc(h.label)}</text>`});
+  if(o.diag){const a=Math.max(x0,y0),b=Math.min(x1,y1);if(b>a)s+=`<line x1="${sx(a)}" y1="${sy(a)}" x2="${sx(b)}" y2="${sy(b)}" stroke="var(--ink)" stroke-dasharray="4 3"/><text x="${sx(b)-4}" y="${sy(b)+14}" text-anchor="end" class="lab" style="font-size:11px">y = x</text>`}
   const placed=[],tw=t=>[...t].reduce((n,ch)=>n+(/[\u0000-\u00ff]/.test(ch)?6.6:11.5),0);
   pts.filter(p=>Number.isFinite(p.x)&&Number.isFinite(p.y)).sort((a,b)=>(b.sel?1:0)-(a.sel?1:0)).forEach(p=>{const big=p.sel,cx=sx(p.x),cy=sy(p.y);let lab='';
     if(p.label){const w=tw(p.label),right=cx+9+w<=W-pr;let x=right?cx+9:cx-9,y=cy+4;const box=y0=>[right?x:x-w,y0-11,right?x+w:x,y0+3],hit=b=>placed.some(q=>b[0]<q[2]&&b[2]>q[0]&&b[1]<q[3]&&b[3]>q[1]);
       for(const dy of[0,14,-14,28,-28]){if(!hit(box(y+dy))){y+=dy;break}}placed.push(box(y));lab=`<text x="${x}" y="${y}"${right?'':' text-anchor="end"'} class="lab" style="font-size:11.5px"${big?' font-weight="700"':''}>${esc(p.label)}</text>`}
     s+=`<g tabindex="0" data-tip="${esc(p.tip)}"><circle cx="${cx}" cy="${cy}" r="14" fill="transparent"/><circle cx="${cx}" cy="${cy}" r="${big?7:5}" fill="var(${p.col})" stroke="var(--paper)" stroke-width="2"/>${lab}</g>`});
   host.innerHTML=s+'</svg>';bindTips(host)}
-function lineChart(host,series,o){const W=Math.max(320,host.clientWidth||600),H=Math.round(Math.min(340,W*0.6)),pl=54,pr=16,pt=12,pb=40;const xs=series.flatMap(s=>s.pts.map(p=>p[0])),ys=[...series.flatMap(s=>s.pts.map(p=>p[1])),...(o.hl||[]).map(h=>h.v)];
+function lineChart(host,series,o){series=series.map(se=>({...se,pts:se.pts.filter(p=>p[1]!=null&&Number.isFinite(p[1]))})).filter(se=>se.pts.length);if(!series.length){host.innerHTML='<p class="small muted">这一项没有记录。</p>';return}const W=Math.max(320,host.clientWidth||600),H=Math.round(Math.min(o.h||340,W*0.6)),pl=54,pr=16,pt=12,pb=40;const xs=series.flatMap(s=>s.pts.map(p=>p[0])),ys=[...series.flatMap(s=>s.pts.map(p=>p[1])),...(o.hl||[]).map(h=>h.v)];
   let[x0,x1]=[Math.min(...xs),Math.max(...xs)],[y0,y1]=[Math.min(...ys),Math.max(...ys)];const py=(y1-y0)*0.1||0.01;y0-=py;y1+=py;const sx=v=>pl+(v-x0)/(x1-x0||1)*(W-pl-pr),sy=v=>pt+(y1-v)/(y1-y0)*(H-pt-pb);
   let s=`<svg width="${W}" height="${H}" role="img" aria-label="${esc(o.title)}">`;niceTicks(y0,y1,5).forEach(t=>{s+=`<line x1="${pl}" x2="${W-pr}" y1="${sy(t)}" y2="${sy(t)}" stroke="var(--line)"/><text x="${pl-6}" y="${sy(t)+4}" text-anchor="end">${o.fy(t)}</text>`});
   (o.xt||niceTicks(x0,x1,5)).forEach(t=>{s+=`<text x="${sx(t)}" y="${H-pb+16}" text-anchor="middle">${o.fx(t)}</text>`});s+=`<text x="${(pl+W-pr)/2}" y="${H-4}" text-anchor="middle" class="lab">${esc(o.xl)}</text>`;
   (o.hl||[]).forEach(h=>{s+=`<line x1="${pl}" x2="${W-pr}" y1="${sy(h.v)}" y2="${sy(h.v)}" stroke="var(--ink)" stroke-dasharray="4 3"/><text x="${W-pr-4}" y="${sy(h.v)-5}" text-anchor="end" class="lab" style="font-size:11px">${esc(h.label)}</text>`});
+  (o.vl||[]).forEach((v,i)=>{const X=sx(v.x),R=X>W*0.7;s+=`<line x1="${X}" x2="${X}" y1="${pt}" y2="${H-pb}" stroke="var(${v.col||'--ink'})" stroke-width="1.5" stroke-dasharray="${v.dash||'4 3'}"/>${v.label?`<text x="${X+(R?-4:4)}" y="${pt+12+i*13}"${R?' text-anchor="end"':''} class="lab" style="font-size:11px">${esc(v.label)}</text>`:''}`});
   series.forEach(se=>{s+=`<polyline fill="none" stroke="var(${se.col})" stroke-width="2" points="${se.pts.map(p=>sx(p[0])+','+sy(p[1])).join(' ')}"/>`;se.pts.forEach(p=>{s+=`<g tabindex="0" data-tip="${esc(se.name+'：'+o.fx(p[0])+' → '+o.fy(p[1]))}"><circle cx="${sx(p[0])}" cy="${sy(p[1])}" r="12" fill="transparent"/><circle cx="${sx(p[0])}" cy="${sy(p[1])}" r="4" fill="var(${se.col})" stroke="var(--paper)" stroke-width="2"/></g>`})});
   host.innerHTML=s+'</svg>';bindTips(host)}
 const legend=(host,items)=>{host.innerHTML=items.map(([c,t])=>`<span><i style="background:var(${c})"></i>${esc(t)}</span>`).join('')};
@@ -131,17 +133,50 @@ function simSweep(){const ds=$('#sDs').value,sim=makeSim(D.datasets.find(x=>x.da
   const rnd=rollout(sim,POL.random(),300,60,7).nlg;$('#sweepBox').hidden=false;lineChart($('#sSweepChart'),se,{xl:'目标答对率 c',fx:v=>v.toFixed(1),fy:v=>v.toFixed(2),hl:[{v:rnd,label:'随机出题'}],title:'c 扫描'});legend($('#sSweepLeg'),se.map(s=>[s.col,s.name]))}
 function simValid(){const rows=D.datasets.map(d=>{const sim=makeSim(d.sim);return`${DSN[d.dataset]}：随机 ${f(rollout(sim,POL.random(),600,60,1).nlg,3)}（论文 ${f(d.ref_random.nlg,3)}）`});
   $('#simValid').textContent=`和论文对照（随机出题的 NLG，浏览器 600 个学生 vs 论文的参照值）：${rows.join('；')}。ASSISTments、EdNet、Algebra 基本一致；Junyi 的模拟器有先修关系，但结果文件里没有保存具体是哪几条，这里没法复现，所以 Junyi 的数字会偏高。另外“经验正确率”的先验用的是模拟器参数算出的平均答对率，论文用的是模拟日志的统计，略有不同。`}
+// ---------- 离线评估 ----------
+function oRender(){const ds=$('#oDs').value,src=RES[ds];const ms=Object.keys(M).filter(m=>src[m]&&src[m].ope_dr!=null);
+  $('#oTbl').innerHTML=ms.map(m=>{const r=src[m];return`<tr class="${m===SEL?'hl':''}"><td>${esc(M[m].zh)}</td><td class="n">${f(r.ope_ips,3)}</td><td class="n">${f(r.ope_snips,3)}</td><td class="n">${f(r.ope_dr,3)} ± ${f(r.ope_dr_se,3)}</td><td class="n">${f(r.ope_ess,3)}</td></tr>`}).join('');
+  const ess=ms.map(m=>src[m].ope_ess).filter(v=>v!=null);$('#oNote').innerHTML=`ESS（归一化的有效样本量）在 ${f(Math.min(...ess),3)} 到 ${f(Math.max(...ess),3)} 之间：新规则和收集日志的旧规则差得很远，几千条记录里真正起作用的只有一小部分。所以 IPS（不归一化）和 SNIPS、DR 差得很大。真实日志上的 OPE 只能当辅助证据，论文的主结论用的是模拟器里的真值。`;
+  const pts=ms.filter(m=>src[m].sim_ope_dr!=null&&src[m].sim_ope_true!=null).map(m=>{const r=src[m];return{x:r.sim_ope_dr,y:r.sim_ope_true,col:GCOL[M[m].g],sel:m===SEL,label:['DKT',AG,'Random'].includes(m)||m===SEL?M[m].zh:'',tip:`<b>${esc(M[m].zh)}</b><br>DR 估计 ${f(r.sim_ope_dr,3)}<br>真实值 ${f(r.sim_ope_true,3)}<br>偏差 ${f(r.sim_ope_bias,3)} · ESS ${f(r.sim_ess,3)}`}});
+  scatter($('#oChart'),pts,{xl:'DR 估计',yl:'真实值',fx:v=>v.toFixed(2),fy:v=>v.toFixed(2),diag:true,title:'OPE 估计和真值'});legend($('#oLeg'),GROUPS.map(([g,t])=>[GCOL[g],t]))}
+// ---------- 学生回放 ----------
+const RP={seed:3,t:0,timer:null,A:null,B:null};
+const RPOL=[['target-emp-0.7','选最接近 0.7 的（两阶段 DKT 的规则）'],['greedy','总出最有把握答对的（模拟刷分）'],['random','完全随机'],['target-emp-0.5','选最接近 0.5 的'],['target-emp-0.3','选最接近 0.3 的'],['target-oracle-0.7','理想模型，选最接近 0.7 的'],['logging','旧日志策略']];
+function rpPol(k){if(k==='random')return POL.random();if(k==='logging')return POL.logging();if(k==='greedy')return POL.target(0.999,'emp');const[,est,c]=k.split('-');return POL.target(+c,est)}
+// 挑一个“一开始会的知识点不超过 6 个”的学生，这样才有东西可学
+function rpNextSeed(sim,from){for(let sd=from;sd<from+200;sd++){if(rolloutOne(sim,POL.random(),sd,0).steps[0].L.filter(Boolean).length<=6)return sd}return from}
+function rpRun(adv){const ds=$('#rpDs').value,sim=makeSim(D.datasets.find(x=>x.dataset===ds).sim);RP.sim=sim;RP.seed=rpNextSeed(sim,adv?RP.seed+1:RP.seed);RP.A=rolloutOne(sim,rpPol($('#rpA').value),RP.seed);RP.B=rolloutOne(sim,rpPol($('#rpB').value),RP.seed);rpDraw()}
+function rpPanel(host,run,name){const t=RP.t,st=run.steps[t],pre=run.steps[0].perf,K=RP.sim.K,cnt=new Array(K).fill(0);let onM=0,learned=0,forgot=0;for(let i=1;i<=t;i++){const s=run.steps[i];cnt[s.a]++;if(s.Lk)onM++;if(s.learn)learned++;forgot+=s.forgot.length}
+  const cells=st.L.map((m,k)=>`<div class="sk ${m?'m':''} ${t>0&&st.a===k?'cur':''}" title="知识点 ${k+1}：${m?'已掌握':'未掌握'}，练了 ${cnt[k]} 次"><b>${k+1}</b><span>${cnt[k]} 次</span></div>`).join('');
+  const nlg=(st.perf-pre)/Math.max(1-pre,1e-3),last=t>0?`第 ${t} 题出了知识点 ${st.a+1}，${st.Lk?'学生已经会了':'学生还不会'}，${st.y?'答对':'答错'}${st.learn?'，这一题学会了':''}${st.forgot.length?`；同时忘了知识点 ${st.forgot.map(k=>k+1).join('、')}`:''}。`:'还没开始做题。';
+  host.innerHTML=`<h3>${esc(name)}</h3><div class="skgrid">${cells}</div><div class="tiles"><div class="tile"><span class="k">测验分（12 个知识点平均答对率）</span><span class="v" style="font-size:19px">${(100*st.perf).toFixed(1)}%<small>开始时 ${(100*pre).toFixed(1)}%</small></span></div><div class="tile"><span class="k">到目前的 NLG</span><span class="v" style="font-size:19px">${nlg.toFixed(3)}</span></div><div class="tile"><span class="k">出给已掌握的题</span><span class="v" style="font-size:19px">${onM} / ${t}</span></div><div class="tile"><span class="k">学会 / 遗忘次数</span><span class="v" style="font-size:19px">${learned} / ${forgot}</span></div></div><p class="small">${last}</p>`}
+function rpDraw(){const t=RP.t;$('#rpTv').textContent=t;$('#rpT').value=t;const na=$('#rpA').selectedOptions[0].text,nb=$('#rpB').selectedOptions[0].text;rpPanel($('#rpPA'),RP.A,'左：'+na);rpPanel($('#rpPB'),RP.B,'右：'+nb);
+  const a=RP.A.steps[60],b=RP.B.steps[60],p0=RP.A.steps[0].perf,nA=(a.perf-p0)/(1-p0),nB=(b.perf-p0)/(1-p0);
+  $('#rpNote').textContent=`这个学生能力 θ = ${RP.A.theta.toFixed(2)}，一开始会 ${RP.A.steps[0].L.filter(Boolean).length} 个知识点。做完 60 题：左边 NLG ${nA.toFixed(3)}，右边 ${nB.toFixed(3)}。一个学生的结果偶然性很大，多换几个学生看看；模拟器游乐场里是几百个学生的平均。`}
+function rpPlay(){if(RP.timer){clearInterval(RP.timer);RP.timer=null;$('#rpPlay').textContent='播放';return}if(RP.t>=60)RP.t=0;$('#rpPlay').textContent='暂停';RP.timer=setInterval(()=>{RP.t++;rpDraw();if(RP.t>=60){clearInterval(RP.timer);RP.timer=null;$('#rpPlay').textContent='播放'}},matchMedia('(prefers-reduced-motion: reduce)').matches?600:260)}
+// ---------- 训练曲线 ----------
+function ckRender(){const ds=$('#ckDs').value,m=$('#ckM').value,w=$('#ckW').value,sd=+$('#ckS').value,r=D.traces.find(x=>x.ds===ds&&x.m===m&&x.w===w&&x.seed===sd);if(!r){$('#ckBce').innerHTML=$('#ckDec').innerHTML='<p class="small muted">没有这一组记录。</p>';return}
+  const ep=r.bce.map((_,i)=>i+1),vl=[{x:r.sb+1,label:`BCE 选第 ${r.sb+1} 轮`,col:'--s1'}];if(r.sd!=null)vl.push({x:r.sd+1,label:`决策价值选第 ${r.sd+1} 轮`,col:'--s2',dash:'2 3'});
+  lineChart($('#ckBce'),[{name:'验证集 BCE',col:'--s1',pts:ep.map((e,i)=>[e,r.bce[i]])}],{xl:'训练轮数',fx:v=>String(v),fy:v=>v.toFixed(4),vl,h:260,title:'验证 BCE'});
+  $('#ckDecT').textContent=w==='sim'?'验证队列的真实 NLG（越高越好）':'验证日志的 DR 估计（越高越好）';
+  lineChart($('#ckDec'),[{name:w==='sim'?'真实 NLG':'DR',col:'--s2',pts:ep.map((e,i)=>[e,r.dec[i]])}],{xl:'训练轮数',fx:v=>String(v),fy:v=>v.toFixed(3),vl,h:260,title:'决策价值'});
+  const hasDec=r.dec.some(v=>v!=null);$('#ckNote').textContent=!hasDec?'这个消融实验没有记录决策价值，只按验证集 BCE 选检查点。':r.sd===r.sb?'两种标准选中了同一轮。':`两种标准选中的轮数不一样（第 ${r.sb+1} 轮和第 ${r.sd+1} 轮）：预测最好的那一轮，出题不一定最好。`}
+// ---------- 术语 ----------
+const TERMS=[['知识追踪（KT）','根据学生过去的做题记录，预测下一题能不能答对。',14],['BKT','贝叶斯知识追踪：每个知识点只有“会”和“不会”，用 p0、learn、guess、slip 四个参数描述。模拟器就是按它造的。',4],['AUC','随机挑一道答对和一道答错的题，模型给答对那道更高分的概率。0.5 是瞎猜。',14],['BCE','二元交叉熵，预测对错时的损失。验证集 BCE 用来选检查点。',6],['ECE','期望校准误差：把预测概率分成 10 段，每段里预测概率和实际答对率差多少，加权平均。',6],['两阶段','先训练一个预测模型，再用固定规则（选最接近 0.7 的）出题。DKT、SAKT 等基线都是这样。',8],['决策导向（DF）','训练时直接把“出题价值”放进损失，让模型学会出题，而不只是预测。',20],['NLG','归一化学习收益：(后测 − 前测) / (1 − 前测)。论文对 12 个知识点取平均，所以覆盖面越广越占便宜。',20],['掌握所需步数','连续答对 3 次算掌握，平均要多少步；没掌握的按 61 计。',20],['OPE','离线策略评估：只用旧策略收集的日志，估计新策略的价值。',19],['IPS / SNIPS','逆倾向加权：用 π/μ 给每条日志加权。SNIPS 用权重之和代替 n 做分母，方差更小。',19],['DR','双重稳健估计：结果模型的预测加上加权残差。权重或结果模型有一个对就无偏。',19],['ESS','有效样本量：(Σw)²/Σw²/n。越接近 0，估计越依赖少数几条记录。',19],['交叉拟合','学生分两折，一折用的 μ 和 Q 在另一折上估计，避免“自己评自己”的偏差。',19],['一步偏离','只在一个决策点换成新策略、之后照旧。论文的 DR 估计的就是这个价值。',19],['安全屏障','γ·ReLU(BCE − (1+ε)·BCE_DKT)：预测变差超过 ε 才惩罚。',20],['POEM 方差惩罚','β·Var(V)：惩罚价值估计的方差，避免策略追着噪声大的估计跑。',20],['反刷分（AG）','惩罚把出题概率放在“预测已掌握（> 0.85）”的知识点上。',20],['刷分（reward hacking）','模型找到让收益估计变高、却不真正提高学习的捷径：总出已经会的题。',20],['Platt 缩放','对 logit 做 a·z + b 再过 sigmoid，重新校准预测概率。',6],['配对检验和 Holm 校正','同一个种子和数据集上两个方法配成一对比较差值；做多次检验时用 Holm 方法收紧 p 值门槛。',20]];
+function termsRender(){$('#termList').innerHTML=TERMS.map(([t,d,day])=>`<div class="mcard" style="cursor:default"><span class="nm">${esc(t)}</span><span class="small">${esc(d)}</span><a class="small" href="${COURSE}${day}" target="_blank" rel="noopener">课程第 ${day} 天</a></div>`).join('')}
 // ---------- 启动 ----------
-function allCharts(){rRender();tRender();hRender();rbRender();parRender()}
+function allCharts(){rRender();tRender();hRender();rbRender();parRender();oRender();if(RP.A)rpDraw();ckRender()}
 function init(){heroTiles();
   $('#dsChips').innerHTML=DSL.map(d=>`<button class="chip" data-ds="${d}">${DSN[d]}</button>`).join('');$$('#dsChips .chip').forEach(c=>c.onclick=()=>{DS=c.dataset.ds;dsRender()});$('#parSel').onchange=parRender;
   const dsOpts=(all)=>(all?'<option value="all">四个数据集平均</option>':'')+DSL.map(d=>`<option value="${d}">${DSN[d]}</option>`).join('');
-  ['#rDs','#tDs','#hDs'].forEach(s=>{$(s).innerHTML=dsOpts(true);$(s).onchange=allCharts});$('#sDs').innerHTML=dsOpts(false);
+  ['#rDs','#tDs','#hDs'].forEach(s=>{$(s).innerHTML=dsOpts(true);$(s).onchange=allCharts});['#sDs','#oDs','#rpDs','#ckDs'].forEach(s=>$(s).innerHTML=dsOpts(false));$('#oDs').onchange=oRender;
+  $('#rpA').innerHTML=$('#rpB').innerHTML=RPOL.map(([k,n])=>`<option value="${k}">${esc(n)}</option>`).join('');$('#rpB').value='random';['#rpDs','#rpA','#rpB'].forEach(s=>$(s).onchange=()=>{rpRun()});$('#rpNew').onclick=()=>{rpRun(true)};$('#rpPlay').onclick=rpPlay;$('#rpT').oninput=()=>{RP.t=+$('#rpT').value;rpDraw()};
+  $('#ckM').innerHTML=['Safe-DFKT-AG','Safe-DFKT','DF-KT','Safe-DFKT w/o safety barrier','Safe-DFKT w/o NLG reward','Safe-DFKT w/o POEM'].map(m=>`<option value="${esc(m)}">${esc(M[m].zh)}</option>`).join('');['#ckDs','#ckM','#ckW','#ckS'].forEach(s=>$(s).onchange=ckRender);
   $('#rMet').innerHTML=METS.map(m=>`<option value="${m[0]}">${m[1]}</option>`).join('');$('#rMet').onchange=rRender;$('#rAbl').onchange=rRender;
   $('#stCmp').innerHTML=[...new Set(D.paired.map(r=>r.comparison))].map(c=>`<option>${esc(c)}</option>`).join('');$('#stCmp').onchange=stRender;
   $('#sC').oninput=()=>$('#sCv').textContent=(+$('#sC').value).toFixed(2);$('#sN').oninput=()=>$('#sNv').textContent=$('#sN').value;
   $('#sRun').onclick=simRun;$('#sSweep').onclick=simSweep;$('#sClear').onclick=()=>{HIST.length=0;histRender()};
-  modelsRender();dsRender();allCharts();stRender();conclRender();simRun();simValid();
+  modelsRender();dsRender();RP.t=60;rpRun();allCharts();stRender();conclRender();termsRender();simRun();simValid();
   let rz;addEventListener('resize',()=>{clearTimeout(rz);rz=setTimeout(()=>{allCharts();histRender()},150)});
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change',allCharts)}
 init();
